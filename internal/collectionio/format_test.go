@@ -12,7 +12,11 @@ import (
 func sampleTree() domain.CollectionTree {
 	return domain.CollectionTree{
 		Collection: domain.Collection{ID: "c1", Name: "Wallet",
-			Auth: domain.Auth{Type: domain.AuthBearer, Token: "collection-literal-token"}},
+			Auth: domain.Auth{Type: domain.AuthBearer, Token: "collection-literal-token"},
+			Variables: []domain.Variable{
+				{Key: "base_url", Value: "http://collection-base", Enabled: true},
+				{Key: "api_secret", Value: "collection-var-secret", Secret: true, Enabled: true},
+			}},
 		Folders: []domain.Folder{{ID: "f1", CollectionID: "c1", Name: "Folder"}},
 		Requests: []domain.Request{
 			{ID: "r1", CollectionID: "c1", ParentID: "f1", Name: "Literal", Method: "GET", URLTemplate: "http://x",
@@ -33,8 +37,8 @@ func sampleEnv() domain.Environment {
 
 func TestScanSecrets(t *testing.T) {
 	f := ScanSecrets(sampleTree(), []domain.Environment{sampleEnv()})
-	if len(f) != 4 {
-		t.Fatalf("expected collection token, literal token, cookie header and secret variable, got %+v", f)
+	if len(f) != 5 {
+		t.Fatalf("expected collection token and variable, literal token, cookie header and secret variable, got %+v", f)
 	}
 }
 
@@ -45,12 +49,13 @@ func TestExportStripsSecretsByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, secret := range []string{"literal-token-123", "sid=abc", "env-secret-xyz", "collection-literal-token"} {
+	for _, secret := range []string{"literal-token-123", "sid=abc", "env-secret-xyz", "collection-literal-token",
+		"collection-var-secret"} {
 		if strings.Contains(out, secret) {
 			t.Fatalf("export leaked %q", secret)
 		}
 	}
-	for _, keep := range []string{"{{token}}", "http://localhost", `"secret": true`} {
+	for _, keep := range []string{"{{token}}", "http://localhost", "http://collection-base", `"secret": true`} {
 		if !strings.Contains(out, keep) {
 			t.Fatalf("export lost %q", keep)
 		}
@@ -75,6 +80,9 @@ func TestRoundTripAssignsFreshIDs(t *testing.T) {
 	}
 	if imp.Tree.Requests[0].ParentID != imp.Tree.Folders[0].ID {
 		t.Fatal("folder relationship lost")
+	}
+	if v := imp.Tree.Collection.Variables; len(v) != 2 || v[0].Value != "http://collection-base" || v[1].Value != "" {
+		t.Fatalf("collection variables should round trip with secrets blanked: %+v", v)
 	}
 	if len(imp.Environments) != 1 || imp.Environments[0].ID != "" {
 		t.Fatal("environments should import without IDs")

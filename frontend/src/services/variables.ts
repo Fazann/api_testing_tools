@@ -41,13 +41,27 @@ export interface VariableInfo {
   name: string;
   state: VariableState;
   variable?: Variable;
+  /** Where the variable is defined: the selected environment or the request's collection. */
+  source?: 'environment' | 'collection';
 }
 
-/** Describes how a reference resolves in env, mirroring the Go resolver. */
-export function describeVariable(name: string, env: Environment | null): VariableInfo {
+/**
+ * Describes how a reference resolves, mirroring the Go resolver: an enabled environment variable wins, then an
+ * enabled collection variable.
+ */
+export function describeVariable(name: string, env: Environment | null, collectionVars: Variable[] = []): VariableInfo {
   if (name in BUILTINS) return { name, state: 'builtin' };
-  const variable = env?.variables.find((v) => v.key === name);
-  if (!variable) return { name, state: 'missing' };
-  if (!variable.enabled) return { name, state: 'disabled', variable };
-  return { name, state: variable.value === '' ? 'empty' : 'defined', variable };
+  const fromEnv = env?.variables.find((v) => v.key === name);
+  const fromCollection = collectionVars.find((v) => v.key === name);
+  const found = (variable: Variable, source: VariableInfo['source']): VariableInfo => ({
+    name,
+    state: !variable.enabled ? 'disabled' : variable.value === '' ? 'empty' : 'defined',
+    variable,
+    source,
+  });
+  if (fromEnv?.enabled) return found(fromEnv, 'environment');
+  if (fromCollection?.enabled) return found(fromCollection, 'collection');
+  if (fromEnv) return found(fromEnv, 'environment');
+  if (fromCollection) return found(fromCollection, 'collection');
+  return { name, state: 'missing' };
 }

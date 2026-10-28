@@ -200,8 +200,9 @@ func TestRequiredVariables(t *testing.T) {
 	ctx := context.Background()
 	empty, _ := f.svc.SaveEnvironment(ctx, domain.Environment{Name: "Empty"})
 	_, err := f.svc.RunCollection(ctx, "", f.tree.Collection.ID, "", empty.ID, false, nil)
-	if err == nil || !strings.Contains(err.Error(), "base_url") || !strings.Contains(err.Error(), "token") {
-		t.Fatalf("expected missing required variables error, got %v", err)
+	// base_url is a collection variable in the demo, so only token is missing.
+	if err == nil || strings.Contains(err.Error(), "base_url") || !strings.Contains(err.Error(), "token") {
+		t.Fatalf("expected missing required variables error for token only, got %v", err)
 	}
 	warnings, _ := f.svc.Preflight(ctx, f.tree.Requests, f.tree.Collection.RequiredVariables, empty.ID)
 	if len(warnings) == 0 || warnings[0].Code != "missing_required" {
@@ -424,4 +425,74 @@ func TestCollectionAuthIsInherited(t *testing.T) {
 	if _, err := f.svc.SaveCollection(ctx, c); err == nil {
 		t.Fatal("collection auth of type inherit must be rejected")
 	}
+}
+
+func TestCollectionVariablesApplyToAllRequests(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	c := f.tree.Collection
+	base := ""
+	for _, v := range f.env.Variables {
+		if v.Key == "base_url" {
+			base = v.Value
+		}
+	}
+
+	// Collection-level base_url and token: every request follows them, even
+	// with no environment selected.
+	c.Variables = []domain.Variable{
+		{Key: "base_url", Value: base, Enabled: true},
+		{Key: "token", Value: testToken, Secret: true, Enabled: true},
+	}
+	if _, err := f.svc.SaveCollection(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if w, err := f.svc.PreflightCollection(ctx, c.ID, "", ""); err != nil || hasCode(w, "missing_required") {
+		t.Fatalf("collection variables should satisfy required variables: %v %+v", err, w)
+	}
+	run, err := f.svc.RunCollection(ctx, "", c.ID, "", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.FailedCount != 0 || run.PassedCount != 6 {
+		t.Fatalf("all requests should pass using collection variables: %v", failures(run))
+	}
+	full, _ := f.svc.GetRun(ctx, run.ID)
+	for _, r := range full.Results {
+		if strings.Contains(r.Request.URL+r.Response.Body, testToken) {
+			t.Fatalf("secret collection variable leaked into history: %+v", r)
+		}
+	}
+
+	// Environment variables override collection variables of the same name.
+	env := f.env
+	env.Variables = []domain.Variable{{Key: "token", Value: "env-wrong-token", Secret: true, Enabled: true}}
+	if env, err = f.svc.SaveEnvironment(ctx, env); err != nil {
+		t.Fatal(err)
+	}
+	run, _ = f.svc.RunCollection(ctx, "", c.ID, "", env.ID, false, nil)
+	if run.FailedCount != 4 {
+		t.Fatalf("environment token should override the collection token: %v", failures(run))
+	}
+
+	// Making every request inherit the collection auth.
+	n, err := f.svc.InheritCollectionAuth(ctx, c.ID)
+	if err != nil || n != 2 {
+		t.Fatalf("expected the 2 no-auth requests to switch to inherit: %d %v", n, err)
+	}
+	tree, _ := f.svc.GetCollectionTree(ctx, c.ID)
+	for _, r := range tree.Requests {
+		if r.Auth.Type != domain.AuthInherit {
+			t.Fatalf("%s still has its own auth: %+v", r.Name, r.Auth)
+		}
+	}
+}
+
+func hasCode(ws []service.Warning, code string) bool {
+	for _, w := range ws {
+		if w.Code == code {
+			return true
+		}
+	}
+	return false
 }

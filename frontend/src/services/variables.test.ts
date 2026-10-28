@@ -40,4 +40,15 @@ describe('describeVariable', () => {
     expect(describeVariable('$uuid', null).state).toBe('builtin');
     expect(describeVariable('base_url', null).state).toBe('missing');
   });
+
+  it('falls back to collection variables, with the environment taking precedence', () => {
+    const collection = [
+      { key: 'base_url', value: 'http://collection', secret: false, enabled: true },
+      { key: 'off', value: 'from collection', secret: false, enabled: true },
+      { key: 'shared', value: 'x', secret: false, enabled: true },
+    ];
+    expect(describeVariable('base_url', env, collection)).toMatchObject({ source: 'environment' });
+    expect(describeVariable('off', env, collection)).toMatchObject({ state: 'defined', source: 'collection' });
+    expect(describeVariable('shared', null, collection)).toMatchObject({ state: 'defined', source: 'collection' });
+  });
 });

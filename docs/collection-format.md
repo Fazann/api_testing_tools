@@ -10,7 +10,7 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 | `version`         | integer   | Format version. This app reads version `1`                       |
 | `exportedAt`      | RFC 3339  | Informational                                                  |
 | `appVersion`      | string    | Informational                                                  |
-| `collection`      | object    | `name`, `description`, `requiredVariables` (string array), `auth` |
+| `collection`      | object    | `name`, `description`, `requiredVariables` (string array), `variables`, `auth` |
 | `folders`         | array     | `id`, `parentId` (`""` = top level), `name`, `sortOrder`       |
 | `requests`        | array     | See below                                                      |
 | `environments`    | array     | Optional. `name`, `protected`, `variables`                     |
@@ -53,8 +53,30 @@ IDs in a file only link folders and requests to each other. **Every ID is regene
 ```
 
 A request with any other auth type overrides the collection auth. Builds made before collection auth was added
-reject files that use `inherit`.
-- `{{name}}` references an environment variable in the URL, headers, query, body, auth and assertion expected values. Built-ins: `{{$uuid}}`, `{{$timestamp}}` (Unix seconds), `{{$isoTimestamp}}`.
+reject files that use `inherit`. **Settings & auth… → Use this auth for all requests** switches every request in the
+collection to `inherit`.
+
+### Collection variables
+
+`collection.variables` has the same shape as an environment's `variables` and is shared by every request in the
+collection, so values such as the base URL or token are set once:
+
+```json
+"collection": {
+  "name": "Wallet",
+  "variables": [
+    { "key": "base_url", "value": "https://staging.wallet.test", "secret": false, "enabled": true },
+    { "key": "token", "value": "", "secret": true, "enabled": true }
+  ],
+  "auth": { "type": "bearer", "token": "{{token}}" }
+}
+```
+
+An enabled variable of the same name in the selected environment takes precedence, so one collection can target
+Local, Staging and Production. Secret collection variables are redacted like environment secrets and their values
+are blanked on export unless secrets are explicitly included. Required variables are satisfied by either.
+
+- `{{name}}` references a collection or environment variable in the URL, headers, query, body, auth and assertion expected values. Built-ins: `{{$uuid}}`, `{{$timestamp}}` (Unix seconds), `{{$isoTimestamp}}`.
 
 ## Assertion
 
@@ -89,6 +111,7 @@ reject files that use `inherit`.
 Unless the user explicitly opts in (after a warning that lists them), exports blank:
 
 - values of variables marked `secret`;
+- values of secret collection variables;
 - literal (non-`{{variable}}`) `auth.token`, `auth.password` and `auth.keyValue`;
 - literal values of credential headers (`Authorization`, `Cookie`, `X-Api-Key`, …).
 

@@ -85,6 +85,8 @@ export interface Collection {
   name: string;
   description: string;
   requiredVariables: string[];
+  /** Shared by every request in the collection; environment variables with the same name win. */
+  variables: Variable[];
   /** Used by requests whose auth type is "inherit". */
   auth: Auth;
   createdAt?: string;

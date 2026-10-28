@@ -13,9 +13,14 @@ See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/securi
 
 ## Quick start
 
-1. **Environments → ＋** — create `Local` with `base_url` and a `token` variable marked **Secret**.
-2. **Requests → Create collection**. In its **⋯ → Settings & auth…**, set Authorization to **Bearer token** with
-   `{{token}}`. New requests use **Inherit auth from collection**, so they all send that token.
+1. **Requests → Create collection**. In its **⋯ → Settings & auth…**:
+   - under **Variables**, add `base_url` (e.g. `http://localhost:8080`) and a `token` marked **Secret**;
+   - under **Authorization**, choose **Bearer token** with `{{token}}`.
+
+   Every request in the collection follows these: change the URL or token once and all requests use the new value.
+   New requests use **Inherit auth from collection**; tick **Use this auth for all requests** to switch existing ones.
+2. Optional: **Environments → ＋** — create `Staging` etc. Its variables override collection variables of the same
+   name, so the same collection runs against each environment.
 3. Add a request such as `GET {{base_url}}/health`, and add tests in the **Tests** tab.
 4. Pick the environment in the top bar and press **Send** (`Ctrl+Enter`). Save with `Ctrl+S`.
 5. When the response is correct, choose **Approve as baseline…** and mark dynamic fields as ignored.

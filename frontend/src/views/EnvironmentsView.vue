@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import SecretInput from '../components/SecretInput.vue';
+import VariableTable from '../components/VariableTable.vue';
 import { clone } from '../services/model';
 import { useEnvironments } from '../stores/environments';
 import { useUi } from '../stores/ui';
@@ -81,10 +81,6 @@ async function remove() {
     ui.error(e);
   }
 }
-
-function addVar() {
-  form.value?.variables.push({ key: '', value: '', secret: false, enabled: true });
-}
 </script>
 
 <template>
@@ -115,7 +111,8 @@ function addVar() {
         <h2>Environments</h2>
         <p>
           Environments hold variables such as <code>base_url</code> and credentials. Reference them as
-          <code v-pre>{{ name }}</code> in URLs, headers, query parameters, bodies and auth.
+          <code v-pre>{{ name }}</code> in URLs, headers, query parameters, bodies and auth. They override collection
+          variables with the same name.
         </p>
       </div>
       <template v-else>
@@ -133,42 +130,7 @@ function addVar() {
             confirmation.</span
           >
         </label>
-        <table class="grid vars">
-          <thead>
-            <tr>
-              <th class="on">On</th>
-              <th>Variable</th>
-              <th>Value</th>
-              <th class="sec">Secret</th>
-              <th class="act" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(v, i) in form.variables" :key="i">
-              <td><input v-model="v.enabled" type="checkbox" :aria-label="`Enable ${v.key || 'variable'}`" /></td>
-              <td>
-                <input v-model="v.key" class="mono full" placeholder="name" :aria-label="`Variable name ${i + 1}`" />
-              </td>
-              <td>
-                <SecretInput v-if="v.secret" v-model="v.value" :label="`Value of ${v.key}`" />
-                <input v-else v-model="v.value" class="mono full" :aria-label="`Value of ${v.key}`" />
-              </td>
-              <td>
-                <input v-model="v.secret" type="checkbox" :aria-label="`Mark ${v.key || 'variable'} as secret`" />
-              </td>
-              <td>
-                <button
-                  class="ghost"
-                  :aria-label="`Remove ${v.key || 'variable'}`"
-                  @click="form.variables.splice(i, 1)"
-                >
-                  ✕
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div><button @click="addVar">＋ Add variable</button></div>
+        <VariableTable :variables="form.variables" />
         <p class="callout small">
           Secret values are masked here, redacted from run history and reports, and left out of collection exports
           unless you explicitly include them. They are stored in the local database file with owner-only file
@@ -224,19 +186,5 @@ function addVar() {
 }
 .prot {
   align-items: flex-start;
-}
-.vars td {
-  vertical-align: middle;
-  padding: 3px 4px;
-}
-.full {
-  width: 100%;
-}
-.on,
-.sec {
-  width: 54px;
-}
-.act {
-  width: 36px;
 }
 </style>

@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useEnvironments } from '../stores/environments';
+import { useWorkspace } from '../stores/workspace';
 import type { Environment } from '../types';
 import VariableInput from './VariableInput.vue';
 
@@ -94,5 +95,43 @@ describe('VariableInput', () => {
     const { wrapper } = setup('https://example.com');
     expect(wrapper.find('.mirror').exists()).toBe(false);
     expect(wrapper.find('input').classes()).not.toContain('masked');
+  });
+
+  it('resolves collection variables for requests in that collection', async () => {
+    const { wrapper } = setup('{{api_root}}/x');
+    expect(wrapper.find('.token').classes()).toContain('missing');
+    const ws = useWorkspace();
+    ws.collections = [
+      {
+        id: 'c1',
+        name: 'Wallet',
+        description: '',
+        requiredVariables: [],
+        variables: [{ key: 'api_root', value: 'https://collection.test', secret: false, enabled: true }],
+        auth: { type: 'none' },
+      },
+    ];
+    ws.open({
+      id: 'r1',
+      collectionId: 'c1',
+      parentId: '',
+      name: 'R',
+      method: 'GET',
+      url: '{{api_root}}/x',
+      headers: [],
+      query: [],
+      body: '',
+      bodyType: 'none',
+      auth: { type: 'inherit' },
+      timeoutMs: 1000,
+      followRedirects: true,
+      sortOrder: 0,
+      assertions: [],
+    });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.token').classes()).toContain('defined');
+    await wrapper.find('.token').trigger('mouseenter');
+    expect(popover()?.textContent).toContain('Collection variable');
+    expect(popover()?.textContent).toContain('https://collection.test');
   });
 });

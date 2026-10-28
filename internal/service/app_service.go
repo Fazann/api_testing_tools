@@ -111,6 +111,12 @@ func (s *Service) SaveCollection(ctx context.Context, c domain.Collection) (doma
 	return s.store.SaveCollection(ctx, c)
 }
 
+// InheritCollectionAuth makes every request in the collection use the
+// collection's auth, returning how many requests were changed.
+func (s *Service) InheritCollectionAuth(ctx context.Context, collectionID string) (int, error) {
+	return s.store.InheritCollectionAuth(ctx, collectionID)
+}
+
 func (s *Service) DuplicateCollection(ctx context.Context, id string) (domain.Collection, error) {
 	c, err := s.store.GetCollection(ctx, id)
 	if err != nil {
@@ -227,7 +233,7 @@ func (s *Service) Preflight(ctx context.Context, reqs []domain.Request, required
 	if err != nil {
 		return nil, err
 	}
-	if reqs, err = s.inheritAuth(ctx, reqs); err != nil {
+	if reqs, env, err = s.scope(ctx, reqs, env); err != nil {
 		return nil, err
 	}
 	_, st := s.current()
@@ -280,6 +286,26 @@ func (s *Service) PreflightCollection(ctx context.Context, collectionID, folderI
 		return nil, err
 	}
 	return s.Preflight(ctx, OrderedRequests(tree, folderID), tree.Collection.RequiredVariables, envID)
+}
+
+// scope applies the collection settings that requests follow: inherited
+// auth, and the collection's variables underneath env's.
+func (s *Service) scope(ctx context.Context, reqs []domain.Request, env *domain.Environment) ([]domain.Request, *domain.Environment, error) {
+	reqs, err := s.inheritAuth(ctx, reqs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(reqs) == 0 || reqs[0].CollectionID == "" {
+		return reqs, env, nil
+	}
+	c, err := s.store.GetCollection(ctx, reqs[0].CollectionID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return reqs, env, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return reqs, domain.WithCollectionVariables(env, c.Variables), nil
 }
 
 // inheritAuth returns reqs with "inherit" auth replaced by their collection's
@@ -392,15 +418,15 @@ func (s *Service) RunCollection(ctx context.Context, opID, collectionID, folderI
 	if err := s.requireConfirmation(ctx, reqs, tree.Collection.RequiredVariables, envID, confirmed); err != nil {
 		return domain.Run{}, err
 	}
-	if missing := s.missingRequired(ctx, envID, tree.Collection.RequiredVariables); len(missing) > 0 {
+	if missing := s.missingRequired(ctx, envID, tree.Collection); len(missing) > 0 {
 		return domain.Run{}, fmt.Errorf("required variables are missing or empty: %s", strings.Join(missing, ", "))
 	}
 	return s.execute(ctx, opID, reqs, envID, tree.Collection.ID, tree.Collection.Name, progress)
 }
 
-func (s *Service) missingRequired(ctx context.Context, envID string, required []string) []string {
+func (s *Service) missingRequired(ctx context.Context, envID string, c domain.Collection) []string {
 	env, _ := s.environment(ctx, envID)
-	return environments.MissingRequired(env, required)
+	return environments.MissingRequired(domain.WithCollectionVariables(env, c.Variables), c.RequiredVariables)
 }
 
 // OrderedRequests returns requests in tree order: top-level requests first,
@@ -436,7 +462,7 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 	if err != nil {
 		return domain.Run{}, err
 	}
-	if reqs, err = s.inheritAuth(ctx, reqs); err != nil {
+	if reqs, env, err = s.scope(ctx, reqs, env); err != nil {
 		return domain.Run{}, err
 	}
 	client, st := s.current()
@@ -530,7 +556,13 @@ func (s *Service) ApproveBaseline(ctx context.Context, in ApproveBaselineInput) 
 	}
 	// Bodies shown in the UI are already redacted; redact again in case the
 	// caller passed something else.
-	body := redact.New(env.SecretValues()...).String(in.Body)
+	secrets := env.SecretValues()
+	if r, err := s.store.GetRequest(ctx, in.RequestID); err == nil {
+		if c, err := s.store.GetCollection(ctx, r.CollectionID); err == nil {
+			secrets = domain.WithCollectionVariables(env, c.Variables).SecretValues()
+		}
+	}
+	body := redact.New(secrets...).String(in.Body)
 	snap, err := regression.Snapshot([]byte(body), paths)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -685,7 +717,7 @@ func (s *Service) ExportReport(ctx context.Context, runID, format string) ([]byt
 	return buf.Bytes(), err
 }
 
-// allSecrets collects secret values from every environment, used as a final
+// allSecrets collects secret values from every environment and collection, used as a final
 // redaction pass on exported reports.
 func (s *Service) allSecrets(ctx context.Context) []string {
 	envs, err := s.store.ListEnvironments(ctx)
@@ -695,6 +727,11 @@ func (s *Service) allSecrets(ctx context.Context) []string {
 	var out []string
 	for i := range envs {
 		out = append(out, envs[i].SecretValues()...)
+	}
+	if cs, err := s.store.ListCollections(ctx); err == nil {
+		for _, c := range cs {
+			out = append(out, (&domain.Environment{Variables: c.Variables}).SecretValues()...)
+		}
 	}
 	return out
 }

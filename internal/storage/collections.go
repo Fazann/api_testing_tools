@@ -15,7 +15,7 @@ import (
 // ---- collections ----
 
 func (s *Store) ListCollections(ctx context.Context) ([]domain.Collection, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, required_vars_json, auth_json, created_at, updated_at FROM collections ORDER BY name COLLATE NOCASE, created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at FROM collections ORDER BY name COLLATE NOCASE, created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (s *Store) ListCollections(ctx context.Context) ([]domain.Collection, error
 }
 
 func (s *Store) GetCollection(ctx context.Context, id string) (domain.Collection, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, name, description, required_vars_json, auth_json, created_at, updated_at FROM collections WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at FROM collections WHERE id = ?`, id)
 	c, err := scanCollection(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
@@ -44,8 +44,8 @@ type scanner interface{ Scan(...any) error }
 
 func scanCollection(r scanner) (domain.Collection, error) {
 	var c domain.Collection
-	var reqVars, auth, created, updated string
-	if err := r.Scan(&c.ID, &c.Name, &c.Description, &reqVars, &auth, &created, &updated); err != nil {
+	var reqVars, vars, auth, created, updated string
+	if err := r.Scan(&c.ID, &c.Name, &c.Description, &reqVars, &vars, &auth, &created, &updated); err != nil {
 		return c, err
 	}
 	unmarshalLenient(auth, &c.Auth)
@@ -55,6 +55,10 @@ func scanCollection(r scanner) (domain.Collection, error) {
 	unmarshalLenient(reqVars, &c.RequiredVariables)
 	if c.RequiredVariables == nil {
 		c.RequiredVariables = []string{}
+	}
+	unmarshalLenient(vars, &c.Variables)
+	if c.Variables == nil {
+		c.Variables = []domain.Variable{}
 	}
 	c.CreatedAt, c.UpdatedAt = parseTS(created), parseTS(updated)
 	return c, nil
@@ -69,6 +73,9 @@ func (s *Store) SaveCollection(ctx context.Context, c domain.Collection) (domain
 	if c.RequiredVariables == nil {
 		c.RequiredVariables = []string{}
 	}
+	if c.Variables == nil {
+		c.Variables = []domain.Variable{}
+	}
 	if c.ID == "" {
 		c.ID = uuid.NewString()
 		c.CreatedAt = now
@@ -78,12 +85,31 @@ func (s *Store) SaveCollection(ctx context.Context, c domain.Collection) (domain
 		c.CreatedAt = now
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO collections (id, name, description, required_vars_json, auth_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description,
-			required_vars_json = excluded.required_vars_json, auth_json = excluded.auth_json, updated_at = excluded.updated_at`,
-		c.ID, c.Name, c.Description, mustJSON(c.RequiredVariables), mustJSON(c.Auth), ts(c.CreatedAt), ts(c.UpdatedAt))
+			required_vars_json = excluded.required_vars_json, variables_json = excluded.variables_json,
+			auth_json = excluded.auth_json, updated_at = excluded.updated_at`,
+		c.ID, c.Name, c.Description, mustJSON(c.RequiredVariables), mustJSON(c.Variables), mustJSON(c.Auth),
+		ts(c.CreatedAt), ts(c.UpdatedAt))
 	return c, err
+}
+
+// InheritCollectionAuth switches every request in the collection to inherit
+// the collection's auth and returns how many requests changed.
+func (s *Store) InheritCollectionAuth(ctx context.Context, collectionID string) (int, error) {
+	if _, err := s.GetCollection(ctx, collectionID); err != nil {
+		return 0, err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE requests SET auth_json = ?, updated_at = ? WHERE collection_id = ?
+			AND (CASE WHEN json_valid(auth_json) THEN json_extract(auth_json, '$.type') END) IS NOT 'inherit'`,
+		mustJSON(domain.Auth{Type: domain.AuthInherit}), ts(time.Now().UTC()), collectionID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
 
 // DeleteCollection removes a collection with its folders, requests,
@@ -129,8 +155,9 @@ func (s *Store) ImportTree(ctx context.Context, t domain.CollectionTree) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC()
 		c := t.Collection
-		if _, err := tx.ExecContext(ctx, `INSERT INTO collections (id, name, description, required_vars_json, auth_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			c.ID, c.Name, c.Description, mustJSON(nonNil(c.RequiredVariables)), mustJSON(c.Auth), ts(now), ts(now)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			c.ID, c.Name, c.Description, mustJSON(nonNil(c.RequiredVariables)), mustJSON(nonNilVars(c.Variables)), mustJSON(c.Auth),
+			ts(now), ts(now)); err != nil {
 			return err
 		}
 		for _, f := range orderFolders(t.Folders) {
@@ -231,6 +258,13 @@ func orderFolders(folders []domain.Folder) []domain.Folder {
 		remaining = next
 	}
 	return out
+}
+
+func nonNilVars(v []domain.Variable) []domain.Variable {
+	if v == nil {
+		return []domain.Variable{}
+	}
+	return v
 }
 
 func nonNil(s []string) []string {

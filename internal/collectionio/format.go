@@ -57,6 +57,11 @@ func ScanSecrets(t domain.CollectionTree, envs []domain.Environment) []SecretFin
 			break
 		}
 	}
+	for _, v := range t.Collection.Variables {
+		if v.Secret && v.Value != "" {
+			out = append(out, SecretFinding{Location: "collection " + t.Collection.Name, Detail: "secret variable " + v.Key})
+		}
+	}
 	for _, r := range t.Requests {
 		for _, c := range r.Auth.Credentials() {
 			if isLiteral(c) {
@@ -76,6 +81,21 @@ func ScanSecrets(t domain.CollectionTree, envs []domain.Environment) []SecretFin
 				out = append(out, SecretFinding{Location: "environment " + e.Name, Detail: "secret variable " + v.Key})
 			}
 		}
+	}
+	return out
+}
+
+// stripSecretValues returns a copy of vars with secret values blanked.
+func stripSecretValues(vars []domain.Variable) []domain.Variable {
+	if vars == nil {
+		return nil
+	}
+	out := make([]domain.Variable, len(vars))
+	for i, v := range vars {
+		if v.Secret {
+			v.Value = ""
+		}
+		out[i] = v
 	}
 	return out
 }
@@ -101,6 +121,7 @@ func Export(t domain.CollectionTree, envs []domain.Environment, includeSecrets b
 	sensitive := redact.New()
 	if !includeSecrets {
 		doc.Collection.Auth = stripCredentials(doc.Collection.Auth)
+		doc.Collection.Variables = stripSecretValues(doc.Collection.Variables)
 	}
 	for i, r := range t.Requests {
 		if !includeSecrets {
@@ -117,14 +138,9 @@ func Export(t domain.CollectionTree, envs []domain.Environment, includeSecrets b
 		doc.Requests[i] = r
 	}
 	for _, e := range envs {
-		vars := make([]domain.Variable, len(e.Variables))
-		for j, v := range e.Variables {
-			if v.Secret && !includeSecrets {
-				v.Value = ""
-			}
-			vars[j] = v
+		if !includeSecrets {
+			e.Variables = stripSecretValues(e.Variables)
 		}
-		e.Variables = vars
 		doc.Environments = append(doc.Environments, e)
 	}
 	return doc
@@ -237,6 +253,7 @@ func validate(doc Document) (*Imported, error) {
 	c := domain.Collection{
 		Name: strings.TrimSpace(doc.Collection.Name), Description: doc.Collection.Description,
 		RequiredVariables: doc.Collection.RequiredVariables,
+		Variables:         doc.Collection.Variables,
 		Auth:              doc.Collection.Auth,
 	}
 	if err := c.Validate(); err != nil {

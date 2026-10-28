@@ -38,11 +38,16 @@ func (e *Environment) Validate() error {
 	if err := ValidateName("environment name", e.Name); err != nil {
 		return err
 	}
-	if len(e.Variables) > MaxVariables {
+	return ValidateVariables(e.Variables)
+}
+
+// ValidateVariables checks names and uniqueness of a variable list.
+func ValidateVariables(vars []Variable) error {
+	if len(vars) > MaxVariables {
 		return fmt.Errorf("at most %d variables are allowed", MaxVariables)
 	}
 	seen := map[string]bool{}
-	for _, v := range e.Variables {
+	for _, v := range vars {
 		if v.Key == "" && v.Value == "" {
 			continue
 		}
@@ -73,3 +78,32 @@ func (e *Environment) SecretValues() []string {
 
 // HasSecrets reports whether any variable is marked secret and has a value.
 func (e *Environment) HasSecrets() bool { return len(e.SecretValues()) > 0 }
+
+// WithCollectionVariables returns the variables a request in a collection
+// sees: the collection's enabled variables overlaid by env's. Environment
+// variables win when both define a name, so one collection can target several
+// environments. The result keeps env's identity (name, protected flag). env may
+// be nil; nil is returned only when neither defines anything.
+func WithCollectionVariables(env *Environment, collection []Variable) *Environment {
+	if len(collection) == 0 {
+		return env
+	}
+	var merged Environment
+	if env != nil {
+		merged = *env
+	}
+	defined := map[string]bool{}
+	for _, v := range merged.Variables {
+		if v.Enabled && v.Key != "" {
+			defined[v.Key] = true
+		}
+	}
+	vars := make([]Variable, 0, len(collection)+len(merged.Variables))
+	for _, v := range collection {
+		if v.Enabled && v.Key != "" && !defined[v.Key] {
+			vars = append(vars, v)
+		}
+	}
+	merged.Variables = append(vars, merged.Variables...)
+	return &merged
+}

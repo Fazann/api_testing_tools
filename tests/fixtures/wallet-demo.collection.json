@@ -7,6 +7,7 @@
     "name": "Wallet demo",
     "description": "Business-rule checks for a test wallet and report API. Point base_url at a controlled test environment.",
     "requiredVariables": ["base_url", "token"],
+    "variables": [{ "key": "base_url", "value": "http://localhost:8080", "secret": false, "enabled": true }],
     "auth": { "type": "bearer", "token": "{{token}}" }
   },
   "folders": [
@@ -127,7 +128,6 @@
       "name": "Local (demo)",
       "protected": false,
       "variables": [
-        { "key": "base_url", "value": "http://localhost:8080", "secret": false, "enabled": true },
         { "key": "token", "value": "", "secret": true, "enabled": true }
       ]
     }

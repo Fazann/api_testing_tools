@@ -52,12 +52,14 @@ func TestCollectionRequestLifecycle(t *testing.T) {
 	ctx := context.Background()
 	s := openTest(t)
 	c, err := s.SaveCollection(ctx, domain.Collection{Name: "Wallet", RequiredVariables: []string{"base_url"},
-		Auth: domain.Auth{Type: domain.AuthBearer, Token: "{{token}}"}})
+		Variables: []domain.Variable{{Key: "base_url", Value: "http://x", Enabled: true}},
+		Auth:      domain.Auth{Type: domain.AuthBearer, Token: "{{token}}"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetCollection(ctx, c.ID); got.Auth.Type != domain.AuthBearer || got.Auth.Token != "{{token}}" {
-		t.Fatalf("collection auth not persisted: %+v", got.Auth)
+	if got, _ := s.GetCollection(ctx, c.ID); got.Auth.Type != domain.AuthBearer || got.Auth.Token != "{{token}}" ||
+		len(got.Variables) != 1 || got.Variables[0].Value != "http://x" {
+		t.Fatalf("collection auth or variables not persisted: %+v", got)
 	}
 	f, err := s.SaveFolder(ctx, domain.Folder{CollectionID: c.ID, Name: "Balances"})
 	if err != nil {
@@ -79,6 +81,18 @@ func TestCollectionRequestLifecycle(t *testing.T) {
 	if saved.Method != "GET" || len(saved.Assertions) != 2 || saved.Assertions[1].Function != "sum" || saved.Assertions[1].Tolerance != 0.01 {
 		t.Fatalf("round trip lost data: %+v", saved)
 	}
+
+	other, _ := s.SaveRequest(ctx, domain.Request{CollectionID: c.ID, Name: "Own auth", Method: "GET", URLTemplate: "http://x"})
+	if n, err := s.InheritCollectionAuth(ctx, c.ID); err != nil || n != 2 {
+		t.Fatalf("inherit collection auth: %d %v", n, err)
+	}
+	if got, _ := s.GetRequest(ctx, other.ID); got.Auth.Type != domain.AuthInherit {
+		t.Fatalf("request should now inherit: %+v", got.Auth)
+	}
+	if err := s.DeleteRequest(ctx, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ = s.GetRequest(ctx, saved.ID)
 
 	saved.Assertions = saved.Assertions[:1]
 	saved.Name = "Renamed"

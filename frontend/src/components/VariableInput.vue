@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 
+import { useCollectionVariables } from '../services/collectionVariables';
 import { describeVariable, splitVariables, type Segment } from '../services/variables';
 import { useEnvironments } from '../stores/environments';
 import VariablePopover from './VariablePopover.vue';
@@ -12,6 +13,7 @@ defineOptions({ inheritAttrs: false });
 const model = defineModel<string | undefined>({ default: '' });
 const attrs = useAttrs();
 const envs = useEnvironments();
+const collectionVars = useCollectionVariables().variables;
 
 const input = ref<HTMLInputElement | null>(null);
 const mirror = ref<HTMLDivElement | null>(null);
@@ -29,7 +31,7 @@ const inputAttrs = computed(() => {
 });
 
 function stateOf(seg: Segment) {
-  return describeVariable(seg.name!, envs.selected).state;
+  return describeVariable(seg.name!, envs.selected, collectionVars.value).state;
 }
 
 function sync() {

@@ -21,6 +21,10 @@ type Collection struct {
 	// RequiredVariables lists environment variables that must be present and
 	// non-empty before the collection runs.
 	RequiredVariables []string `json:"requiredVariables"`
+	// Variables are available to every request in the collection, for
+	// example base_url or token. Environment variables with the same name
+	// take precedence.
+	Variables []Variable `json:"variables"`
 	// Auth applies to every request whose auth type is "inherit".
 	Auth      Auth      `json:"auth"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -60,6 +64,9 @@ func (c *Collection) Validate() error {
 	}
 	if err := c.Auth.Validate(); err != nil {
 		return fmt.Errorf("collection auth: %w", err)
+	}
+	if err := ValidateVariables(c.Variables); err != nil {
+		return fmt.Errorf("collection variables: %w", err)
 	}
 	for _, v := range c.RequiredVariables {
 		if !IsValidVariableName(v) {

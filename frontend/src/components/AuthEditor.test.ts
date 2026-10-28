@@ -10,6 +10,7 @@ const collection: Collection = {
   name: 'Wallet',
   description: '',
   requiredVariables: [],
+  variables: [],
   auth: { type: 'bearer', token: '{{token}}' },
 };
 

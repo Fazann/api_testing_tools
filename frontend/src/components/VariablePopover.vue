@@ -1,19 +1,32 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 
+import { useCollectionVariables } from '../services/collectionVariables';
 import { clone } from '../services/model';
 import { BUILTINS, describeVariable } from '../services/variables';
 import { useEnvironments } from '../stores/environments';
 import { useUi } from '../stores/ui';
+import { useWorkspace } from '../stores/workspace';
+import type { Variable } from '../types';
+
+type Target = 'environment' | 'collection';
 
 const props = defineProps<{ name: string; x: number; y: number }>();
 const emit = defineEmits<{ enter: []; leave: []; close: [] }>();
 const envs = useEnvironments();
+const ws = useWorkspace();
 const ui = useUi();
+const scope = useCollectionVariables();
 
-const info = computed(() => describeVariable(props.name, envs.selected));
+const info = computed(() => describeVariable(props.name, envs.selected, scope.variables.value));
+/** The collection a new or changed collection variable is saved to. */
+const collection = computed(() => (scope.editing ? null : ws.currentCollection));
+const canUseCollection = computed(() => scope.editing !== null || collection.value !== null);
+const sourceLabel = computed(() =>
+  info.value.source === 'collection' ? 'Collection' : (envs.selected?.name ?? 'Environment'),
+);
 const reveal = ref(false);
-const editing = ref(false);
+const editing = ref<Target | null>(null);
 const draft = ref('');
 const secret = ref(false);
 const saving = ref(false);
@@ -23,7 +36,7 @@ watch(
   () => props.name,
   () => {
     reveal.value = false;
-    editing.value = false;
+    editing.value = null;
   },
 );
 
@@ -34,30 +47,47 @@ const displayValue = computed(() => {
   return v.secret && !reveal.value ? '•'.repeat(Math.min(v.value.length, 12)) : v.value;
 });
 
-function startEdit() {
+function startEdit(target: Target) {
   draft.value = info.value.variable?.value ?? '';
   secret.value = info.value.variable?.secret ?? /token|secret|password|key/i.test(props.name);
-  editing.value = true;
+  editing.value = target;
   nextTick(() => valueInput.value?.focus());
 }
 
-async function save() {
-  const env = envs.selected;
-  if (!env) return;
-  const updated = clone(env);
-  const existing = updated.variables.find((v) => v.key === props.name);
+/** Sets the variable in list, adding it when absent. */
+function upsert(list: Variable[]) {
+  const existing = list.find((v) => v.key === props.name);
   if (existing) {
     existing.value = draft.value;
     existing.secret = secret.value;
     existing.enabled = true;
   } else {
-    updated.variables.push({ key: props.name, value: draft.value, secret: secret.value, enabled: true });
+    list.push({ key: props.name, value: draft.value, secret: secret.value, enabled: true });
+  }
+}
+
+async function save() {
+  if (editing.value === 'collection' && scope.editing) {
+    // The collection settings form is saved by its own Save button.
+    upsert(scope.editing.value);
+    editing.value = null;
+    return;
   }
   saving.value = true;
   try {
-    await envs.save(updated);
-    editing.value = false;
-    ui.toast(`Saved ${props.name} in ${env.name}`, 'success');
+    if (editing.value === 'collection' && collection.value) {
+      const updated = clone(collection.value);
+      updated.variables = updated.variables ?? [];
+      upsert(updated.variables);
+      await ws.updateCollection(updated);
+      ui.toast(`Saved ${props.name} in collection ${updated.name}`, 'success');
+    } else if (editing.value === 'environment' && envs.selected) {
+      const updated = clone(envs.selected);
+      upsert(updated.variables);
+      await envs.save(updated);
+      ui.toast(`Saved ${props.name} in ${updated.name}`, 'success');
+    }
+    editing.value = null;
   } catch (e) {
     ui.error(e);
   } finally {
@@ -90,8 +120,8 @@ const style = computed(() => ({
           {{
             {
               builtin: 'Built-in',
-              defined: envs.selected?.name,
-              empty: envs.selected?.name,
+              defined: sourceLabel,
+              empty: sourceLabel,
               disabled: 'Disabled',
               missing: 'Unresolved',
             }[info.state]
@@ -101,12 +131,10 @@ const style = computed(() => ({
 
       <p v-if="info.state === 'builtin'" class="muted small">{{ BUILTINS[name] }}</p>
 
-      <template v-else-if="!envs.selected">
-        <p class="small">No environment is selected, so this variable cannot be resolved.</p>
-        <p class="muted small">Choose an environment in the top bar, or create one under Environments.</p>
-      </template>
-
       <template v-else-if="editing">
+        <p class="muted small">
+          {{ editing === 'collection' ? 'Collection variable, used by every request' : `In ${envs.selected?.name}` }}
+        </p>
         <input
           v-model="draft"
           class="mono"
@@ -123,7 +151,7 @@ const style = computed(() => ({
             {{ reveal ? 'Hide' : 'Show' }}
           </button>
           <span class="spacer" />
-          <button class="small" type="button" @click="editing = false">Cancel</button>
+          <button class="small" type="button" @click="editing = null">Cancel</button>
           <button class="primary small" type="button" :disabled="saving" @click="save">Save</button>
         </div>
       </template>
@@ -135,25 +163,43 @@ const style = computed(() => ({
             {{ reveal ? 'Hide' : 'Show' }}
           </button>
         </div>
+        <p v-if="info.source === 'collection'" class="muted small">
+          Collection variable: every request in the collection uses it unless the environment overrides it.
+        </p>
         <p v-if="info.state === 'disabled'" class="warn small">
-          This variable is disabled in {{ envs.selected.name }}, so the reference will not be replaced.
+          This variable is disabled, so the reference will not be replaced.
         </p>
         <p v-else-if="info.state === 'empty'" class="warn small">The value is empty.</p>
         <p v-if="info.variable.secret" class="muted small">Secret: redacted from history, reports and exports.</p>
         <div class="row">
           <span class="spacer" />
-          <button class="small" @click="startEdit">{{ info.state === 'disabled' ? 'Enable and edit' : 'Edit' }}</button>
+          <button
+            v-if="info.source === 'environment' || canUseCollection"
+            class="small"
+            @click="startEdit(info.source ?? 'environment')"
+          >
+            {{ info.state === 'disabled' ? 'Enable and edit' : 'Edit' }}
+          </button>
         </div>
       </template>
 
       <template v-else>
         <p class="small">
-          <strong class="fail">{{ name }}</strong> is not defined in <strong>{{ envs.selected.name }}</strong
-          >. The request will fail until it is.
+          <strong class="fail">{{ name }}</strong> is not defined
+          <template v-if="envs.selected">
+            in <strong>{{ envs.selected.name }}</strong></template
+          >
+          <template v-if="canUseCollection"> or in the collection</template>. The request will fail until it is.
+        </p>
+        <p v-if="!envs.selected && !canUseCollection" class="muted small">
+          Choose an environment in the top bar, or create one under Environments.
         </p>
         <div class="row">
           <span class="spacer" />
-          <button class="primary small" @click="startEdit">Add to {{ envs.selected.name }}</button>
+          <button v-if="canUseCollection" class="small" @click="startEdit('collection')">Add to collection</button>
+          <button v-if="envs.selected" class="primary small" @click="startEdit('environment')">
+            Add to {{ envs.selected.name }}
+          </button>
         </div>
       </template>
     </div>

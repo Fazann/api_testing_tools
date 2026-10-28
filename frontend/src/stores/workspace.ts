@@ -40,7 +40,13 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   async function createCollection(name: string) {
-    const c = await api.saveCollection({ name, description: '', requiredVariables: [], auth: { type: 'none' } });
+    const c = await api.saveCollection({
+      name,
+      description: '',
+      requiredVariables: [],
+      variables: [],
+      auth: { type: 'none' },
+    });
     expanded.value[c.id] = true;
     await load();
     return c;
@@ -49,6 +55,18 @@ export const useWorkspace = defineStore('workspace', () => {
   async function updateCollection(c: Collection) {
     await api.saveCollection(c);
     await load();
+  }
+
+  /** Makes every request in the collection use the collection's auth; returns how many changed. */
+  async function inheritCollectionAuth(id: string) {
+    const changed = await api.inheritCollectionAuth(id);
+    const tree = await loadTree(id);
+    // Follow along in the editor unless the open request has unsaved edits.
+    if (draft.value?.collectionId === id && !dirty.value) {
+      const fresh = tree.requests.find((r) => r.id === draft.value!.id);
+      if (fresh) open(fresh);
+    }
+    return changed;
   }
 
   async function duplicateCollection(id: string) {
@@ -156,6 +174,7 @@ export const useWorkspace = defineStore('workspace', () => {
     toggle,
     createCollection,
     updateCollection,
+    inheritCollectionAuth,
     duplicateCollection,
     deleteCollection,
     createFolder,

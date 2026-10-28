@@ -49,6 +49,10 @@ func (a *App) SaveCollection(c domain.Collection) (domain.Collection, error) {
 	return a.svc.SaveCollection(a.ctx, c)
 }
 
+func (a *App) InheritCollectionAuth(collectionID string) (int, error) {
+	return a.svc.InheritCollectionAuth(a.ctx, collectionID)
+}
+
 func (a *App) DuplicateCollection(id string) (domain.Collection, error) {
 	return a.svc.DuplicateCollection(a.ctx, id)
 }
