@@ -5,3 +5,5 @@ frontend/wailsjs/
 *.db
 *.db-wal
 *.db-shm
+release/
+.cache/

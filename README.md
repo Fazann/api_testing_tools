@@ -38,6 +38,33 @@ Requirements: Go 1.26+, Node.js 20+, and the [Wails v2 CLI](https://wails.io/doc
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 ```
 
+### With make
+
+```sh
+make help              # list all targets
+make deps              # install frontend dependencies, download Go modules
+make dev               # run with hot reload
+make run               # build for this machine and start the app
+make build             # build for this machine → build/bin/api-regression-guard
+make test              # frontend + Go tests
+make build-linux       # Linux binary for this architecture
+make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
+make build-windows     # Windows amd64 + arm64 .exe (cross-compiles from Linux, no C toolchain needed)
+make release           # tests, then packaged builds of every platform this host can build → release/
+```
+
+`make release` calls [`scripts/build.sh`](scripts/build.sh), which can also be used directly:
+
+```sh
+scripts/build.sh --help
+scripts/build.sh -v 1.2.0 linux windows      # → release/api-regression-guard-1.2.0-<os>-<arch>.{tar.gz,zip}
+scripts/build.sh --nsis windows/amd64        # plus an NSIS installer (needs makensis)
+```
+
+Each release also gets a `SHA256SUMS-<version>.txt`. The version is stamped into the binary (default: `git describe`).
+Linux builds use CGO with GTK/WebKitGTK, so they only target the host architecture; macOS builds need a macOS host.
+On Windows, run the script from Git Bash, or use the `wails build` commands below.
+
 ### Linux
 
 ```sh
@@ -45,6 +72,19 @@ go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 wails build -tags webkit2_41          # → build/bin/api-regression-guard
 ```
+
+A binary built with `wails build` or `make build-linux` only runs on distributions with the same or a newer glibc than
+the build machine. To build one package for Debian 12+, Ubuntu 22.04+ and their derivatives (Mint, Pop!_OS, ...), use:
+
+```sh
+make build-debian                     # → release/test-tool-kit_<version>_<arch>.deb
+sudo apt install ./release/test-tool-kit_*.deb
+test-tool-kit                         # or open it from the app menu
+```
+
+This builds inside a Debian 12 container ([`build/linux/debian.Dockerfile`](build/linux/debian.Dockerfile)), so only
+Docker is needed on the host. The package declares its GTK/WebKitGTK dependencies, so `apt` installs them, and it adds
+a menu entry and icon.
 
 On distributions that still ship WebKitGTK 4.0 (`libwebkit2gtk-4.0-dev`), omit `-tags webkit2_41`. Fedora: `sudo dnf install gtk3-devel webkit2gtk4.1-devel`.
 
