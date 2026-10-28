@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "api-regression-guard",
+  "outputfilename": "api-regression-guard",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "./frontend",
+  "author": {
+    "name": "API Regression Guard contributors"
+  },
+  "info": {
+    "productName": "API Regression Guard",
+    "productVersion": "0.1.0",
+    "comments": "Local-first API testing and regression detection"
+  }
+}

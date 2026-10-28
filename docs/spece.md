@@ -1,0 +1,701 @@
+# API Testing & Regression Guard
+
+**Target platforms:** Windows and Linux first; macOS may be added later.  
+**Suggested stack:** Go, Wails, Vue 3, TypeScript, Pinia, SQLite.  
+**Product approach:** Keep core desktop testing free. Consider optional paid cloud/team features only after validating recurring user demand.
+
+---
+
+## 1. Product Vision
+
+Help developers and QA testers catch API regressions before deployment, especially failures caused by code changes, environment variables, configuration changes, database settings, and business-logic errors.
+
+The app should be easy to start using, work offline for local collections and test history, and not require a cloud account for core functionality.
+
+### Problem to solve
+
+API regressions are not limited to HTTP errors. An endpoint can return `200 OK` while returning incorrect balances, totals, permissions, or report data. The tool should validate both transport-level behavior and business-level expectations.
+
+### Target users
+
+- Backend developers
+- QA engineers and manual testers
+- Small software teams without a dedicated test platform
+- Developers maintaining APIs with scheduled jobs or Telegram/email reports
+- Independent developers who need repeatable checks before releasing changes
+
+### Product positioning
+
+A lightweight, local-first alternative to heavyweight API workflows, focused on:
+
+1. Repeatable HTTP API tests
+2. Business-rule assertions
+3. Regression comparisons
+4. Environment and configuration checks
+5. Clear failure reports
+
+---
+
+## 2. Goals and Non-Goals
+
+### MVP goals
+
+- Create and organize HTTP requests.
+- Run requests individually or as a collection.
+- Support environment variables without committing secrets to source control.
+- Validate status codes, headers, response time, JSON fields, and custom assertions.
+- Compare selected JSON response fields against a saved baseline.
+- Store test collections and run history locally.
+- Export a readable HTML or JSON test report.
+- Build distributable Windows and Linux desktop packages.
+- Work without requiring a user account or hosted backend.
+
+### Non-goals for the first release
+
+- Full browser automation
+- Load testing at scale
+- Automatic vulnerability exploitation
+- Replacing a full API client or API gateway
+- Hosted collaboration and organization management
+- Running arbitrary user scripts without strict controls
+- Automatic production testing that may modify real data
+- macOS support before the Windows/Linux release is validated
+
+---
+
+## 3. Core User Workflows
+
+### Workflow A: Create and run an API test
+
+1. Create a workspace or collection.
+2. Add a request with method, URL, headers, query parameters, and body.
+3. Select an environment, such as Local, Staging, or Production.
+4. Add assertions, such as expected status code and JSON field values.
+5. Run the request.
+6. Review the request, response, assertion results, and duration.
+7. Save the test and rerun it later.
+
+### Workflow B: Detect a regression
+
+1. Run a known-good request against a controlled environment.
+2. Save a baseline for selected stable response fields.
+3. Change application code or configuration.
+4. Run the same collection again.
+5. Compare actual results with the baseline and assertions.
+6. Review added, removed, changed, or type-changed JSON fields.
+7. Export the regression report.
+
+A baseline is not automatically the truth. The user must review and approve a new baseline after verifying the behavior is correct.
+
+### Workflow C: Check environment or configuration changes
+
+1. Select a named environment.
+2. Run a test collection against it.
+3. Verify required environment variables are present.
+4. Execute read-only health and business-rule tests.
+5. Compare the result with the previous run.
+6. Review failures before promoting the configuration.
+
+### Workflow D: Verify reports and scheduled jobs
+
+For the MVP, test report APIs or endpoints that expose job status and generated data. Later, add optional CLI execution so users can run collections from cron, systemd timers, or CI pipelines and send results to a notification endpoint.
+
+Do not promise that a desktop GUI process can run jobs while the computer is powered off.
+
+---
+
+## 4. MVP Feature Requirements
+
+### P0 — Required for first usable release
+
+#### Request builder
+
+- HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
+- URL, query parameters, headers, and request body
+- JSON and plain-text request bodies
+- Authentication: Bearer token, Basic Auth, and API key
+- Request timeout
+- Redirect handling
+- Cancel an in-progress request
+- Display status code, response headers, response body, and duration
+- Response size limit configurable with a safe default
+
+#### Collections and environments
+
+- Create, rename, duplicate, and delete collections and requests
+- Organize requests in folders
+- Store environment variables locally
+- Variable interpolation in URL, headers, query parameters, and body
+- Mark sensitive variables as secret
+- Mask secrets in the UI and reports
+- Import/export collections using a documented JSON format
+- Warn before exporting secrets
+- Never include secrets in logs by default
+
+#### Assertions
+
+- Expected HTTP status
+- Response header exists or equals a value
+- JSON path exists
+- JSON field equals, not-equals, or matches a type
+- Numeric comparisons: greater-than, less-than, greater-than-or-equal, less-than-or-equal
+- String contains or matches a safe pattern
+- Response time below a threshold
+- Response body is valid JSON
+- Required fields are present
+- Assertion results include expected value, actual value, and a useful failure message
+
+#### Regression comparison
+
+- Save a baseline for a response or selected JSON paths
+- Compare JSON objects independent of key order
+- Report added, removed, and changed fields
+- Detect JSON type changes
+- Allow users to ignore dynamic fields such as timestamps, request IDs, and random tokens
+- Support numeric tolerance for floating-point fields
+- Show a readable diff
+- Require explicit user approval to update a baseline
+
+#### Run history and reports
+
+- Persist run summaries and assertion results in SQLite
+- Show pass/fail counts and duration
+- Filter history by collection, request, and date
+- Export JSON and self-contained HTML reports
+- Redact configured secret values from reports
+- Include app version, run time, target environment name, and test counts
+- Do not include authorization headers or secret environment values
+
+#### Desktop quality
+
+- Keyboard-friendly request editing
+- Clear empty states and error messages
+- Confirm destructive operations
+- Recover safely from interrupted writes
+- Provide Windows and Linux build instructions
+- Keep core features usable without login or network access except when making API requests
+
+### P1 — After MVP feedback
+
+- CLI mode for running exported collections
+- CI integration examples for GitHub Actions and other CI systems
+- Scheduled local test runs
+- Notifications through a configurable webhook
+- CSV export for selected tabular results
+- Encrypted secret storage using platform facilities where practical
+- Request chaining and extracting values from prior responses
+- OpenAPI import
+- Test templates for common API patterns
+
+### P2 — Only after validating demand
+
+- Optional hosted run history
+- Team workspaces and shared collections
+- Centralized scheduled runs
+- Team dashboards and report retention
+- Role-based access and audit logs
+- Organization-level secret management
+
+---
+
+## 5. Example Business-Rule Tests
+
+The tool should make business logic easy to verify, not just status codes.
+
+### Wallet balance
+
+Example assertions:
+
+- Response status is `200`.
+- `data.balance` exists and is numeric.
+- `data.currency` equals the expected currency.
+- Balance after a test transaction equals the expected value.
+- A rejected transaction does not change the balance.
+
+Use a dedicated test account and controlled data. Never run destructive financial tests against real customer accounts.
+
+### Report totals
+
+Example assertions:
+
+- Report date range matches the requested range.
+- `total_count` equals the number of returned records, where the API contract defines that relationship.
+- Sum of item amounts equals the reported total within an explicitly configured tolerance.
+- Empty periods return a valid empty result instead of stale data.
+- Pagination does not double-count records.
+
+### Authorization
+
+Example assertions:
+
+- Unauthenticated requests return the documented status.
+- A user cannot access another user's protected resource.
+- A read-only role cannot perform a write operation.
+- Sensitive fields are not present in responses.
+
+Only test systems and accounts for which the user has authorization.
+
+---
+
+## 6. Technical Architecture
+
+```text
+┌─────────────────────────────────────────┐
+│             Vue 3 + TypeScript           │
+│  Request Editor · Collections · Results │
+│  Environments · Assertions · Diff View  │
+└────────────────────┬────────────────────┘
+                     │ Wails bindings
+┌────────────────────▼────────────────────┐
+│                  Go App                  │
+│ Request Runner · Assertion Engine       │
+│ Regression Comparator · Report Exporter │
+│ Collection/Environment Services         │
+└──────────┬─────────────────────┬────────┘
+           │                     │
+┌──────────▼─────────┐  ┌────────▼────────┐
+│ SQLite Repository  │  │ HTTP Client     │
+│ Collections        │  │ TLS · Timeout   │
+│ Environments       │  │ Redirect Policy │
+│ Baselines/History  │  │ Response Limits │
+└────────────────────┘  └─────────────────┘
+```
+
+### Recommended stack
+
+- **Backend:** Go
+- **Desktop framework:** Wails
+- **Frontend:** Vue 3, TypeScript, Vite
+- **State management:** Pinia
+- **UI:** accessible component library or a small consistent design system
+- **Local database:** SQLite
+- **Validation:** explicit Go validation functions and typed domain models
+- **Testing:** Go unit tests, integration tests with local mock servers, frontend unit tests, packaged-app smoke tests
+- **CI:** GitHub Actions with Windows and Linux build/test jobs
+
+Keep request execution and assertion logic independent of Wails so the same engine can later power a CLI.
+
+### Frontend code style
+
+All frontend code (`.ts`, `.vue`, `.css`) follows these rules, enforced by Prettier (`frontend/.prettierrc.json`) and checked in CI with `npm run lint`:
+
+- **Import order:** imports are sorted automatically — Node built-ins, then third-party packages, then a blank line, then local (`./`, `../`) imports.
+- **Semicolons:** every statement ends with a semicolon.
+- **Maximum line length: 120 characters.** Prettier wraps code at 120 columns; `scripts/check-line-length.mjs` fails the lint step for anything it cannot wrap, such as long strings or template text.
+- Single quotes and trailing commas.
+
+Run `npm run format` to apply the style and `npm run lint` to check it.
+
+---
+
+## 7. Suggested Repository Structure
+
+```text
+api-regression-guard/
+├── app.go
+├── main.go
+├── go.mod
+├── internal/
+│   ├── domain/
+│   │   ├── collection.go
+│   │   ├── request.go
+│   │   ├── environment.go
+│   │   ├── assertion.go
+│   │   └── run.go
+│   ├── httpclient/
+│   │   ├── client.go
+│   │   └── safety.go
+│   ├── runner/
+│   │   ├── runner.go
+│   │   └── concurrency.go
+│   ├── assertions/
+│   │   ├── evaluator.go
+│   │   └── jsonpath.go
+│   ├── regression/
+│   │   ├── baseline.go
+│   │   └── diff.go
+│   ├── storage/
+│   │   ├── sqlite.go
+│   │   └── migrations/
+│   ├── environments/
+│   │   └── resolver.go
+│   ├── reports/
+│   │   ├── json.go
+│   │   └── html.go
+│   └── service/
+│       └── app_service.go
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── views/
+│   │   ├── stores/
+│   │   ├── services/
+│   │   ├── types/
+│   │   └── router/
+│   ├── package.json
+│   └── vite.config.ts
+├── tests/
+│   ├── fixtures/
+│   └── integration/
+├── build/
+├── docs/
+│   ├── architecture.md
+│   ├── security.md
+│   └── collection-format.md
+└── README.md
+```
+
+Adjust the layout to the selected Wails version's generated project structure. Avoid creating packages before they have a clear responsibility.
+
+---
+
+## 8. Initial Data Model
+
+Use SQLite migrations from the beginning.
+
+### `collections`
+
+- `id`: text UUID primary key
+- `name`: text, required
+- `description`: text, optional
+- `created_at`: timestamp
+- `updated_at`: timestamp
+
+### `requests`
+
+- `id`: text UUID primary key
+- `collection_id`: foreign key
+- `parent_id`: optional folder/request grouping identifier
+- `name`: text, required
+- `method`: text, required
+- `url_template`: text, required
+- `headers_json`: text
+- `query_json`: text
+- `body`: text
+- `body_type`: text
+- `auth_json`: text with secret values excluded or encrypted as designed
+- `timeout_ms`: integer
+- `created_at`: timestamp
+- `updated_at`: timestamp
+
+### `environments`
+
+- `id`: text UUID primary key
+- `name`: text, required
+- `variables_json`: text, protected according to secret-handling rules
+- `created_at`: timestamp
+- `updated_at`: timestamp
+
+### `assertions`
+
+- `id`: text UUID primary key
+- `request_id`: foreign key
+- `kind`: text, required
+- `path`: text, optional
+- `operator`: text, optional
+- `expected_json`: text, optional
+- `enabled`: boolean
+- `created_at`: timestamp
+
+### `baselines`
+
+- `id`: text UUID primary key
+- `request_id`: foreign key
+- `environment_id`: optional foreign key
+- `response_snapshot`: text or JSON
+- `ignored_paths_json`: text
+- `created_at`: timestamp
+- `updated_at`: timestamp
+
+### `runs`
+
+- `id`: text UUID primary key
+- `collection_id`: optional foreign key
+- `environment_name`: text
+- `status`: text
+- `started_at`: timestamp
+- `finished_at`: optional timestamp
+- `passed_count`: integer
+- `failed_count`: integer
+- `error_count`: integer
+
+### `run_results`
+
+- `id`: text UUID primary key
+- `run_id`: foreign key
+- `request_id`: optional foreign key
+- `request_summary_json`: text with secrets removed
+- `response_summary_json`: text with secrets removed
+- `assertion_results_json`: text
+- `duration_ms`: integer
+- `status`: text
+- `created_at`: timestamp
+
+Use indexes for foreign keys and common history queries. Define retention and response-body limits so test history cannot silently consume unlimited disk space.
+
+---
+
+## 9. Security and Reliability Requirements
+
+API clients can access sensitive systems, so security must be part of the MVP.
+
+### Secret handling
+
+- Never log passwords, API keys, cookies, or authorization headers.
+- Mask secrets in the UI by default.
+- Redact secret values from reports and error messages.
+- Warn before exporting collections containing secrets.
+- Prefer OS-backed secure storage for secrets where supported.
+- If encrypted storage is unavailable, explain the limitation and offer safer alternatives rather than claiming plaintext storage is secure.
+- Do not embed service credentials in the desktop binary.
+
+### Network safety
+
+- Set request timeouts and response-size limits.
+- Avoid unbounded concurrent requests.
+- Do not disable TLS certificate verification by default.
+- Treat imported collections and environment files as untrusted input.
+- Warn before requests target production or perform destructive methods.
+- Avoid automatic retries for non-idempotent methods unless explicitly configured.
+- Do not automatically follow redirects across origins while forwarding sensitive credentials.
+- Protect against accidental requests to local metadata endpoints and other sensitive network destinations when executing untrusted collections.
+- Make proxy and certificate behavior explicit.
+
+### Data integrity
+
+- Use database transactions for multi-step writes.
+- Version the collection export format.
+- Use migrations for schema changes.
+- Make baseline updates explicit and reviewable.
+- Handle malformed JSON and missing paths without crashing.
+- Use bounded history retention and allow users to delete local data.
+
+### Quality gates
+
+- Unit tests for assertion operators and JSON diff logic
+- Tests for secret redaction
+- Tests for timeout, cancellation, oversized responses, redirects, and TLS failures
+- Integration tests using a local mock HTTP server
+- Race detector and `govulncheck` in CI where supported
+- Build and smoke tests on Windows and Linux
+- Verify that no secrets appear in application logs or exported reports
+
+---
+
+## 10. UI Screens
+
+### Main layout
+
+- Left sidebar: collections, folders, and saved requests
+- Top bar: environment selector, run button, save button
+- Main panel: request editor with Params, Headers, Body, Auth, and Tests tabs
+- Bottom or side panel: response status, duration, headers, body, and assertion results
+- Separate run-history view with filters
+- Regression diff view with changed JSON paths highlighted
+
+### MVP screens
+
+1. Welcome / empty state
+2. Collection explorer
+3. Request editor
+4. Environment editor
+5. Assertion editor
+6. Response viewer
+7. Test-run summary
+8. Baseline diff viewer
+9. Run history
+10. Import/export dialogs
+11. Settings and data-management screen
+
+Keep the first version focused. Do not build a complex dashboard before the request and test workflows are reliable.
+
+---
+
+## 11. Development Roadmap
+
+Assumption: one developer working approximately 5–10 hours per week. Estimates are approximate and should be revised after the prototype.
+
+### Phase 0 — Validate the problem (3–5 days)
+
+- Interview 5–10 backend developers or QA testers.
+- Ask how they currently test APIs after code, config, or database changes.
+- Collect examples of real regression failures.
+- Show a simple mockup and test whether users want local-first regression comparisons.
+- Define the initial supported use cases.
+
+**Exit criterion:** At least three testers agree to try a working prototype on real, authorized test APIs.
+
+### Phase 1 — Foundation (1 week)
+
+- Create the Wails project.
+- Add Vue, TypeScript, Pinia, and the initial layout.
+- Define Go domain models.
+- Set up SQLite migrations.
+- Add CI jobs for Go tests and frontend checks.
+- Add a local mock HTTP server for integration testing.
+
+**Exit criterion:** The app launches on Windows and Linux, and automated tests run in CI.
+
+### Phase 2 — HTTP request runner (1–2 weeks)
+
+- Implement request methods, headers, query parameters, body, auth, and timeout.
+- Display response status, headers, body, and duration.
+- Add cancellation and response-size limits.
+- Implement environment variable interpolation.
+- Add request and collection persistence.
+
+**Exit criterion:** Users can save, close, reopen, and run a collection successfully.
+
+### Phase 3 — Assertions and regression engine (1–2 weeks)
+
+- Implement status and JSON assertions.
+- Implement response time and header assertions.
+- Implement baseline creation and explicit approval.
+- Implement JSON path diffs and ignored paths.
+- Add detailed pass/fail messages.
+
+**Exit criterion:** A deliberate response change causes the expected test failure and a useful diff.
+
+### Phase 4 — History, reports, and security (1–2 weeks)
+
+- Store run history.
+- Export self-contained HTML and JSON reports.
+- Add secret redaction.
+- Add import/export validation.
+- Test timeouts, redirects, malformed input, and oversized responses.
+
+**Exit criterion:** A test run can be reproduced and shared without leaking credentials.
+
+### Phase 5 — Private beta (1–2 weeks)
+
+- Package Windows and Linux builds.
+- Write installation and quick-start documentation.
+- Recruit five testers.
+- Collect issues and observe actual use.
+- Fix crashes and usability problems before adding more features.
+
+**Exit criterion:** Testers can complete the core workflow without your direct help and want to keep using it.
+
+### Phase 6 — Public release
+
+- Publish release binaries and checksums.
+- Add screenshots, demo collections, and a short walkthrough.
+- Publish source code if using an open-source model.
+- Add issue templates and a public roadmap.
+- Track opt-in, privacy-respecting product metrics or rely on direct user feedback.
+- Consider a CLI after desktop usage is validated.
+
+---
+
+## 12. Monetization Strategy
+
+The desktop MVP should remain free. Avoid paywalls around basic API requests, assertions, and local regression testing.
+
+Potential future revenue:
+
+### Free
+
+- Unlimited local collections, subject to reasonable resource limits
+- HTTP request runner
+- Assertions and JSON comparisons
+- Local run history
+- HTML and JSON reports
+- Windows and Linux builds
+
+### Optional paid features
+
+- Hosted run history and scheduled cloud runs
+- Team-shared collections
+- Centralized dashboards
+- Long-term report retention
+- Organization access controls
+- Managed CI reporting and integrations
+- Paid business support
+
+Possible experiments after validation:
+
+- Small team plan: test approximately $5–$10 per user/month.
+- Hosted project plan: test approximately $10–$25 per project/month.
+- Business support: quote based on support scope.
+
+These are pricing hypotheses, not validated market prices. Interview users and test willingness to pay before implementing billing.
+
+---
+
+## 13. Distribution and Marketing
+
+### Windows
+
+- Publish downloadable installers and portable builds where practical.
+- Consider Microsoft Store distribution after packaging and policy checks.
+- Sign releases when feasible and provide checksums.
+- Document upgrade and uninstall behavior.
+
+### Linux
+
+- Start with a tested AppImage or native package where practical.
+- Consider Flatpak/Flathub after the app's permissions and packaging are ready.
+- Document supported distributions and dependencies.
+- Test on a mainstream Ubuntu release and at least one additional distribution.
+
+### Reach the first users
+
+- Publish technical walkthroughs showing how to catch a real API regression.
+- Share with Go, backend development, and QA communities without spamming.
+- Offer ready-to-run demo collections.
+- Write examples for wallet balances, report totals, pagination, and role-based access.
+- Ask early testers which missing feature would make them use the app weekly.
+
+Measure repeat usage and successful test runs rather than downloads alone.
+
+---
+
+## 14. Success Metrics
+
+For the first 30–60 days after beta:
+
+- 5–10 active testers
+- At least 3 testers using it repeatedly
+- Successful installation on both Windows and Linux
+- No unresolved critical data-loss or secret-leak bugs
+- Clear evidence of which workflows users repeat
+- At least 3 user interviews about paid team or hosted features before implementing monetization
+
+Do not treat downloads or GitHub stars alone as product-market fit.
+
+---
+
+## 15. Definition of Done for the MVP
+
+The MVP is ready for public release when:
+
+- [ ] Users can create and persist collections and requests.
+- [ ] Users can define environments and use variables safely.
+- [ ] Requests can run with timeouts and cancellation.
+- [ ] Assertions cover HTTP status, headers, JSON values, and response time.
+- [ ] Users can save, compare, and explicitly update baselines.
+- [ ] Regression diffs identify added, removed, and changed fields.
+- [ ] Run history persists locally and can be exported.
+- [ ] Reports redact secrets.
+- [ ] Importing malformed or untrusted data does not crash the app.
+- [ ] Unit and integration tests pass.
+- [ ] Windows and Linux packages have been smoke-tested.
+- [ ] Installation, quick-start, security, and data backup documentation exists.
+
+---
+
+## 16. Recommended First Implementation Task
+
+Start with a narrow vertical slice rather than generating the entire application at once:
+
+1. Create the Wails + Vue + TypeScript project.
+2. Add one screen with method, URL, headers, and body inputs.
+3. Implement a Go method that sends an HTTP request with a timeout.
+4. Display status, headers, response body, and duration.
+5. Add tests using a local mock HTTP server.
+6. Save and reload one request from SQLite.
+7. Build and verify on Windows and Linux.
+
+Once this works, add assertions, then baseline comparison, then reports. This sequence reduces the risk of building a large UI before the core engine is proven.
+
+---

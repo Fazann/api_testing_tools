@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Wallet mock
+  version: "1.0"
+  description: OpenAPI description of the mock API used in the integration tests.
+servers:
+  - url: http://localhost:8080
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+security:
+  - bearerAuth: []
+tags:
+  - name: wallet
+  - name: reports
+paths:
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties: { status: { type: string } }
+  /wallet/balance:
+    get:
+      tags: [wallet]
+      summary: Get balance
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      balance: { type: number }
+                      currency: { type: string }
+                  meta: { type: object }
+        "401": { description: unauthorized }
+  /reports/daily:
+    get:
+      tags: [reports]
+      summary: Daily report
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date, example: "2026-10-01" } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date, example: "2026-10-07" } }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [range, items, total_count, total]

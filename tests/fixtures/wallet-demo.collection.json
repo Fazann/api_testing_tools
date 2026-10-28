@@ -1,0 +1,136 @@
+{
+  "format": "api-regression-guard.collection",
+  "version": 1,
+  "exportedAt": "2026-10-28T00:00:00Z",
+  "collection": {
+    "id": "demo",
+    "name": "Wallet demo",
+    "description": "Business-rule checks for a test wallet and report API. Point base_url at a controlled test environment.",
+    "requiredVariables": ["base_url", "token"],
+    "auth": { "type": "bearer", "token": "{{token}}" }
+  },
+  "folders": [
+    { "id": "f-wallet", "parentId": "", "name": "Wallet" },
+    { "id": "f-reports", "parentId": "", "name": "Reports" },
+    { "id": "f-auth", "parentId": "", "name": "Authorization" }
+  ],
+  "requests": [
+    {
+      "id": "r-health",
+      "parentId": "",
+      "name": "Health check",
+      "method": "GET",
+      "url": "{{base_url}}/health",
+      "bodyType": "none",
+      "auth": { "type": "none" },
+      "timeoutMs": 5000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "response_time", "operator": "lt", "expected": 1000, "enabled": true },
+        { "kind": "json_path", "path": "status", "operator": "eq", "expected": "ok", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-balance",
+      "parentId": "f-wallet",
+      "name": "Get balance",
+      "method": "GET",
+      "url": "{{base_url}}/wallet/balance",
+      "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 5000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "valid_json", "operator": "", "enabled": true },
+        { "kind": "required_fields", "operator": "", "expected": ["data.balance", "data.currency"], "enabled": true },
+        { "kind": "json_path", "path": "data.balance", "operator": "type", "expected": "number", "enabled": true },
+        { "kind": "json_path", "path": "data.currency", "operator": "eq", "expected": "USD", "enabled": true },
+        { "kind": "header", "path": "Content-Type", "operator": "contains", "expected": "application/json", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-reject",
+      "parentId": "f-wallet",
+      "name": "Rejected transaction does not change balance",
+      "method": "POST",
+      "url": "{{base_url}}/wallet/transactions",
+      "body": "{\"amount\": 1000000, \"reference\": \"{{$uuid}}\"}",
+      "bodyType": "json",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 5000,
+      "followRedirects": false,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 422, "enabled": true },
+        { "kind": "json_path", "path": "error.code", "operator": "eq", "expected": "insufficient_funds", "enabled": true },
+        { "kind": "json_path", "path": "balance_after", "operator": "eq", "expected": { "$path": "balance_before" }, "enabled": true }
+      ]
+    },
+    {
+      "id": "r-report",
+      "parentId": "f-reports",
+      "name": "Daily report totals",
+      "method": "GET",
+      "url": "{{base_url}}/reports/daily",
+      "query": [
+        { "key": "from", "value": "2026-10-01", "enabled": true },
+        { "key": "to", "value": "2026-10-07", "enabled": true }
+      ],
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 5000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "json_path", "path": "range.from", "operator": "eq", "expected": "2026-10-01", "enabled": true },
+        { "kind": "json_path", "path": "range.to", "operator": "eq", "expected": "2026-10-07", "enabled": true },
+        { "kind": "aggregate", "function": "count", "path": "items", "operator": "eq", "expected": { "$path": "total_count" }, "enabled": true },
+        { "kind": "aggregate", "function": "sum", "path": "items[*].amount", "operator": "eq", "expected": { "$path": "total" }, "tolerance": 0.005, "enabled": true },
+        { "kind": "json_path", "path": "items[*].amount", "operator": "gte", "expected": 0, "enabled": true }
+      ]
+    },
+    {
+      "id": "r-unauth",
+      "parentId": "f-auth",
+      "name": "Unauthenticated request is rejected",
+      "method": "GET",
+      "url": "{{base_url}}/wallet/balance",
+      "bodyType": "none",
+      "auth": { "type": "none" },
+      "timeoutMs": 5000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 401, "enabled": true },
+        { "kind": "json_path", "path": "data", "operator": "not_exists", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-sensitive",
+      "parentId": "f-auth",
+      "name": "Profile hides sensitive fields",
+      "method": "GET",
+      "url": "{{base_url}}/me",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 5000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "json_path", "path": "password_hash", "operator": "not_exists", "enabled": true },
+        { "kind": "body", "operator": "not_contains", "expected": "{{token}}", "enabled": true }
+      ]
+    }
+  ],
+  "environments": [
+    {
+      "name": "Local (demo)",
+      "protected": false,
+      "variables": [
+        { "key": "base_url", "value": "http://localhost:8080", "secret": false, "enabled": true },
+        { "key": "token", "value": "", "secret": true, "enabled": true }
+      ]
+    }
+  ],
+  "secretsIncluded": false
+}
