@@ -1,7 +1,7 @@
 # API Regression Guard — common development and release tasks.
 # Run `make help` for the list of targets.
 
-APP      := api-regression-guard
+APP      := test-tool-kit
 MODULE   := api-test-kits
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.1.0-dev)
 GO       ?= go

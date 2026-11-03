@@ -252,9 +252,11 @@ func validate(doc Document) (*Imported, error) {
 
 	c := domain.Collection{
 		Name: strings.TrimSpace(doc.Collection.Name), Description: doc.Collection.Description,
-		RequiredVariables: doc.Collection.RequiredVariables,
-		Variables:         doc.Collection.Variables,
-		Auth:              doc.Collection.Auth,
+		RequiredVariables:  doc.Collection.RequiredVariables,
+		Variables:          doc.Collection.Variables,
+		Auth:               doc.Collection.Auth,
+		PreRequestScript:   doc.Collection.PreRequestScript,
+		PostResponseScript: doc.Collection.PostResponseScript,
 	}
 	if err := c.Validate(); err != nil {
 		add("collection: %v", err)

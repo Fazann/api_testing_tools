@@ -22,7 +22,7 @@ defineProps<{ results: AssertionResult[] }>();
           <span :class="r.passed ? 'pass' : 'fail'">{{ r.passed ? '✔ Pass' : '✘ Fail' }}</span>
         </td>
         <td>
-          {{ KIND_LABELS[r.kind] ?? r.kind }}
+          {{ r.kind === 'script' ? 'Script test' : KIND_LABELS[r.kind] }}
           <code v-if="r.path">{{ r.path }}</code>
           <span v-if="r.operator" class="muted"> {{ OPERATOR_LABELS[r.operator] ?? r.operator }}</span>
           <div v-if="r.description" class="muted small">{{ r.description }}</div>
@@ -33,5 +33,5 @@ defineProps<{ results: AssertionResult[] }>();
       </tr>
     </tbody>
   </table>
-  <p v-else class="muted">No tests ran. Add tests in the Tests tab.</p>
+  <p v-else class="muted">No tests ran. Add tests in the Tests tab, or pm.test() in a post-response script.</p>
 </template>

@@ -45,7 +45,7 @@ make help              # list all targets
 make deps              # install frontend dependencies, download Go modules
 make dev               # run with hot reload
 make run               # build for this machine and start the app
-make build             # build for this machine → build/bin/api-regression-guard
+make build             # build for this machine → build/bin/test-tool-kit
 make test              # frontend + Go tests
 make build-linux       # Linux binary for this architecture
 make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
@@ -57,7 +57,7 @@ make release           # tests, then packaged builds of every platform this host
 
 ```sh
 scripts/build.sh --help
-scripts/build.sh -v 1.2.0 linux windows      # → release/api-regression-guard-1.2.0-<os>-<arch>.{tar.gz,zip}
+scripts/build.sh -v 1.2.0 linux windows      # → release/test-tool-kit-1.2.0-<os>-<arch>.{tar.gz,zip}
 scripts/build.sh --nsis windows/amd64        # plus an NSIS installer (needs makensis)
 ```
 
@@ -70,7 +70,7 @@ On Windows, run the script from Git Bash, or use the `wails build` commands belo
 ```sh
 # Debian/Ubuntu 24.04+ (WebKitGTK 4.1)
 sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
-wails build -tags webkit2_41          # → build/bin/api-regression-guard
+wails build -tags webkit2_41          # → build/bin/test-tool-kit
 ```
 
 A binary built with `wails build` or `make build-linux` only runs on distributions with the same or a newer glibc than
@@ -93,7 +93,7 @@ On distributions that still ship WebKitGTK 4.0 (`libwebkit2gtk-4.0-dev`), omit `
 Requires the WebView2 runtime (preinstalled on Windows 10/11).
 
 ```powershell
-wails build                           # → build\bin\api-regression-guard.exe
+wails build                           # → build\bin\test-tool-kit.exe
 wails build -nsis                     # optional installer (requires NSIS)
 ```
 
@@ -118,6 +118,14 @@ cd frontend && npm ci && npm run lint && npm test && npm run build
 
 `go test` compiles `main.go`, which embeds `frontend/dist`, so build the frontend once first. CI (`.github/workflows/ci.yml`) runs all of this on Linux and Windows, plus `govulncheck` and packaged desktop builds.
 
+## Scripts
+
+Requests and collections can have **pre-request** and **post-response** scripts in JavaScript with a
+Postman-compatible `pm` API — sign or encrypt requests (`CryptoJS`, `pm.crypto.rsaSign`/`rsaEncrypt`), write
+`pm.test` checks, and pass values such as tokens between requests with `pm.environment.set`. `lodash`, `moment`,
+`uuid` and `atob`/`btoa` are bundled. Scripts run in an isolated runtime with no file or network access. See
+[docs/collection-format.md#scripts](docs/collection-format.md#scripts) for the full API.
+
 ## Data and backups
 
 Everything is stored in one SQLite file:
@@ -135,7 +143,7 @@ Secrets are stored unencrypted in this file with owner-only permissions — read
 
 ```text
 main.go, app.go          Wails entry point and bindings
-internal/                engine (domain, httpclient, runner, assertions, regression,
+internal/                engine (domain, httpclient, runner, assertions, regression, scripting,
                          environments, redact, storage, reports, collectionio, service)
 frontend/                Vue 3 + TypeScript + Pinia UI
 tests/integration        end-to-end tests against a mock API
@@ -145,4 +153,4 @@ docs/                    spec, architecture, security, collection format
 
 ## Status
 
-This implements the MVP (P0) from [docs/spece.md](docs/spece.md). OpenAPI import (P1) is also done. Not yet done: other P1 items (CLI, scheduled runs, webhooks, OS-backed encrypted secrets, request chaining) and packaged-app smoke tests on real Windows/Linux machines.
+This implements the MVP (P0) from [docs/spece.md](docs/spece.md). OpenAPI import and request chaining through scripts (P1) are also done. Not yet done: other P1 items (CLI, scheduled runs, webhooks, OS-backed encrypted secrets) and packaged-app smoke tests on real Windows/Linux machines.

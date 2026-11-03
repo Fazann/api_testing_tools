@@ -27,6 +27,9 @@ const (
 	// AssertAggregate applies Function (count, sum, min, max) to the values
 	// selected by Path and compares the result.
 	AssertAggregate AssertionKind = "aggregate"
+	// AssertScript is a pm.test() result from a post-response script. It only
+	// appears in results, never in a request's saved assertions.
+	AssertScript AssertionKind = "script"
 )
 
 type Operator string

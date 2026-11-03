@@ -26,9 +26,14 @@ type Collection struct {
 	// take precedence.
 	Variables []Variable `json:"variables"`
 	// Auth applies to every request whose auth type is "inherit".
-	Auth      Auth      `json:"auth"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Auth Auth `json:"auth"`
+	// Scripts that run around every request in the collection: the
+	// collection's pre-request script before the request's own, and its
+	// post-response script before the request's own.
+	PreRequestScript   string    `json:"preRequestScript"`
+	PostResponseScript string    `json:"postResponseScript"`
+	CreatedAt          time.Time `json:"createdAt"`
+	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
 // Folder organizes requests inside a collection. Folders may nest.
@@ -64,6 +69,9 @@ func (c *Collection) Validate() error {
 	}
 	if err := c.Auth.Validate(); err != nil {
 		return fmt.Errorf("collection auth: %w", err)
+	}
+	if err := validateScripts(c.PreRequestScript, c.PostResponseScript); err != nil {
+		return fmt.Errorf("collection %w", err)
 	}
 	if err := ValidateVariables(c.Variables); err != nil {
 		return fmt.Errorf("collection variables: %w", err)

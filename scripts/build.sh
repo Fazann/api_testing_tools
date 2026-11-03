@@ -22,7 +22,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-APP="api-regression-guard"
+APP="test-tool-kit"
 MODULE="api-test-kits"
 RELEASE_DIR="$ROOT/release"
 

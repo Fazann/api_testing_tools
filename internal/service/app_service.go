@@ -23,6 +23,7 @@ import (
 	"api-test-kits/internal/regression"
 	"api-test-kits/internal/reports"
 	"api-test-kits/internal/runner"
+	"api-test-kits/internal/scripting"
 	"api-test-kits/internal/storage"
 )
 
@@ -233,7 +234,8 @@ func (s *Service) Preflight(ctx context.Context, reqs []domain.Request, required
 	if err != nil {
 		return nil, err
 	}
-	if reqs, env, err = s.scope(ctx, reqs, env); err != nil {
+	reqs, env, c, err := s.scope(ctx, reqs, env)
+	if err != nil {
 		return nil, err
 	}
 	_, st := s.current()
@@ -249,6 +251,11 @@ func (s *Service) Preflight(ctx context.Context, reqs []domain.Request, required
 			destructive = append(destructive, r.Method+" "+r.Name)
 		}
 		prepared, err := runner.Prepare(r, env)
+		var missing *runner.MissingVariablesError
+		if errors.As(err, &missing) && hasPreRequestScript(r, c) {
+			// The pre-request script may define them; the run reports it if not.
+			continue
+		}
 		if err != nil {
 			warnings = append(warnings, Warning{Level: LevelError, Code: "prepare", Message: r.Name + ": " + err.Error()})
 			continue
@@ -289,23 +296,28 @@ func (s *Service) PreflightCollection(ctx context.Context, collectionID, folderI
 }
 
 // scope applies the collection settings that requests follow: inherited
-// auth, and the collection's variables underneath env's.
-func (s *Service) scope(ctx context.Context, reqs []domain.Request, env *domain.Environment) ([]domain.Request, *domain.Environment, error) {
+// auth, and the collection's variables underneath env's. It also returns the
+// collection, or nil for drafts that are not in one.
+func (s *Service) scope(ctx context.Context, reqs []domain.Request, env *domain.Environment) ([]domain.Request, *domain.Environment, *domain.Collection, error) {
 	reqs, err := s.inheritAuth(ctx, reqs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(reqs) == 0 || reqs[0].CollectionID == "" {
-		return reqs, env, nil
+		return reqs, env, nil, nil
 	}
 	c, err := s.store.GetCollection(ctx, reqs[0].CollectionID)
 	if errors.Is(err, storage.ErrNotFound) {
-		return reqs, env, nil
+		return reqs, env, nil, nil
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return reqs, domain.WithCollectionVariables(env, c.Variables), nil
+	return reqs, domain.WithCollectionVariables(env, c.Variables), &c, nil
+}
+
+func hasPreRequestScript(r domain.Request, c *domain.Collection) bool {
+	return strings.TrimSpace(r.PreRequestScript) != "" || (c != nil && strings.TrimSpace(c.PreRequestScript) != "")
 }
 
 // inheritAuth returns reqs with "inherit" auth replaced by their collection's
@@ -462,8 +474,14 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 	if err != nil {
 		return domain.Run{}, err
 	}
-	if reqs, env, err = s.scope(ctx, reqs, env); err != nil {
+	reqs, _, c, err := s.scope(ctx, reqs, env)
+	if err != nil {
 		return domain.Run{}, err
+	}
+	scope := runner.NewScope(env)
+	if c != nil {
+		scope = &runner.Scope{Vars: scripting.NewVariables(env, c.Variables),
+			PreRequestScript: c.PreRequestScript, PostResponseScript: c.PostResponseScript}
 	}
 	client, st := s.current()
 	items := make([]runner.Item, len(reqs))
@@ -491,7 +509,7 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 		run.EnvironmentName = env.Name
 	}
 	finished := 0
-	run.Results = runner.New(client).RunAll(opCtx, items, env, st.Concurrency, func(_ int, res domain.RunResult) {
+	run.Results = runner.New(client).RunAll(opCtx, items, scope, st.Concurrency, func(_ int, res domain.RunResult) {
 		finished++
 		if progress != nil {
 			progress(finished, len(items), res)
@@ -508,7 +526,79 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 	if err := s.store.SaveRun(context.WithoutCancel(ctx), run, st.HistoryBodyLimitBytes, st.HistoryRetentionRuns); err != nil {
 		return run, fmt.Errorf("the run finished but could not be saved to history: %w", err)
 	}
+	if err := s.saveScriptVariables(context.WithoutCancel(ctx), env, c, scope.Vars); err != nil {
+		return run, fmt.Errorf("the run finished but variables set by scripts could not be saved: %w", err)
+	}
 	return run, nil
+}
+
+// saveScriptVariables stores the environment and collection variables that
+// scripts changed, as Postman does, so that for example a login request can
+// keep a token for later requests. Only the variables a script changed are
+// written, so edits made elsewhere during the run are kept.
+func (s *Service) saveScriptVariables(ctx context.Context, env *domain.Environment, c *domain.Collection, vars *scripting.Variables) error {
+	if after, changed := vars.Environment(); changed && env != nil && env.ID != "" {
+		cur, err := s.store.GetEnvironment(ctx, env.ID)
+		if err != nil {
+			return err
+		}
+		cur.Variables = applyVariableChanges(cur.Variables, env.Variables, after.Variables)
+		if _, err := s.store.SaveEnvironment(ctx, cur); err != nil {
+			return err
+		}
+	}
+	if after, changed := vars.Collection(); changed && c != nil {
+		cur, err := s.store.GetCollection(ctx, c.ID)
+		if err != nil {
+			return err
+		}
+		cur.Variables = applyVariableChanges(cur.Variables, c.Variables, after)
+		if _, err := s.store.SaveCollection(ctx, cur); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyVariableChanges applies the difference between before and after to
+// current: changed or new variables are set (keeping current's secret flag),
+// and variables missing from after are removed.
+func applyVariableChanges(current, before, after []domain.Variable) []domain.Variable {
+	index := func(list []domain.Variable) map[string]domain.Variable {
+		m := map[string]domain.Variable{}
+		for _, v := range list {
+			if _, dup := m[v.Key]; !dup {
+				m[v.Key] = v
+			}
+		}
+		return m
+	}
+	was, now := index(before), index(after)
+	out := append([]domain.Variable(nil), current...)
+	for _, v := range after {
+		if old, ok := was[v.Key]; ok && old.Value == v.Value && old.Enabled == v.Enabled {
+			continue
+		}
+		found := false
+		for i := range out {
+			if out[i].Key == v.Key {
+				out[i].Value, out[i].Enabled, found = v.Value, v.Enabled, true
+			}
+		}
+		if !found {
+			out = append(out, v)
+		}
+	}
+	kept := out[:0]
+	for _, v := range out {
+		if _, existed := was[v.Key]; existed {
+			if _, still := now[v.Key]; !still {
+				continue
+			}
+		}
+		kept = append(kept, v)
+	}
+	return kept
 }
 
 // ---- baselines ----

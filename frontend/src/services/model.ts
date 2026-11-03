@@ -30,6 +30,8 @@ export function newRequest(collectionId: string, parentId = ''): Request {
     followRedirects: true,
     sortOrder: 0,
     assertions: [newAssertion('status')],
+    preRequestScript: '',
+    postResponseScript: '',
   };
 }
 

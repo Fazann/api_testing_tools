@@ -22,6 +22,7 @@ import (
 	"api-test-kits/internal/httpclient"
 	"api-test-kits/internal/redact"
 	"api-test-kits/internal/regression"
+	"api-test-kits/internal/scripting"
 )
 
 // Sender is the subset of httpclient.Client used by the runner.
@@ -174,9 +175,44 @@ func headerUsesSecret(h domain.KeyValue, res *environments.Resolver) bool {
 	return false
 }
 
+// Scope is the state shared by every request in a run: the variables that
+// scripts may change, and the collection's scripts that wrap each request's own.
+type Scope struct {
+	Vars               *scripting.Variables
+	PreRequestScript   string
+	PostResponseScript string
+}
+
+// NewScope returns a scope over env (which may be nil) with no collection.
+func NewScope(env *domain.Environment) *Scope {
+	return &Scope{Vars: scripting.NewVariables(env, nil)}
+}
+
+type script struct{ name, source string }
+
+func scripts(list ...script) []script {
+	var out []script
+	for _, s := range list {
+		if strings.TrimSpace(s.source) != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // Run executes one request. baseline may be nil. The returned result is
 // already redacted and safe to display, store and export.
 func (r *Runner) Run(ctx context.Context, req domain.Request, env *domain.Environment, baseline *domain.Baseline) domain.RunResult {
+	return r.RunScoped(ctx, req, NewScope(env), baseline)
+}
+
+// RunScoped executes one request within a run's scope: collection and
+// request pre-request scripts, then the request, then the post-response
+// scripts. Variable changes made by scripts are visible to later requests.
+func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope, baseline *domain.Baseline) domain.RunResult {
+	if scope == nil {
+		scope = NewScope(nil)
+	}
 	result := domain.RunResult{
 		ID:               uuid.NewString(),
 		RequestID:        req.ID,
@@ -190,12 +226,61 @@ func (r *Runner) Run(ctx context.Context, req domain.Request, env *domain.Enviro
 		return result
 	}
 
+	locals := map[string]string{}
+	var logs []domain.ScriptLog
+	// Logs are redacted with every secret known at the end, including ones
+	// that scripts set.
+	finish := func(red *redact.Redactor) domain.RunResult {
+		if red == nil {
+			red = redact.New(scope.Vars.Resolved(locals).SecretValues()...)
+		}
+		for _, l := range logs {
+			l.Message = red.String(l.Message)
+			result.Logs = append(result.Logs, l)
+		}
+		return result
+	}
+	newInput := func(phase scripting.Phase, s script, sreq scripting.Request) scripting.Input {
+		in := scripting.Input{Phase: phase, Script: s.source, Name: s.name, RequestName: req.Name, RequestID: req.ID,
+			Request: sreq, Vars: scope.Vars, Locals: locals}
+		if e, _ := scope.Vars.Environment(); e != nil {
+			in.EnvironmentName = e.Name
+		}
+		return in
+	}
+	collect := func(phase scripting.Phase, out scripting.Output) {
+		for _, l := range out.Logs {
+			logs = append(logs, domain.ScriptLog{Phase: string(phase), Level: l.Level, Message: l.Message})
+		}
+	}
+
+	req.Normalize()
+	for _, s := range scripts(script{"collection pre-request script", scope.PreRequestScript}, script{"pre-request script", req.PreRequestScript}) {
+		out, err := scripting.Run(ctx, newInput(scripting.PreRequest, s, scriptRequest(req)))
+		collect(scripting.PreRequest, out)
+		if err != nil {
+			result.Status = domain.StatusError
+			if ctx.Err() != nil {
+				result.Status = domain.StatusCancelled
+			}
+			result.Error = s.name + " failed: " + err.Error()
+			return finish(nil)
+		}
+		applyScriptRequest(&req, out.Request)
+	}
+	if err := req.Validate(); err != nil {
+		result.Status = domain.StatusError
+		result.Error = "the request is invalid after the pre-request script ran: " + err.Error()
+		return finish(nil)
+	}
+
+	env := scope.Vars.Resolved(locals)
 	prepared, err := Prepare(req, env)
 	if err != nil {
 		result.Status = domain.StatusError
 		// Prepare errors never contain unredacted secrets, but be defensive.
 		result.Error = redact.New(env.SecretValues()...).String(err.Error())
-		return result
+		return finish(nil)
 	}
 	red := prepared.Redactor
 	result.Request = prepared.Summary
@@ -210,7 +295,7 @@ func (r *Runner) Run(ctx context.Context, req domain.Request, env *domain.Enviro
 			result.Status = domain.StatusCancelled
 		}
 		result.Error = red.String(err.Error())
-		return result
+		return finish(red)
 	}
 	result.DurationMs = resp.Duration.Milliseconds()
 
@@ -242,6 +327,26 @@ func (r *Runner) Run(ctx context.Context, req domain.Request, env *domain.Enviro
 		results[i].Actual = red.String(results[i].Actual)
 		results[i].Message = red.String(results[i].Message)
 	}
+
+	var scriptErr string
+	sent := scripting.Request{Method: prepared.HTTP.Method, URL: prepared.HTTP.URL, Headers: scripting.HeaderRows(prepared.HTTP.Header),
+		Query: []domain.KeyValue{}, Body: string(prepared.HTTP.Body), BodyType: req.BodyType}
+	scriptResp := &scripting.Response{Code: resp.StatusCode, Status: resp.Status, Header: resp.Header, Body: resp.Body,
+		DurationMs: resp.Duration.Milliseconds(), Size: resp.BodyBytes}
+	for _, s := range scripts(script{"collection post-response script", scope.PostResponseScript}, script{"post-response script", req.PostResponseScript}) {
+		in := newInput(scripting.PostResponse, s, sent)
+		in.Response = scriptResp
+		out, err := scripting.Run(ctx, in)
+		collect(scripting.PostResponse, out)
+		for _, t := range out.Tests {
+			results = append(results, domain.AssertionResult{Kind: domain.AssertScript, Description: red.String(t.Name),
+				Passed: t.Passed, Message: red.String(t.Error)})
+		}
+		if err != nil {
+			scriptErr = s.name + " failed: " + red.String(err.Error())
+			break
+		}
+	}
 	result.AssertionResults = results
 
 	if baseline != nil {
@@ -259,7 +364,23 @@ func (r *Runner) Run(ctx context.Context, req domain.Request, env *domain.Enviro
 	if result.Regression != nil && !result.Regression.Passed {
 		result.Status = domain.StatusFailed
 	}
-	return result
+	if scriptErr != "" {
+		result.Status = domain.StatusError
+		result.Error = scriptErr
+	}
+	return finish(red)
+}
+
+func scriptRequest(req domain.Request) scripting.Request {
+	return scripting.Request{Method: req.Method, URL: req.URLTemplate,
+		Headers: append([]domain.KeyValue{}, req.Headers...), Query: append([]domain.KeyValue{}, req.Query...),
+		Body: req.Body, BodyType: req.BodyType}
+}
+
+func applyScriptRequest(req *domain.Request, s scripting.Request) {
+	req.Method, req.URLTemplate, req.Headers, req.Query = s.Method, s.URL, s.Headers, s.Query
+	req.Body, req.BodyType = s.Body, s.BodyType
+	req.Normalize()
 }
 
 // resolveAssertions substitutes {{variables}} inside expected values so that

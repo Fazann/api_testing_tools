@@ -12,6 +12,7 @@ import (
 func sampleTree() domain.CollectionTree {
 	return domain.CollectionTree{
 		Collection: domain.Collection{ID: "c1", Name: "Wallet",
+			PreRequestScript: "pm.variables.set('a', 1);", PostResponseScript: "pm.test('ok', () => {});",
 			Auth: domain.Auth{Type: domain.AuthBearer, Token: "collection-literal-token"},
 			Variables: []domain.Variable{
 				{Key: "base_url", Value: "http://collection-base", Enabled: true},
@@ -23,7 +24,7 @@ func sampleTree() domain.CollectionTree {
 				Auth:    domain.Auth{Type: domain.AuthBearer, Token: "literal-token-123"},
 				Headers: []domain.KeyValue{{Key: "Cookie", Value: "sid=abc", Enabled: true}, {Key: "Accept", Value: "*/*", Enabled: true}}},
 			{ID: "r2", CollectionID: "c1", Name: "Var", Method: "GET", URLTemplate: "http://x",
-				Auth: domain.Auth{Type: domain.AuthBearer, Token: "{{token}}"}},
+				Auth: domain.Auth{Type: domain.AuthBearer, Token: "{{token}}"}, PreRequestScript: "console.log(1);"},
 		},
 	}
 }
@@ -83,6 +84,9 @@ func TestRoundTripAssignsFreshIDs(t *testing.T) {
 	}
 	if v := imp.Tree.Collection.Variables; len(v) != 2 || v[0].Value != "http://collection-base" || v[1].Value != "" {
 		t.Fatalf("collection variables should round trip with secrets blanked: %+v", v)
+	}
+	if c := imp.Tree.Collection; c.PreRequestScript == "" || c.PostResponseScript == "" || imp.Tree.Requests[1].PreRequestScript != "console.log(1);" {
+		t.Fatalf("scripts should round trip: %+v", c)
 	}
 	if len(imp.Environments) != 1 || imp.Environments[0].ID != "" {
 		t.Fatal("environments should import without IDs")

@@ -76,6 +76,10 @@ export interface Request {
   followRedirects: boolean;
   sortOrder: number;
   assertions: Assertion[];
+  /** JavaScript run before variables are resolved and the request is sent. */
+  preRequestScript: string;
+  /** JavaScript run after the response arrives (pm.test, pm.environment.set, ...). */
+  postResponseScript: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -89,6 +93,10 @@ export interface Collection {
   variables: Variable[];
   /** Used by requests whose auth type is "inherit". */
   auth: Auth;
+  /** Run before every request's own pre-request script. */
+  preRequestScript?: string;
+  /** Run before every request's own post-response script. */
+  postResponseScript?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -146,7 +154,8 @@ export interface ResponseSummary {
 
 export interface AssertionResult {
   assertionId: string;
-  kind: AssertionKind;
+  /** 'script' is a pm.test() result from a post-response script; its name is in description. */
+  kind: AssertionKind | 'script';
   path?: string;
   operator?: Operator;
   description?: string;
@@ -172,6 +181,12 @@ export interface RegressionResult {
   message?: string;
 }
 
+export interface ScriptLog {
+  phase: 'pre-request' | 'post-response';
+  level: 'log' | 'info' | 'warn' | 'error';
+  message: string;
+}
+
 export interface RunResult {
   id: string;
   runId: string;
@@ -180,6 +195,8 @@ export interface RunResult {
   response?: ResponseSummary;
   assertionResults: AssertionResult[];
   regression?: RegressionResult;
+  /** console output from scripts, already redacted. */
+  logs?: ScriptLog[];
   durationMs: number;
   status: ResultStatus;
   error?: string;

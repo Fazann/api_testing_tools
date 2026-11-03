@@ -14,7 +14,7 @@ const props = defineProps<{ result: RunResult; requestId?: string; allowApprove?
 const ui = useUi();
 const envs = useEnvironments();
 
-type Tab = 'body' | 'headers' | 'tests' | 'regression' | 'previous' | 'request';
+type Tab = 'body' | 'headers' | 'tests' | 'regression' | 'previous' | 'request' | 'console';
 const tab = ref<Tab>('tests');
 const approving = ref(false);
 const baseline = ref<Baseline | null>(null);
@@ -22,6 +22,7 @@ const previous = ref<PreviousComparison | null>(null);
 
 const resp = computed(() => props.result.response);
 const failedTests = computed(() => props.result.assertionResults.filter((a) => !a.passed).length);
+const logs = computed(() => props.result.logs ?? []);
 const body = computed(() => (resp.value ? prettyBody(resp.value.body, resp.value.contentType) : ''));
 const statusClass = computed(() => {
   const c = resp.value?.statusCode ?? 0;
@@ -110,6 +111,9 @@ async function copyBody() {
         vs previous run
       </button>
       <button :class="{ active: tab === 'request' }" role="tab" @click="tab = 'request'">Sent request</button>
+      <button v-if="logs.length" :class="{ active: tab === 'console' }" role="tab" @click="tab = 'console'">
+        Console<span class="count">{{ logs.length }}</span>
+      </button>
     </nav>
     <div class="tab-body">
       <AssertionResults v-if="tab === 'tests'" :results="result.assertionResults" />
@@ -157,6 +161,13 @@ async function copyBody() {
           <DiffTable v-if="previous.diffs.length" :diffs="previous.diffs" />
           <p v-else class="muted">Response bodies are identical (or not comparable JSON).</p>
         </template>
+      </div>
+      <div v-else-if="tab === 'console'" class="console mono small">
+        <div v-for="(l, i) in logs" :key="i" class="log" :class="l.level">
+          <span class="muted phase">{{ l.phase }}</span>
+          <span class="message">{{ l.message }}</span>
+        </div>
+        <p class="muted small">Secret values are redacted.</p>
       </div>
       <div v-else-if="tab === 'request'" class="stack">
         <p class="mono small">
@@ -213,6 +224,26 @@ async function copyBody() {
   max-height: none;
 }
 .count.fail {
+  color: var(--fail);
+}
+.log {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+.log .phase {
+  flex: none;
+  width: 92px;
+}
+.log .message {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.log.warn .message {
+  color: var(--warn);
+}
+.log.error .message {
   color: var(--fail);
 }
 </style>

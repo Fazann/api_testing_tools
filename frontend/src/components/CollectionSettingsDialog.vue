@@ -8,6 +8,7 @@ import { useWorkspace } from '../stores/workspace';
 import type { Collection } from '../types';
 import AuthEditor from './AuthEditor.vue';
 import ModalFrame from './ModalFrame.vue';
+import ScriptEditor from './ScriptEditor.vue';
 import VariableTable from './VariableTable.vue';
 
 const props = defineProps<{ collection: Collection }>();
@@ -18,6 +19,8 @@ const ui = useUi();
 const form = ref(clone(props.collection));
 if (!form.value.auth) form.value.auth = { type: 'none' };
 if (!form.value.variables) form.value.variables = [];
+form.value.preRequestScript ??= '';
+form.value.postResponseScript ??= '';
 provideCollectionVariables(toRef(() => form.value.variables));
 const required = ref((props.collection.requiredVariables ?? []).join(', '));
 const applyToAll = ref(false);
@@ -99,6 +102,9 @@ async function save() {
       </span>
     </label>
     <p v-else-if="ws.trees[collection.id]" class="muted small">All requests in this collection use this auth.</p>
+
+    <h3 class="section-title">Scripts</h3>
+    <ScriptEditor v-model:pre="form.preRequestScript!" v-model:post="form.postResponseScript!" scope="collection" />
 
     <template #footer>
       <button @click="emit('close')">Cancel</button>

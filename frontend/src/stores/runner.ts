@@ -21,6 +21,15 @@ interface CollectionRun {
   running: boolean;
 }
 
+function hasScripts(x?: { preRequestScript?: string; postResponseScript?: string } | null): boolean {
+  return !!(x?.preRequestScript?.trim() || x?.postResponseScript?.trim());
+}
+
+/** Scripts may have saved environment or collection variables during a run. */
+async function reloadVariables() {
+  await Promise.all([useEnvironments().load(), useWorkspace().load()]);
+}
+
 export const useRunner = defineStore('runner', () => {
   const sendingOp = ref('');
   const collectionRun = ref<CollectionRun | null>(null);
@@ -61,6 +70,7 @@ export const useRunner = defineStore('runner', () => {
       sendingOp.value = opId;
       const result = await api.sendRequest(opId, req, env.selectedId, confirmed);
       ws.setResult(req.id, result);
+      if (hasScripts(req) || hasScripts(ws.currentCollection)) await reloadVariables();
     } catch (e) {
       ui.error(e);
     } finally {
@@ -114,6 +124,8 @@ export const useRunner = defineStore('runner', () => {
       }
       const ws = useWorkspace();
       for (const r of run.results ?? []) if (r.requestId) ws.setResult(r.requestId, r);
+      const tree = ws.trees[collectionId];
+      if (!tree || hasScripts(tree.collection) || tree.requests.some(hasScripts)) await reloadVariables();
     } catch (e) {
       ui.error(e);
     } finally {

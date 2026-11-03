@@ -56,6 +56,7 @@ const (
 	MaxURLLength     = 8_192
 	MaxBodyLength    = 5 << 20
 	MaxKeyValuePairs = 200
+	MaxScriptLength  = 100_000
 )
 
 // KeyValue is a header or query parameter row.
@@ -119,8 +120,12 @@ type Request struct {
 	FollowRedirects bool        `json:"followRedirects"`
 	SortOrder       int         `json:"sortOrder"`
 	Assertions      []Assertion `json:"assertions"`
-	CreatedAt       time.Time   `json:"createdAt"`
-	UpdatedAt       time.Time   `json:"updatedAt"`
+	// PreRequestScript runs before variables are resolved and the request is
+	// sent; PostResponseScript runs after the response arrives (see internal/scripting).
+	PreRequestScript   string    `json:"preRequestScript"`
+	PostResponseScript string    `json:"postResponseScript"`
+	CreatedAt          time.Time `json:"createdAt"`
+	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
 // Normalize fills defaults so that partially specified requests behave predictably.
@@ -188,6 +193,9 @@ func (r *Request) Validate() error {
 	if err := r.Auth.Validate(); err != nil {
 		return err
 	}
+	if err := validateScripts(r.PreRequestScript, r.PostResponseScript); err != nil {
+		return err
+	}
 	for i := range r.Assertions {
 		if err := r.Assertions[i].Validate(); err != nil {
 			return fmt.Errorf("assertion %d: %w", i+1, err)
@@ -211,6 +219,16 @@ func (a *Auth) Validate() error {
 		}
 	default:
 		return fmt.Errorf("unsupported auth type %q", a.Type)
+	}
+	return nil
+}
+
+func validateScripts(pre, post string) error {
+	if len(pre) > MaxScriptLength {
+		return fmt.Errorf("pre-request script must be at most %d characters", MaxScriptLength)
+	}
+	if len(post) > MaxScriptLength {
+		return fmt.Errorf("post-response script must be at most %d characters", MaxScriptLength)
 	}
 	return nil
 }

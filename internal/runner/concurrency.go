@@ -22,7 +22,8 @@ type Item struct {
 // strictly in order, which matters for business flows that depend on state.
 // progress, if set, is called once per finished item, serialized, in
 // completion order.
-func (r *Runner) RunAll(ctx context.Context, items []Item, env *domain.Environment, concurrency int, progress func(index int, res domain.RunResult)) []domain.RunResult {
+// scope may be nil when no environment or collection applies.
+func (r *Runner) RunAll(ctx context.Context, items []Item, scope *Scope, concurrency int, progress func(index int, res domain.RunResult)) []domain.RunResult {
 	if concurrency < 1 {
 		concurrency = 1
 	}
@@ -42,7 +43,7 @@ func (r *Runner) RunAll(ctx context.Context, items []Item, env *domain.Environme
 
 	if concurrency == 1 {
 		for i, it := range items {
-			report(i, r.Run(ctx, it.Request, env, it.Baseline))
+			report(i, r.RunScoped(ctx, it.Request, scope, it.Baseline))
 		}
 		return results
 	}
@@ -64,7 +65,7 @@ func (r *Runner) RunAll(ctx context.Context, items []Item, env *domain.Environme
 			if acquired {
 				defer func() { <-sem }()
 			}
-			report(i, r.Run(ctx, it.Request, env, it.Baseline))
+			report(i, r.RunScoped(ctx, it.Request, scope, it.Baseline))
 		}(i, it, acquired)
 	}
 	wg.Wait()

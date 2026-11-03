@@ -10,7 +10,7 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 | `version`         | integer   | Format version. This app reads version `1`                       |
 | `exportedAt`      | RFC 3339  | Informational                                                  |
 | `appVersion`      | string    | Informational                                                  |
-| `collection`      | object    | `name`, `description`, `requiredVariables` (string array), `variables`, `auth` |
+| `collection`      | object    | `name`, `description`, `requiredVariables` (string array), `variables`, `auth`, `preRequestScript`, `postResponseScript` |
 | `folders`         | array     | `id`, `parentId` (`""` = top level), `name`, `sortOrder`       |
 | `requests`        | array     | See below                                                      |
 | `environments`    | array     | Optional. `name`, `protected`, `variables`                     |
@@ -34,7 +34,9 @@ IDs in a file only link folders and requests to each other. **Every ID is regene
   "auth": { "type": "bearer", "token": "{{token}}" },
   "timeoutMs": 5000,
   "followRedirects": true,
-  "assertions": []
+  "assertions": [],
+  "preRequestScript": "",
+  "postResponseScript": ""
 }
 ```
 
@@ -100,6 +102,53 @@ are blanked on export unless secrets are explicitly included. Required variables
 - **Types** for `type`: `string`, `number` (includes integers), `integer`, `boolean`, `object`, `array`, `null`.
 - **Patterns** for `matches` use RE2 syntax (linear-time, no catastrophic backtracking), max 512 characters.
 - `tolerance` is an absolute tolerance for numeric equality (`eq`/`neq`, `aggregate`).
+
+## Scripts
+
+`preRequestScript` and `postResponseScript` hold JavaScript (ES5.1 plus most of ES2015, run by
+[goja](https://github.com/dop251/goja)) with a Postman-compatible `pm` API. They exist on the collection and on each
+request, at most 100,000 characters each. For every request the order is:
+
+1. collection pre-request script, then the request's pre-request script;
+2. `{{variables}}` are resolved and the request is sent;
+3. collection post-response script, then the request's post-response script;
+4. the request's saved assertions are evaluated.
+
+```js
+// Pre-request: sign the body with HMAC-SHA256
+const ts = Date.now().toString();
+const sig = CryptoJS.HmacSHA256(ts + pm.request.body.raw, pm.environment.get('api_secret')).toString(CryptoJS.enc.Hex);
+pm.request.headers.upsert({ key: 'X-Timestamp', value: ts });
+pm.request.headers.upsert({ key: 'X-Signature', value: sig });
+
+// Post-response: check the response and keep a token for later requests
+pm.test('status is 200', () => pm.response.to.have.status(200));
+pm.environment.set('token', pm.response.json().data.token);
+```
+
+| API | Notes |
+| --- | --- |
+| `pm.environment`, `pm.collectionVariables` | `get` `set` `unset` `has` `toObject` `replaceIn`. Changes are seen by later requests in the run and **saved when the run ends** (only the variables a script changed; a variable keeps its secret flag; new ones are not secret) |
+| `pm.variables` | Reads local → environment → collection. `set` creates a local value that lasts for this request only (both its scripts and `{{name}}` resolution) |
+| `pm.request` | `method`, `url` (assign a string; `url.query` is a list), `headers`, `body.raw` / `body.update()`, `addHeader` `upsertHeader` `removeHeader`. Changes apply only in pre-request scripts; in post-response scripts it is the request that was sent |
+| `pm.response` | `code` `status` `responseTime` `responseSize` `headers` `text()` `json()`, and `pm.response.to.have.status/header/body/jsonBody`, `to.be.ok/success/clientError/serverError/json` |
+| `pm.test(name, fn)`, `pm.expect(v)` | Each test becomes a result of kind `script`. `pm.expect` covers the common Chai BDD chain: `equal` `eql` `deep` `above` `below` `within` `a` `include` `match` `oneOf` `property` `lengthOf` `keys` `members` `ok` `true` `exist` `empty` `not` … |
+| `pm.info` | `eventName` (`prerequest` / `test`), `requestName`, `requestId` |
+| `pm.crypto.rsaEncrypt(publicKeyPem, data, opts)` | `padding`: `pkcs1` (default) or `oaep`; `hash` for OAEP: `sha1` `sha256` (default) `sha384` `sha512`; `encoding`: `base64` (default) or `hex` |
+| `pm.crypto.rsaSign(privateKeyPem, data, opts)` | `padding`: `pkcs1` (default) or `pss`; `hash` and `encoding` as above. PKCS#1 and PKCS#8 PEM keys |
+| `console.log/info/warn/error` | Shown in the response's **Console** tab and stored with the run, with secret values redacted |
+| Libraries | Globals `CryptoJS`, `_` (lodash), `moment`, `atob`, `btoa`; or `require('crypto-js' \| 'lodash' \| 'moment' \| 'uuid' \| 'atob' \| 'btoa')`. `crypto.getRandomValues` and `crypto.randomUUID` are available |
+| Legacy | `tests["name"] = bool`, `postman.setEnvironmentVariable`, `responseBody`, `responseCode`, `responseTime`, `responseHeaders` |
+
+Not supported: `pm.sendRequest`, `pm.globals`, other `require` modules, and file, network or process access. Each
+script runs in a fresh runtime and is stopped after 10 seconds.
+
+A pre-request script that throws stops the request (result `error`). A post-response script that throws marks the
+result `error`; tests recorded before the throw are kept. A request may use variables that are missing from the
+environment when it or its collection has a pre-request script, since the script may set them.
+
+Scripts are exported as written. Do not put literal secrets in them — reference variables instead
+(`pm.environment.get('api_secret')`), because the export secret scan does not look inside scripts.
 
 ## Environments and secrets
 

@@ -15,7 +15,7 @@ import (
 // ---- collections ----
 
 func (s *Store) ListCollections(ctx context.Context) ([]domain.Collection, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at FROM collections ORDER BY name COLLATE NOCASE, created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, pre_request_script, post_response_script, created_at, updated_at FROM collections ORDER BY name COLLATE NOCASE, created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (s *Store) ListCollections(ctx context.Context) ([]domain.Collection, error
 }
 
 func (s *Store) GetCollection(ctx context.Context, id string) (domain.Collection, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at FROM collections WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, pre_request_script, post_response_script, created_at, updated_at FROM collections WHERE id = ?`, id)
 	c, err := scanCollection(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
@@ -45,7 +45,7 @@ type scanner interface{ Scan(...any) error }
 func scanCollection(r scanner) (domain.Collection, error) {
 	var c domain.Collection
 	var reqVars, vars, auth, created, updated string
-	if err := r.Scan(&c.ID, &c.Name, &c.Description, &reqVars, &vars, &auth, &created, &updated); err != nil {
+	if err := r.Scan(&c.ID, &c.Name, &c.Description, &reqVars, &vars, &auth, &c.PreRequestScript, &c.PostResponseScript, &created, &updated); err != nil {
 		return c, err
 	}
 	unmarshalLenient(auth, &c.Auth)
@@ -85,13 +85,15 @@ func (s *Store) SaveCollection(ctx context.Context, c domain.Collection) (domain
 		c.CreatedAt = now
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json,
+			pre_request_script, post_response_script, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description,
 			required_vars_json = excluded.required_vars_json, variables_json = excluded.variables_json,
-			auth_json = excluded.auth_json, updated_at = excluded.updated_at`,
+			auth_json = excluded.auth_json, pre_request_script = excluded.pre_request_script,
+			post_response_script = excluded.post_response_script, updated_at = excluded.updated_at`,
 		c.ID, c.Name, c.Description, mustJSON(c.RequiredVariables), mustJSON(c.Variables), mustJSON(c.Auth),
-		ts(c.CreatedAt), ts(c.UpdatedAt))
+		c.PreRequestScript, c.PostResponseScript, ts(c.CreatedAt), ts(c.UpdatedAt))
 	return c, err
 }
 
@@ -155,9 +157,10 @@ func (s *Store) ImportTree(ctx context.Context, t domain.CollectionTree) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC()
 		c := t.Collection
-		if _, err := tx.ExecContext(ctx, `INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		if _, err := tx.ExecContext(ctx, `INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json,
+			pre_request_script, post_response_script, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			c.ID, c.Name, c.Description, mustJSON(nonNil(c.RequiredVariables)), mustJSON(nonNilVars(c.Variables)), mustJSON(c.Auth),
-			ts(now), ts(now)); err != nil {
+			c.PreRequestScript, c.PostResponseScript, ts(now), ts(now)); err != nil {
 			return err
 		}
 		for _, f := range orderFolders(t.Folders) {
@@ -349,7 +352,8 @@ func (s *Store) DeleteFolder(ctx context.Context, id string) error {
 // ---- requests ----
 
 const requestColumns = `r.id, r.collection_id, IFNULL(r.parent_id, ''), r.name, r.method, r.url_template, r.headers_json, r.query_json,
-	r.body, r.body_type, r.auth_json, r.timeout_ms, r.follow_redirects, r.sort_order, r.created_at, r.updated_at`
+	r.body, r.body_type, r.auth_json, r.timeout_ms, r.follow_redirects, r.sort_order, r.pre_request_script, r.post_response_script,
+	r.created_at, r.updated_at`
 
 func (s *Store) listRequests(ctx context.Context, q querier, where string, args ...any) ([]domain.Request, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+requestColumns+` FROM requests r `+where+` ORDER BY r.sort_order, r.name COLLATE NOCASE`, args...)
@@ -363,7 +367,8 @@ func (s *Store) listRequests(ctx context.Context, q querier, where string, args 
 		var headers, query, auth, created, updated string
 		var follow int
 		if err := rows.Scan(&r.ID, &r.CollectionID, &r.ParentID, &r.Name, &r.Method, &r.URLTemplate, &headers, &query,
-			&r.Body, &r.BodyType, &auth, &r.TimeoutMs, &follow, &r.SortOrder, &created, &updated); err != nil {
+			&r.Body, &r.BodyType, &auth, &r.TimeoutMs, &follow, &r.SortOrder, &r.PreRequestScript, &r.PostResponseScript,
+			&created, &updated); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -460,14 +465,17 @@ func writeRequest(ctx context.Context, tx *sql.Tx, r *domain.Request, now time.T
 	r.UpdatedAt = now
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO requests (id, collection_id, parent_id, name, method, url_template, headers_json, query_json, body, body_type,
-			auth_json, timeout_ms, follow_redirects, sort_order, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			auth_json, timeout_ms, follow_redirects, sort_order, pre_request_script, post_response_script, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET parent_id = excluded.parent_id, name = excluded.name, method = excluded.method,
 			url_template = excluded.url_template, headers_json = excluded.headers_json, query_json = excluded.query_json,
 			body = excluded.body, body_type = excluded.body_type, auth_json = excluded.auth_json, timeout_ms = excluded.timeout_ms,
-			follow_redirects = excluded.follow_redirects, sort_order = excluded.sort_order, updated_at = excluded.updated_at`,
+			follow_redirects = excluded.follow_redirects, sort_order = excluded.sort_order,
+			pre_request_script = excluded.pre_request_script, post_response_script = excluded.post_response_script,
+			updated_at = excluded.updated_at`,
 		r.ID, r.CollectionID, nullable(r.ParentID), r.Name, r.Method, r.URLTemplate, mustJSON(r.Headers), mustJSON(r.Query),
-		r.Body, string(r.BodyType), mustJSON(r.Auth), r.TimeoutMs, boolInt(r.FollowRedirects), r.SortOrder, ts(r.CreatedAt), ts(r.UpdatedAt))
+		r.Body, string(r.BodyType), mustJSON(r.Auth), r.TimeoutMs, boolInt(r.FollowRedirects), r.SortOrder,
+		r.PreRequestScript, r.PostResponseScript, ts(r.CreatedAt), ts(r.UpdatedAt))
 	if err != nil {
 		return err
 	}

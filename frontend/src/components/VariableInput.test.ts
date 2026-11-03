@@ -127,6 +127,8 @@ describe('VariableInput', () => {
       followRedirects: true,
       sortOrder: 0,
       assertions: [],
+      preRequestScript: '',
+      postResponseScript: '',
     });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.token').classes()).toContain('defined');

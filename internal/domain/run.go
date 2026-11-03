@@ -62,6 +62,14 @@ type RegressionResult struct {
 	Message    string      `json:"message,omitempty"`
 }
 
+// ScriptLog is one console message written by a script, already redacted.
+type ScriptLog struct {
+	// Phase is "pre-request" or "post-response".
+	Phase   string `json:"phase"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+}
+
 // RunResult is the outcome of running one request.
 type RunResult struct {
 	ID               string            `json:"id"`
@@ -71,6 +79,7 @@ type RunResult struct {
 	Response         *ResponseSummary  `json:"response,omitempty"`
 	AssertionResults []AssertionResult `json:"assertionResults"`
 	Regression       *RegressionResult `json:"regression,omitempty"`
+	Logs             []ScriptLog       `json:"logs,omitempty"`
 	DurationMs       int64             `json:"durationMs"`
 	Status           ResultStatus      `json:"status"`
 	Error            string            `json:"error,omitempty"`

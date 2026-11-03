@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "api-regression-guard",
-  "outputfilename": "api-regression-guard",
+  "name": "test-tool-kit",
+  "outputfilename": "test-tool-kit",
   "frontend:install": "npm ci",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",

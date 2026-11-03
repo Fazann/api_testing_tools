@@ -206,9 +206,10 @@ func (s *Store) SaveRun(ctx context.Context, run domain.Run, bodyLimit, retain i
 				}
 			}
 			_, err := tx.ExecContext(ctx, `INSERT INTO run_results (id, run_id, request_id, request_summary_json, response_summary_json,
-				assertion_results_json, regression_json, error, duration_ms, status, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				res.ID, run.ID, reqID, mustJSON(res.Request), resp, mustJSON(res.AssertionResults), reg, res.Error,
-				res.DurationMs, string(res.Status), i, ts(res.CreatedAt))
+				assertion_results_json, regression_json, logs_json, error, duration_ms, status, sort_order, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				res.ID, run.ID, reqID, mustJSON(res.Request), resp, mustJSON(res.AssertionResults), reg, mustJSON(nonNilLogs(res.Logs)),
+				res.Error, res.DurationMs, string(res.Status), i, ts(res.CreatedAt))
 			if err != nil {
 				return err
 			}
@@ -289,7 +290,7 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	}
 	run := runs[0]
 	rows, err := s.db.QueryContext(ctx, `SELECT id, IFNULL(request_id, ''), request_summary_json, IFNULL(response_summary_json, ''),
-		assertion_results_json, IFNULL(regression_json, ''), error, duration_ms, status, created_at FROM run_results WHERE run_id = ? ORDER BY sort_order`, id)
+		assertion_results_json, IFNULL(regression_json, ''), logs_json, error, duration_ms, status, created_at FROM run_results WHERE run_id = ? ORDER BY sort_order`, id)
 	if err != nil {
 		return run, err
 	}
@@ -297,8 +298,8 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	run.Results = []domain.RunResult{}
 	for rows.Next() {
 		var r domain.RunResult
-		var reqJSON, respJSON, assertJSON, regJSON, created string
-		if err := rows.Scan(&r.ID, &r.RequestID, &reqJSON, &respJSON, &assertJSON, &regJSON, &r.Error, &r.DurationMs, &r.Status, &created); err != nil {
+		var reqJSON, respJSON, assertJSON, regJSON, logsJSON, created string
+		if err := rows.Scan(&r.ID, &r.RequestID, &reqJSON, &respJSON, &assertJSON, &regJSON, &logsJSON, &r.Error, &r.DurationMs, &r.Status, &created); err != nil {
 			return run, err
 		}
 		r.RunID = id
@@ -311,6 +312,7 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 		if r.AssertionResults == nil {
 			r.AssertionResults = []domain.AssertionResult{}
 		}
+		unmarshalLenient(logsJSON, &r.Logs)
 		if regJSON != "" {
 			r.Regression = &domain.RegressionResult{}
 			unmarshalLenient(regJSON, r.Regression)
@@ -414,4 +416,11 @@ func (s *Store) SaveSettings(ctx context.Context, st domain.Settings) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 		settingsKey, mustJSON(st))
 	return err
+}
+
+func nonNilLogs(l []domain.ScriptLog) []domain.ScriptLog {
+	if l == nil {
+		return []domain.ScriptLog{}
+	}
+	return l
 }
