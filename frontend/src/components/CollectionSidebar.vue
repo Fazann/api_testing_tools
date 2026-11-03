@@ -17,7 +17,7 @@ const ui = useUi();
 const runner = useRunner();
 const envs = useEnvironments();
 const exporting = ref<Collection | null>(null);
-const editing = ref<Collection | null>(null);
+const editing = ref<{ collection: Collection; tab: 'endpoints' | 'settings' } | null>(null);
 
 async function newCollection() {
   const name = await ui.prompt({ title: 'New collection', value: 'My API tests', confirmLabel: 'Create' });
@@ -46,7 +46,8 @@ function menu(c: Collection) {
     { label: 'New request', action: () => ws.createRequest(c.id).catch(ui.error) },
     { label: 'New folder', action: () => newFolder(c) },
     { label: 'Run collection', action: () => runner.runCollection(c.id, '', c.name) },
-    { label: 'Settings & auth…', action: () => (editing.value = c) },
+    { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
+    { label: 'Settings & auth…', action: () => (editing.value = { collection: c, tab: 'settings' }) },
     { label: 'Duplicate', action: () => ws.duplicateCollection(c.id).catch(ui.error) },
     { label: 'Export…', action: () => (exporting.value = c) },
     { label: 'Delete', danger: true, action: () => remove(c) },
@@ -110,7 +111,12 @@ async function remove(c: Collection) {
       </div>
     </div>
     <ExportDialog v-if="exporting" :collection="exporting" @close="exporting = null" />
-    <CollectionSettingsDialog v-if="editing" :collection="editing" @close="editing = null" />
+    <CollectionSettingsDialog
+      v-if="editing"
+      :collection="editing.collection"
+      :initial-tab="editing.tab"
+      @close="editing = null"
+    />
   </aside>
 </template>
 

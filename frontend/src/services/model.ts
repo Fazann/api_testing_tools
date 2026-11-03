@@ -203,3 +203,52 @@ export function jsonPaths(doc: unknown, max = 500): string[] {
   walk(doc, '');
   return out;
 }
+
+const VERSION_SEGMENT = /^v\d+(?:\.\d+)*$/i;
+const VERSION_PARAMS = ['api-version', 'api_version', 'apiversion', 'version', 'v'];
+
+/**
+ * Detects the API version a request targets, such as "v1" or "v2.1", from a
+ * path segment (`/api/v1/orders`) or else a version query parameter
+ * (`?api-version=2`, also from the request's Query table). Purely numeric
+ * parameter values get a "v" prefix; others (`2024-01-01`) are kept as is.
+ * `{{name}}` placeholders are filled from `vars` first. Returns '' when no
+ * version is found.
+ */
+export function apiVersion(url: string, query: KeyValue[] = [], vars: Record<string, string> = {}): string {
+  const full = url.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (m, name: string) => vars[name] ?? m);
+  const [beforeQuery, queryString = ''] = full.split('#')[0].split('?', 2);
+  const path = beforeQuery.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '');
+  for (const seg of path.split('/')) {
+    if (VERSION_SEGMENT.test(seg)) return seg.toLowerCase();
+  }
+  const params: [string, string][] = queryString
+    .split('&')
+    .filter(Boolean)
+    .map((p) => {
+      const [k, v = ''] = p.split('=', 2);
+      return [safeDecode(k), safeDecode(v)];
+    });
+  for (const q of query) if (q.enabled) params.push([q.key, q.value]);
+  for (const name of VERSION_PARAMS) {
+    const hit = params.find(([k, v]) => k.toLowerCase() === name && v.trim() && !v.includes('{{'));
+    if (hit) {
+      const v = hit[1].trim();
+      return /^\d+(?:\.\d+)*$/.test(v) ? `v${v}` : v.toLowerCase();
+    }
+  }
+  return '';
+}
+
+/** Orders versions naturally: v1 < v2 < v10, v1 < v1.1. */
+export function compareVersions(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s.replace(/\+/g, ' '));
+  } catch {
+    return s;
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatExpected, joinKey, jsonPaths, parseExpected, prettyBody } from './model';
+import { apiVersion, compareVersions, formatExpected, joinKey, jsonPaths, parseExpected, prettyBody } from './model';
 
 describe('expected values', () => {
   it('parses JSON and falls back to strings', () => {
@@ -38,5 +38,39 @@ describe('prettyBody', () => {
   it('formats JSON and leaves other text alone', () => {
     expect(prettyBody('{"a":1}')).toBe('{\n  "a": 1\n}');
     expect(prettyBody('<html>')).toBe('<html>');
+  });
+});
+
+describe('apiVersion', () => {
+  it('finds a version path segment', () => {
+    expect(apiVersion('{{base_url}}/v1/orders')).toBe('v1');
+    expect(apiVersion('https://api.example.com/api/V2/users/7?x=1')).toBe('v2');
+    expect(apiVersion('/api/v2.1/items')).toBe('v2.1');
+    expect(apiVersion('/v3')).toBe('v3');
+  });
+
+  it('ignores look-alikes in the host, names and other segments', () => {
+    expect(apiVersion('https://v1.example.com/orders')).toBe('');
+    expect(apiVersion('/videos/v1beta/list')).toBe('');
+    expect(apiVersion('/movies/vote')).toBe('');
+    expect(apiVersion('{{base_url}}/health')).toBe('');
+  });
+
+  it('falls back to a version query parameter, from the URL or the Query table', () => {
+    expect(apiVersion('/orders?api-version=2')).toBe('v2');
+    expect(apiVersion('/orders?api-version=2024-01-01')).toBe('2024-01-01');
+    expect(apiVersion('/orders', [{ key: 'version', value: '3', enabled: true }])).toBe('v3');
+    expect(apiVersion('/orders', [{ key: 'version', value: '3', enabled: false }])).toBe('');
+    expect(apiVersion('/orders?version={{ver}}')).toBe('');
+    expect(apiVersion('/v1/orders?api-version=9')).toBe('v1');
+  });
+
+  it('fills placeholders from variables', () => {
+    expect(apiVersion('{{base_url}}/orders', [], { base_url: 'https://x.test/api/v2' })).toBe('v2');
+    expect(apiVersion('{{base_url}}/{{ver}}/orders', [], { ver: 'v4' })).toBe('v4');
+  });
+
+  it('sorts versions naturally', () => {
+    expect(['v10', 'v2', 'v1.1', 'v1'].sort(compareVersions)).toEqual(['v1', 'v1.1', 'v2', 'v10']);
   });
 });

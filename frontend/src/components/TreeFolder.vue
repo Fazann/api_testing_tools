@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import { useOpenRequest } from '../services/navigation';
 import { useRunner } from '../stores/runner';
 import { useUi } from '../stores/ui';
 import { useWorkspace } from '../stores/workspace';
@@ -11,25 +12,11 @@ const props = defineProps<{ tree: CollectionTree; parentId: string; depth: numbe
 const ws = useWorkspace();
 const ui = useUi();
 const runner = useRunner();
+const openRequest = useOpenRequest();
 
 const folders = computed(() => props.tree.folders.filter((f) => f.parentId === props.parentId));
 const requests = computed(() => props.tree.requests.filter((r) => r.parentId === props.parentId));
 const collectionId = computed(() => props.tree.collection.id);
-
-async function openRequest(r: Request) {
-  if (ws.draft?.id === r.id) return;
-  if (ws.dirty) {
-    const discard = await ui.confirm({
-      title: 'Discard unsaved changes?',
-      message: `"${ws.draft?.name}" has unsaved changes.`,
-      confirmLabel: 'Discard',
-      danger: true,
-    });
-    if (!discard) return;
-  }
-  ws.open(r);
-  ui.view = 'requests';
-}
 
 function folderMenu(f: Folder) {
   return [
