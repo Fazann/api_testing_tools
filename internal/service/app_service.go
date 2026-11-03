@@ -5,6 +5,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -618,6 +619,8 @@ type ApproveBaselineInput struct {
 	SelectedPaths []string `json:"selectedPaths"`
 	IgnoredPaths  []string `json:"ignoredPaths"`
 	Tolerance     float64  `json:"tolerance"`
+	// Mode is "values" (default) or "schema".
+	Mode domain.BaselineMode `json:"mode"`
 }
 
 // ApproveBaseline saves a reviewed response as the baseline for a request.
@@ -634,7 +637,20 @@ func (s *Service) ApproveBaseline(ctx context.Context, in ApproveBaselineInput) 
 	if in.Tolerance < 0 {
 		return domain.Baseline{}, errors.New("tolerance must not be negative")
 	}
+	switch in.Mode {
+	case "":
+		in.Mode = domain.BaselineValues
+	case domain.BaselineValues, domain.BaselineSchema:
+	default:
+		return domain.Baseline{}, fmt.Errorf("unknown baseline mode %q", in.Mode)
+	}
 	paths := cleanPaths(in.SelectedPaths)
+	if in.Mode == domain.BaselineSchema {
+		if len(paths) > 0 {
+			return domain.Baseline{}, errors.New("a schema baseline checks the whole response; use ignored paths to skip parts of it")
+		}
+		in.Tolerance = 0
+	}
 	for _, p := range paths {
 		if _, err := assertions.ParsePath(p); err != nil {
 			return domain.Baseline{}, err
@@ -653,12 +669,17 @@ func (s *Service) ApproveBaseline(ctx context.Context, in ApproveBaselineInput) 
 		}
 	}
 	body := redact.New(secrets...).String(in.Body)
-	snap, err := regression.Snapshot([]byte(body), paths)
+	var snap json.RawMessage
+	if in.Mode == domain.BaselineSchema {
+		snap, err = regression.SchemaSnapshot([]byte(body))
+	} else {
+		snap, err = regression.Snapshot([]byte(body), paths)
+	}
 	if err != nil {
 		return domain.Baseline{}, err
 	}
 	return s.store.SaveBaseline(ctx, domain.Baseline{
-		RequestID: in.RequestID, EnvironmentID: in.EnvironmentID, Snapshot: snap,
+		RequestID: in.RequestID, EnvironmentID: in.EnvironmentID, Mode: in.Mode, Snapshot: snap,
 		SelectedPaths: paths, IgnoredPaths: cleanPaths(in.IgnoredPaths), Tolerance: in.Tolerance,
 	})
 }

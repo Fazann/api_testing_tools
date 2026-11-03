@@ -5,11 +5,12 @@ A free, local-first desktop app for testing HTTP APIs, checking business rules, 
 - **Requests** — GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS, headers, query, JSON/text bodies, Bearer/Basic/API-key auth (set once per collection and inherited, or overridden per request), timeouts, redirect control, cancellation, response size limit.
 - **Environments** — `{{variables}}` everywhere, secret variables (masked, redacted, not exported), protected environments that require confirmation for destructive requests, required variables per collection.
 - **Assertions** — status, headers, JSON fields (`eq`, `≠`, `>`, `≥`, `<`, `≤`, contains, regex, type), response time, valid JSON, required fields, body text, and aggregates (`count`/`sum`/`min`/`max`) with tolerance — e.g. “item amounts sum to `total` within 0.005”.
-- **Regression comparison** — approve a baseline per request and environment (whole body or selected fields), ignore dynamic fields (`meta.request_id`, `items[*].updated_at`, `**.timestamp`), numeric tolerance, order-independent diff of added / removed / changed / type-changed fields, and comparison with the previous run.
+- **Regression comparison** — approve a baseline per request and environment (whole body, selected fields, or **structure only**), ignore dynamic fields (`meta.request_id`, `items[*].updated_at`, `**.timestamp`), numeric tolerance, order-independent diff of added / removed / changed / type-changed fields, and comparison with the previous run.
+- **Schema regression** — a structure-only baseline records field names, JSON types, optional and nullable fields (merged across array items) and fails a run only when a field appears, disappears or changes type, so endpoints whose values change on every call need no ignore list. See [docs/schema-regression.md](docs/schema-regression.md).
 - **History & reports** — SQLite history with filters by collection, request, status and date; self-contained HTML and JSON reports with secrets removed.
 - **Import/export** — documented, versioned JSON format; also imports **OpenAPI 3 / Swagger 2** (`swagger.json`, `openapi.yaml`) as a ready-to-run collection. Imports are treated as untrusted.
 
-See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md) and [docs/collection-format.md](docs/collection-format.md).
+See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md) and [docs/schema-regression.md](docs/schema-regression.md).
 
 ## Quick start
 

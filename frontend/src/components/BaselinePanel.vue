@@ -80,9 +80,11 @@ async function remove() {
         Approved {{ formatTime(baseline.updatedAt) }} for <strong>{{ envs.selected?.name ?? 'No environment' }}</strong
         >. Compares
         {{
-          baseline.selectedPaths.length
-            ? `${baseline.selectedPaths.length} selected path(s)`
-            : 'the whole response body'
+          baseline.mode === 'schema'
+            ? 'the structure of the response (field names and types, not values)'
+            : baseline.selectedPaths.length
+              ? `${baseline.selectedPaths.length} selected path(s)`
+              : 'the whole response body'
         }}.
       </p>
       <div v-if="baseline.selectedPaths.length" class="small">
@@ -93,7 +95,7 @@ async function remove() {
         <span>Ignored paths (one per line) — dynamic values such as timestamps and request IDs</span>
         <textarea v-model="ignored" rows="4" placeholder="meta.request_id&#10;items[*].updated_at&#10;**.timestamp" />
       </label>
-      <label class="field tol">
+      <label v-if="baseline.mode !== 'schema'" class="field tol">
         <span>Numeric tolerance (absolute)</span>
         <input v-model.number="tolerance" type="number" min="0" step="any" />
       </label>
@@ -102,7 +104,9 @@ async function remove() {
         <button class="danger" @click="remove">Delete baseline</button>
       </div>
       <details>
-        <summary class="small muted">Approved snapshot</summary>
+        <summary class="small muted">
+          {{ baseline.mode === 'schema' ? 'Approved schema' : 'Approved snapshot' }}
+        </summary>
         <pre class="code snap">{{ JSON.stringify(baseline.snapshot, null, 2) }}</pre>
       </details>
     </template>

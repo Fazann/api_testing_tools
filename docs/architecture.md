@@ -24,7 +24,7 @@ internal/service      application facade — no Wails dependency
 | `internal/environments` | Resolves `{{name}}` and built-ins; reports missing and required variables. |
 | `internal/httpclient` | Sends a fully resolved request. Never retries. Classifies errors (timeout, cancelled, TLS, blocked, network). |
 | `internal/assertions` | Path parsing/selection (`a.b[0]`, `[*]`, `["k"]`) and evaluation of every assertion kind. Numbers are decoded as `json.Number` to avoid precision loss. |
-| `internal/regression` | Builds baseline snapshots (whole body or selected paths) and diffs them: added / removed / changed / type-changed, with ignored-path globs (`*`, `**`) and numeric tolerance. |
+| `internal/regression` | Builds baseline snapshots (whole body or selected paths) and diffs them: added / removed / changed / type-changed, with ignored-path globs (`*`, `**`) and numeric tolerance. Schema-mode baselines (`baselines.mode = 'schema'`, `schema.go`) store an inferred JSON-Schema subset (`type`, `properties`, `required`, `items`) and report only structural changes, with array elements reported once as `[*]`. |
 | `internal/redact` | Masks secret values (including URL-encoded forms) and credential headers. |
 | `internal/runner` | Runs one request (`Run`) or many with bounded concurrency (`RunAll`), producing already-redacted results. |
 | `internal/storage` | SQLite via the pure-Go `modernc.org/sqlite` driver (no cgo, simple Windows builds). |
@@ -42,7 +42,7 @@ internal/service      application facade — no Wails dependency
 
 ## Data model
 
-See `internal/storage/migrations/0001_init.sql`. It follows the spec, with these additions: a `folders` table (requests reference it through `parent_id`), `collections.required_vars_json`, `environments.protected`, `assertions.options_json` (tolerance, aggregate function, description), `baselines.selected_paths_json`/`tolerance`, and names copied into `runs` so history stays readable after deletions.
+See `internal/storage/migrations/0001_init.sql`. It follows the spec, with these additions: a `folders` table (requests reference it through `parent_id`), `collections.required_vars_json`, `environments.protected`, `assertions.options_json` (tolerance, aggregate function, description), `baselines.selected_paths_json`/`tolerance`/`mode` (0005), and names copied into `runs` so history stays readable after deletions.
 
 ## Frontend
 

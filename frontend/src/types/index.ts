@@ -228,10 +228,14 @@ export interface RunFilter {
   offset?: number;
 }
 
+/** `values` compares field values; `schema` compares only field names, presence and JSON types. */
+export type BaselineMode = 'values' | 'schema';
+
 export interface Baseline {
   id: string;
   requestId: string;
   environmentId: string;
+  mode: BaselineMode;
   snapshot: unknown;
   selectedPaths: string[];
   ignoredPaths: string[];

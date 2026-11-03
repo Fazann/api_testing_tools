@@ -49,6 +49,21 @@ func Compare(b domain.Baseline, body []byte, truncated bool) domain.RegressionRe
 		res.Message = "stored baseline is corrupt: " + err.Error()
 		return res
 	}
+	if b.Mode == domain.BaselineSchema {
+		var shape Shape
+		if err := json.Unmarshal(b.Snapshot, &shape); err != nil || len(shape.Type) == 0 {
+			res.Message = "stored baseline schema is corrupt"
+			return res
+		}
+		res.Diffs = CompareShape(&shape, actual, b.IgnoredPaths, 0)
+		res.Passed = len(res.Diffs) == 0
+		if res.Passed {
+			res.Message = "response matches the baseline structure"
+		} else {
+			res.Message = fmt.Sprintf("%d structural difference(s) from the baseline", len(res.Diffs))
+		}
+		return res
+	}
 	opts := Options{IgnoredPaths: b.IgnoredPaths, Tolerance: b.Tolerance}
 	if len(b.SelectedPaths) == 0 {
 		res.Diffs = Diff(snap, actual, opts)

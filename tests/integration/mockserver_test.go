@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -19,7 +20,9 @@ type mockAPI struct {
 	currency string
 	// leakPassword simulates a regression that exposes a sensitive field.
 	leakPassword bool
-	slow         time.Duration
+	// balanceAsString simulates a contract break: the balance is sent as a string.
+	balanceAsString bool
+	slow            time.Duration
 }
 
 func newMockAPI() (*mockAPI, *httptest.Server) {
@@ -31,8 +34,12 @@ func newMockAPI() (*mockAPI, *httptest.Server) {
 	mux.HandleFunc("GET /wallet/balance", m.auth(func(w http.ResponseWriter, r *http.Request) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
+		var balance any = m.balance
+		if m.balanceAsString {
+			balance = fmt.Sprintf("%.2f", m.balance)
+		}
 		writeJSON(w, 200, map[string]any{
-			"data": map[string]any{"balance": m.balance, "currency": m.currency},
+			"data": map[string]any{"balance": balance, "currency": m.currency},
 			"meta": map[string]any{"request_id": uuid.NewString(), "generated_at": time.Now().Format(time.RFC3339Nano)},
 		})
 	}))

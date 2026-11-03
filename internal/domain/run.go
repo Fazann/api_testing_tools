@@ -143,12 +143,26 @@ type RunFilter struct {
 
 // Baseline is an approved snapshot of a response used for regression checks.
 // A baseline is never updated automatically: users approve every change.
+// BaselineMode chooses what a baseline compares.
+type BaselineMode string
+
+const (
+	// BaselineValues compares field values (and structure).
+	BaselineValues BaselineMode = "values"
+	// BaselineSchema compares only structure: field names, presence and JSON
+	// types. Use it for responses whose values change on every call.
+	BaselineSchema BaselineMode = "schema"
+)
+
 type Baseline struct {
 	ID            string `json:"id"`
 	RequestID     string `json:"requestId"`
 	EnvironmentID string `json:"environmentId"`
+	// Mode is BaselineValues (the default) or BaselineSchema.
+	Mode BaselineMode `json:"mode"`
 	// Snapshot is the approved JSON. When SelectedPaths is set it is an
-	// object mapping each path to the value it selected.
+	// object mapping each path to the value it selected. In schema mode it
+	// is the inferred structure (see regression.Shape).
 	Snapshot      json.RawMessage `json:"snapshot"`
 	SelectedPaths []string        `json:"selectedPaths"`
 	IgnoredPaths  []string        `json:"ignoredPaths"`

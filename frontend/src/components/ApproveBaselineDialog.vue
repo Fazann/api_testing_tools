@@ -13,7 +13,7 @@ const emit = defineEmits<{ close: []; approved: [] }>();
 const envs = useEnvironments();
 const ui = useUi();
 
-const mode = ref<'all' | 'selected'>('all');
+const mode = ref<'all' | 'selected' | 'schema'>('all');
 const filter = ref('');
 const selected = ref<string[]>([]);
 const ignored = ref((props.existingIgnored ?? []).join('\n'));
@@ -60,7 +60,8 @@ async function approve() {
       truncated: props.result.response?.truncated ?? false,
       selectedPaths: mode.value === 'selected' ? selected.value : [],
       ignoredPaths: ignored.value.split('\n'),
-      tolerance: tolerance.value || 0,
+      tolerance: mode.value === 'schema' ? 0 : tolerance.value || 0,
+      mode: mode.value === 'schema' ? 'schema' : 'values',
     });
     ui.toast('Baseline approved', 'success');
     emit('approved');
@@ -89,7 +90,16 @@ async function approve() {
         <label class="row"
           ><input v-model="mode" type="radio" value="selected" /> Compare selected stable fields only</label
         >
+        <label class="row"
+          ><input v-model="mode" type="radio" value="schema" /> Compare structure only (field names and types)</label
+        >
       </div>
+      <p v-if="mode === 'schema'" class="muted small">
+        Values are not compared. A run fails when a field appears or disappears, or its type changes (for example a
+        number becomes a string, or an object becomes <code>null</code>). Array items are checked against all items seen
+        now; fields missing from some items are optional. Fields that are <code>null</code> now, and empty arrays,
+        accept any value later.
+      </p>
       <div v-if="mode === 'selected'" class="stack">
         <input v-model="filter" placeholder="Filter paths…" aria-label="Filter paths" />
         <div class="paths">
@@ -108,7 +118,7 @@ async function approve() {
         >
         <textarea v-model="ignored" rows="4" placeholder="meta.request_id&#10;items[*].updated_at&#10;**.timestamp" />
       </label>
-      <label class="field tol"
+      <label v-if="mode !== 'schema'" class="field tol"
         ><span>Numeric tolerance (absolute)</span><input v-model.number="tolerance" type="number" min="0" step="any"
       /></label>
     </template>

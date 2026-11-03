@@ -96,15 +96,15 @@ func (s *Store) DeleteEnvironment(ctx context.Context, id string) error {
 
 // ---- baselines ----
 
-const baselineColumns = `id, request_id, IFNULL(environment_id, ''), response_snapshot, selected_paths_json, ignored_paths_json, tolerance, created_at, updated_at`
+const baselineColumns = `id, request_id, IFNULL(environment_id, ''), mode, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, created_at, updated_at`
 
 // GetBaseline returns the baseline for a request in an environment
 // (environmentID may be empty for "no environment").
 func (s *Store) GetBaseline(ctx context.Context, requestID, environmentID string) (*domain.Baseline, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+baselineColumns+` FROM baselines WHERE request_id = ? AND IFNULL(environment_id, '') = ?`, requestID, environmentID)
 	var b domain.Baseline
-	var snap, selected, ignored, created, updated string
-	err := row.Scan(&b.ID, &b.RequestID, &b.EnvironmentID, &snap, &selected, &ignored, &b.Tolerance, &created, &updated)
+	var snap, selected, ignored, created, updated, mode string
+	err := row.Scan(&b.ID, &b.RequestID, &b.EnvironmentID, &mode, &snap, &selected, &ignored, &b.Tolerance, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -112,6 +112,7 @@ func (s *Store) GetBaseline(ctx context.Context, requestID, environmentID string
 		return nil, err
 	}
 	b.Snapshot = json.RawMessage(snap)
+	b.Mode = domain.BaselineMode(mode)
 	unmarshalLenient(selected, &b.SelectedPaths)
 	unmarshalLenient(ignored, &b.IgnoredPaths)
 	b.SelectedPaths, b.IgnoredPaths = nonNil(b.SelectedPaths), nonNil(b.IgnoredPaths)
@@ -141,12 +142,15 @@ func (s *Store) SaveBaseline(ctx context.Context, b domain.Baseline) (domain.Bas
 			b.CreatedAt = parseTS(created)
 		}
 		b.UpdatedAt = now
+		if b.Mode == "" {
+			b.Mode = domain.BaselineValues
+		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO baselines (id, request_id, environment_id, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET response_snapshot = excluded.response_snapshot, selected_paths_json = excluded.selected_paths_json,
+			INSERT INTO baselines (id, request_id, environment_id, mode, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET mode = excluded.mode, response_snapshot = excluded.response_snapshot, selected_paths_json = excluded.selected_paths_json,
 				ignored_paths_json = excluded.ignored_paths_json, tolerance = excluded.tolerance, updated_at = excluded.updated_at`,
-			b.ID, b.RequestID, nullable(b.EnvironmentID), string(b.Snapshot), mustJSON(nonNil(b.SelectedPaths)), mustJSON(nonNil(b.IgnoredPaths)),
+			b.ID, b.RequestID, nullable(b.EnvironmentID), string(b.Mode), string(b.Snapshot), mustJSON(nonNil(b.SelectedPaths)), mustJSON(nonNil(b.IgnoredPaths)),
 			b.Tolerance, ts(b.CreatedAt), ts(b.UpdatedAt))
 		return err
 	})

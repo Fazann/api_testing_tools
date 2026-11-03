@@ -155,7 +155,7 @@ func kind(v any) string {
 
 func describe(v any) string { return assertions.TypeName(v) + " " + assertions.Format(v) }
 
-func unionKeys(a, b map[string]any) []string {
+func unionKeys[A, B any](a map[string]A, b map[string]B) []string {
 	set := make(map[string]struct{}, len(a)+len(b))
 	for k := range a {
 		set[k] = struct{}{}

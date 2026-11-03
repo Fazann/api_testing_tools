@@ -173,7 +173,7 @@ func TestBaselineUpsertAndRunHistory(t *testing.T) {
 		t.Fatal("approving again must replace the baseline for the same request and environment")
 	}
 	got, _ := s.GetBaseline(ctx, r.ID, env.ID)
-	if string(got.Snapshot) != `{"a":2}` || got.IgnoredPaths[0] != "ts" {
+	if string(got.Snapshot) != `{"a":2}` || got.IgnoredPaths[0] != "ts" || got.Mode != domain.BaselineValues {
 		t.Fatalf("got %+v", got)
 	}
 	if none, _ := s.GetBaseline(ctx, r.ID, ""); none != nil {

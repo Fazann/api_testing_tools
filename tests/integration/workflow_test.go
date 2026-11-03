@@ -496,3 +496,43 @@ func hasCode(ws []service.Warning, code string) bool {
 	}
 	return false
 }
+
+// A schema baseline ignores value changes but catches a changed field type.
+func TestSchemaBaselineDetectsContractBreak(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	req := f.request(t, "Get balance")
+
+	res, _ := f.svc.SendRequest(ctx, "op", req, f.env.ID, false)
+	if _, err := f.svc.ApproveBaseline(ctx, service.ApproveBaselineInput{
+		RequestID: req.ID, EnvironmentID: f.env.ID, Body: res.Response.Body, Mode: domain.BaselineSchema,
+		SelectedPaths: []string{"data.balance"},
+	}); err == nil {
+		t.Fatal("schema baselines must reject selected paths")
+	}
+	b, err := f.svc.ApproveBaseline(ctx, service.ApproveBaselineInput{
+		RequestID: req.ID, EnvironmentID: f.env.ID, Body: res.Response.Body, Mode: domain.BaselineSchema,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.svc.GetBaseline(ctx, req.ID, f.env.ID); got.Mode != domain.BaselineSchema || got.ID != b.ID {
+		t.Fatalf("mode not stored: %+v", got)
+	}
+
+	// New balance, new request_id and timestamp: no ignored paths needed.
+	f.api.set(func(m *mockAPI) { m.balance = 1 })
+	res, _ = f.svc.SendRequest(ctx, "op", req, f.env.ID, false)
+	if res.Regression == nil || !res.Regression.Passed {
+		t.Fatalf("value changes must pass a schema baseline: %+v", res.Regression)
+	}
+
+	f.api.set(func(m *mockAPI) { m.balanceAsString = true })
+	res, _ = f.svc.SendRequest(ctx, "op", req, f.env.ID, false)
+	if res.Status != domain.StatusFailed || len(res.Regression.Diffs) != 1 {
+		t.Fatalf("expected one structural diff, got %+v", res.Regression)
+	}
+	if d := res.Regression.Diffs[0]; d.Path != "data.balance" || d.Kind != domain.DiffTypeChanged || d.Before != "number" || d.After != "string" {
+		t.Fatalf("unexpected diff %+v", d)
+	}
+}

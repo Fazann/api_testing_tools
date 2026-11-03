@@ -3,6 +3,7 @@
 import type {
   AppInfo,
   Baseline,
+  BaselineMode,
   Collection,
   CollectionTree,
   DataInfo,
@@ -85,6 +86,7 @@ export const api = {
     selectedPaths: string[];
     ignoredPaths: string[];
     tolerance: number;
+    mode: BaselineMode;
   }) => call<Baseline>('ApproveBaseline', input),
   updateBaselineRules: (id: string, ignored: string[], tolerance: number) =>
     call<void>('UpdateBaselineRules', id, ignored, tolerance),
