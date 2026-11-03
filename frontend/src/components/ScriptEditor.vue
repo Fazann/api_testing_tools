@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 
 import { SCRIPT_PLACEHOLDERS, SCRIPT_SNIPPETS, type ScriptPhase } from '../services/scripts';
+import CodeEditor from './CodeEditor.vue';
 
 const pre = defineModel<string>('pre', { required: true });
 const post = defineModel<string>('post', { required: true });
@@ -25,16 +26,6 @@ function insertSnippet() {
   if (!s) return;
   const current = code.value.trimEnd();
   code.value = (current ? current + '\n\n' : '') + s.code + '\n';
-}
-
-/** Tab indents instead of leaving the editor. */
-function onKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
-  const el = e.target as HTMLTextAreaElement;
-  e.preventDefault();
-  const { selectionStart: start, selectionEnd: end } = el;
-  code.value = code.value.slice(0, start) + '  ' + code.value.slice(end);
-  requestAnimationFrame(() => el.setSelectionRange(start + 2, start + 2));
 }
 </script>
 
@@ -73,16 +64,11 @@ function onKeydown(e: KeyboardEvent) {
       </template>
       <template v-if="scope === 'collection'"> Runs before the request's own script.</template>
     </p>
-    <textarea
+    <CodeEditor
       v-model="code"
-      class="code-input"
-      rows="14"
-      spellcheck="false"
-      autocapitalize="off"
-      autocomplete="off"
-      :aria-label="phase === 'pre' ? 'Pre-request script' : 'Post-response script'"
+      language="javascript"
+      :label="phase === 'pre' ? 'Pre-request script' : 'Post-response script'"
       :placeholder="SCRIPT_PLACEHOLDERS[phase]"
-      @keydown="onKeydown"
     />
     <details class="small help">
       <summary>Available APIs and libraries</summary>
@@ -120,14 +106,6 @@ function onKeydown(e: KeyboardEvent) {
 .inner {
   padding: 0;
   border-bottom: none;
-}
-.code-input {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  line-height: 1.5;
-  tab-size: 2;
-  white-space: pre;
-  min-height: 220px;
 }
 .help ul {
   margin: 6px 0;

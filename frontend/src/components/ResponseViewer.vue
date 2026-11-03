@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { api } from '../services/api';
+import { HIGHLIGHT_LIMIT, highlightJson } from '../services/highlight';
 import { formatBytes, formatDuration, formatTime, prettyBody } from '../services/model';
 import { useEnvironments } from '../stores/environments';
 import { useUi } from '../stores/ui';
@@ -24,6 +25,17 @@ const resp = computed(() => props.result.response);
 const failedTests = computed(() => props.result.assertionResults.filter((a) => !a.passed).length);
 const logs = computed(() => props.result.logs ?? []);
 const body = computed(() => (resp.value ? prettyBody(resp.value.body, resp.value.contentType) : ''));
+/** Colored tokens when the body is valid JSON (and not too large to highlight). */
+const bodyTokens = computed(() => {
+  const text = body.value;
+  if (!text || text.length > HIGHLIGHT_LIMIT) return null;
+  try {
+    JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return highlightJson(text);
+});
 const statusClass = computed(() => {
   const c = resp.value?.statusCode ?? 0;
   return c >= 200 && c < 300 ? 'pass' : c >= 400 ? 'fail' : 'warn';
@@ -130,7 +142,11 @@ async function copyBody() {
           <span class="muted small">{{ resp.contentType }}</span
           ><span class="spacer" /><button class="ghost small" @click="copyBody">Copy</button>
         </div>
-        <pre class="code body">{{ body || '(empty body)' }}</pre>
+        <pre
+          v-if="bodyTokens"
+          class="code body json-view"
+        ><span v-for="(t, i) in bodyTokens" :key="i" :class="t.kind && `tk-${t.kind}`">{{ t.text }}</span></pre>
+        <pre v-else class="code body">{{ body || '(empty body)' }}</pre>
       </div>
       <table v-else-if="tab === 'headers' && resp" class="grid">
         <tbody>

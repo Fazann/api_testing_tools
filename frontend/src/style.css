@@ -17,6 +17,12 @@
   --radius: 6px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   color-scheme: light;
+  /* JSON colors (VS Code Light+ / Dark+). */
+  --json-key: #0451a5;
+  --json-string: #a31515;
+  --json-number: #098658;
+  --json-literal: #0000ff;
+  --json-punct: #3b3b3b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,6 +42,11 @@
     --rem-bg: #2d1214;
     --chg-bg: #272115;
     --focus: #4c8dff66;
+    --json-key: #9cdcfe;
+    --json-string: #ce9178;
+    --json-number: #b5cea8;
+    --json-literal: #569cd6;
+    --json-punct: #d4d4d4;
     color-scheme: dark;
   }
 }
@@ -274,6 +285,28 @@ pre.code {
   white-space: pre-wrap;
   word-break: break-word;
   overflow: auto;
+}
+
+pre.json-view {
+  white-space: pre;
+  word-break: normal;
+  line-height: 1.5;
+}
+.json-view .tk-key {
+  color: var(--json-key);
+}
+.json-view .tk-string {
+  color: var(--json-string);
+}
+.json-view .tk-number {
+  color: var(--json-number);
+}
+.json-view .tk-literal {
+  color: var(--json-literal);
+  font-weight: 600;
+}
+.json-view .tk-punct {
+  color: var(--json-punct);
 }
 
 .empty {
