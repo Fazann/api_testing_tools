@@ -310,3 +310,100 @@ export interface RunProgress {
   total: number;
   result: RunResult;
 }
+
+// ---- security tests ----
+
+/** Fires one saved request many times at once and checks concurrency invariants. */
+export interface RaceTest {
+  requestId: string;
+  count: number;
+  /** '' means no limit on successful (2xx) responses. */
+  successOp: '' | 'eq' | 'lte' | 'gte';
+  successCount: number;
+  uniquePath: string;
+  allowServerErrors: boolean;
+  check?: RaceCheck | null;
+  updatedAt?: string;
+}
+
+/** Reads a number before and after the burst; it must change by successes × deltaPerSuccess. */
+export interface RaceCheck {
+  requestId: string;
+  path: string;
+  deltaPerSuccess: number;
+  tolerance: number;
+}
+
+export interface StatusCount {
+  /** 0 means no response. */
+  code: number;
+  count: number;
+}
+
+export interface RaceReport {
+  runId: string;
+  passed: boolean;
+  cancelled: boolean;
+  count: number;
+  successes: number;
+  serverErrors: number;
+  noResponse: number;
+  statusCounts: StatusCount[];
+  minMs: number;
+  maxMs: number;
+  avgMs: number;
+  before?: number;
+  after?: number;
+  checks: AssertionResult[];
+  results: RunResult[];
+}
+
+export type Access = '' | 'allow' | 'deny';
+
+export interface Role {
+  id: string;
+  name: string;
+  /** Sends requests without auth, Authorization or Cookie headers. */
+  anonymous: boolean;
+  /** Override environment and collection variables, e.g. token = {{bob_token}}. */
+  variables: Variable[];
+}
+
+export interface PermissionMatrix {
+  collectionId: string;
+  roles: Role[];
+  requestIds: string[];
+  /** request id → role id → expected access. */
+  expected: Record<string, Record<string, Access>>;
+  updatedAt?: string;
+}
+
+export type MatrixOutcome = 'allowed' | 'denied' | 'not_found' | 'rejected' | 'server_error' | 'error';
+export type MatrixVerdict = 'pass' | 'fail' | 'warn' | 'unset' | 'error';
+
+export interface MatrixCell {
+  requestId: string;
+  roleId: string;
+  expected: Access;
+  outcome: MatrixOutcome;
+  statusCode: number;
+  durationMs: number;
+  verdict: MatrixVerdict;
+  message?: string;
+  resultId: string;
+  suggested: Access;
+}
+
+export interface MatrixReport {
+  runId: string;
+  passed: boolean;
+  cancelled: boolean;
+  roles: { id: string; name: string; anonymous: boolean }[];
+  requests: { id: string; name: string; method: string }[];
+  cells: MatrixCell[];
+  passes: number;
+  failures: number;
+  warnings: number;
+  unset: number;
+  errors: number;
+}

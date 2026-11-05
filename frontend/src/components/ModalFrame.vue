@@ -1,11 +1,11 @@
 <script setup lang="ts">
-defineProps<{ title: string; wide?: boolean }>();
+defineProps<{ title: string; wide?: boolean; xwide?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 </script>
 
 <template>
   <div class="backdrop" @mousedown.self="emit('close')" @keydown.esc="emit('close')">
-    <section class="modal" :class="{ wide }" role="dialog" aria-modal="true" :aria-label="title">
+    <section class="modal" :class="{ wide, xwide }" role="dialog" aria-modal="true" :aria-label="title">
       <header class="row">
         <h2 class="grow">{{ title }}</h2>
         <button class="ghost" aria-label="Close" @click="emit('close')">✕</button>
@@ -39,6 +39,9 @@ const emit = defineEmits<{ close: [] }>();
 }
 .modal.wide {
   width: min(760px, 100%);
+}
+.modal.xwide {
+  width: min(1180px, 100%);
 }
 header {
   padding: 14px 16px 6px;

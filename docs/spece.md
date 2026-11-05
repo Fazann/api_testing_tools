@@ -32,7 +32,8 @@ A lightweight, local-first alternative to heavyweight API workflows, focused on:
 2. Business-rule assertions
 3. Regression comparisons
 4. Environment and configuration checks
-5. Clear failure reports
+5. Business-security checks that request-by-request clients miss: race conditions and access control
+6. Clear failure reports
 
 ---
 
@@ -53,8 +54,10 @@ A lightweight, local-first alternative to heavyweight API workflows, focused on:
 ### Non-goals for the first release
 
 - Full browser automation
-- Load testing at scale
-- Automatic vulnerability exploitation
+- Load testing at scale (a race test sends at most 50 simultaneous copies of one request; it checks correctness under
+  concurrency, not throughput)
+- Automatic vulnerability exploitation (the permission matrix only sends the user's own saved requests, as roles the
+  user defines, and compares the results with the user's expectations)
 - Replacing a full API client or API gateway
 - Hosted collaboration and organization management
 - Running arbitrary user scripts without strict controls
@@ -101,6 +104,27 @@ A baseline is not automatically the truth. The user must review and approve a ne
 For the MVP, test report APIs or endpoints that expose job status and generated data. Later, add optional CLI execution so users can run collections from cron, systemd timers, or CI pipelines and send results to a notification endpoint.
 
 Do not promise that a desktop GUI process can run jobs while the computer is powered off.
+
+### Workflow E: Find a race condition
+
+1. Save a request that changes state, such as redeeming a coupon or withdrawing money.
+2. Open its **Race test** tab and set how many copies to send at once and how many may succeed.
+3. Optionally choose a JSON field that must be unique per success, and a second request that reads a number (such as
+   a balance) before and after the burst.
+4. Confirm and run. All copies are released at the same moment.
+5. Review the verdict: too many successes (double spend), duplicate IDs, 5xx responses, or a state change that does
+   not match the number of successes (lost update).
+6. After a fix, rerun with the saved settings. The run and every response are stored in history.
+
+### Workflow F: Verify access control
+
+1. Define roles for a collection; each role overrides variables such as `token`, and one role may send no
+   credentials.
+2. Tick the requests to check, read-only ones by default.
+3. Run the matrix: every ticked request is sent once as every role.
+4. Mark each cell as expected **allow** or **deny**, or approve the observed results after reviewing them.
+5. Rerun after authentication, role or middleware changes. A request allowed where deny is expected is reported as
+   broken access control (including IDOR); a request denied where allow is expected is reported as lost access.
 
 ---
 
@@ -187,6 +211,44 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 - OpenAPI import
 - Test templates for common API patterns
 
+### Business-security tests — implemented after the MVP
+
+These set the product apart from general-purpose API clients. Guides: [race-test.md](race-test.md) and
+[permission-matrix.md](permission-matrix.md).
+
+#### Race-condition test (per request)
+
+- Send 2–50 copies of a saved request at the same moment. Each copy runs its pre-request scripts first, then waits at
+  a start gate; a copy that fails before sending must not block the others.
+- Invariants: at most, exactly or at least *n* successful (2xx) responses; a JSON path that must be unique across
+  successful responses; no 5xx unless accepted; every request gets a response.
+- Optional state check: a second saved request reads a number before and after the burst; the change must equal
+  successes × the configured change per success, within a tolerance.
+- The request's own assertions and baseline are not part of the verdict; losing copies are expected to fail.
+- Store the settings per request. Record the run in history with every response and a verdict result listing the
+  invariants.
+
+#### Permission matrix (per collection)
+
+- Roles override environment and collection variables; references such as `{{bob_token}}` are resolved, and values
+  derived from secret variables are redacted. A role with no credentials removes auth and `Authorization`/`Cookie`
+  header rows.
+- Each cell (request × role) has an expectation: allow, deny or none.
+- Judge 2xx/3xx as allowed; 401, 403 and 404 as denied; other 4xx against a deny expectation as suspicious (not a
+  failure); 5xx and missing responses as failures.
+- Allow approving observed results as expectations, after an explicit warning.
+- Store roles, ticked requests and expectations per collection. Record each run in history with one result per cell.
+
+#### Shared rules for both
+
+- Confirm before every run, listing requests that may modify data and protected environments; refuse runs on
+  protected environments without confirmation.
+- Never save variable changes made by scripts during these runs.
+- Support cancellation; redact secrets from results, history and reports.
+
+**Not yet done:** including race tests and matrices in collection export and duplication; dedicated sections in HTML
+reports; running them from the planned CLI.
+
 ### P2 — Only after validating demand
 
 - Optional hosted run history
@@ -211,6 +273,8 @@ Example assertions:
 - `data.currency` equals the expected currency.
 - Balance after a test transaction equals the expected value.
 - A rejected transaction does not change the balance.
+- Under concurrent requests, a withdrawal is applied once per successful response and never overdraws the account
+  (race test with a state check on the balance).
 
 Use a dedicated test account and controlled data. Never run destructive financial tests against real customer accounts.
 
@@ -232,6 +296,9 @@ Example assertions:
 - A user cannot access another user's protected resource.
 - A read-only role cannot perform a write operation.
 - Sensitive fields are not present in responses.
+
+The permission matrix covers the first three for a whole collection at once: one row per endpoint, one column per
+role.
 
 Only test systems and accounts for which the user has authorization.
 
@@ -431,6 +498,18 @@ Use SQLite migrations from the beginning.
 - `status`: text
 - `created_at`: timestamp
 
+### `race_tests`
+
+- `request_id`: primary key, foreign key to `requests` (deleted with the request)
+- `config_json`: text — count, success rule, unique path, server-error setting, optional state check
+- `updated_at`: timestamp
+
+### `permission_matrices`
+
+- `collection_id`: primary key, foreign key to `collections` (deleted with the collection)
+- `config_json`: text — roles with their variable overrides, ticked request IDs, expected access per cell
+- `updated_at`: timestamp
+
 Use indexes for foreign keys and common history queries. Define retention and response-body limits so test history cannot silently consume unlimited disk space.
 
 ---
@@ -506,6 +585,8 @@ API clients can access sensitive systems, so security must be part of the MVP.
 9. Run history
 10. Import/export dialogs
 11. Settings and data-management screen
+12. Race test tab on the request editor (settings, verdict, status-code counts, every response)
+13. Permissions tab in the collection dialog (roles, request × role grid, mismatch list)
 
 Keep the first version focused. Do not build a complex dashboard before the request and test workflows are reliable.
 

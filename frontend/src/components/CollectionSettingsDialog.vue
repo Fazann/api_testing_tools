@@ -10,15 +10,31 @@ import type { Collection, Request } from '../types';
 import AuthEditor from './AuthEditor.vue';
 import CollectionEndpoints from './CollectionEndpoints.vue';
 import ModalFrame from './ModalFrame.vue';
+import PermissionMatrix from './PermissionMatrix.vue';
 import ScriptEditor from './ScriptEditor.vue';
 import VariableTable from './VariableTable.vue';
 
-const props = defineProps<{ collection: Collection; initialTab?: 'endpoints' | 'settings' }>();
+const props = defineProps<{ collection: Collection; initialTab?: 'endpoints' | 'permissions' | 'settings' }>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
 const ui = useUi();
 const openRequest = useOpenRequest();
 const tab = ref(props.initialTab ?? 'settings');
+const matrixDirty = ref(false);
+
+/** Closes the dialog, asking first when the permission matrix has unsaved changes. */
+async function requestClose() {
+  if (matrixDirty.value) {
+    const discard = await ui.confirm({
+      title: 'Discard permission matrix changes?',
+      message: 'You changed roles, ticked requests or expectations without saving.',
+      confirmLabel: 'Discard',
+      danger: true,
+    });
+    if (!discard) return;
+  }
+  emit('close');
+}
 
 const form = ref(clone(props.collection));
 if (!form.value.auth) form.value.auth = { type: 'none' };
@@ -35,6 +51,15 @@ const tree = computed(() => ws.trees[props.collection.id]);
 
 /** Opens an endpoint from the Endpoints tab, then closes the dialog. */
 async function openEndpoint(r: Request) {
+  if (matrixDirty.value) {
+    const discard = await ui.confirm({
+      title: 'Discard permission matrix changes?',
+      message: 'You changed the permission matrix without saving.',
+      confirmLabel: 'Discard',
+      danger: true,
+    });
+    if (!discard) return;
+  }
   if (settingsChanged.value) {
     const discard = await ui.confirm({
       title: 'Discard collection settings changes?',
@@ -81,16 +106,22 @@ async function save() {
 </script>
 
 <template>
-  <ModalFrame :title="collection.name" wide @close="emit('close')">
+  <ModalFrame :title="collection.name" wide :xwide="tab === 'permissions'" @close="requestClose">
     <nav class="tabs" role="tablist">
       <button :class="{ active: tab === 'endpoints' }" role="tab" @click="tab = 'endpoints'">
         Endpoints<span v-if="tree" class="count">{{ tree.requests.length }}</span>
       </button>
+      <button :class="{ active: tab === 'permissions' }" role="tab" @click="tab = 'permissions'">Permissions</button>
       <button :class="{ active: tab === 'settings' }" role="tab" @click="tab = 'settings'">Settings &amp; auth</button>
     </nav>
 
     <template v-if="tab === 'endpoints'">
       <CollectionEndpoints v-if="tree" :tree="tree" @open="openEndpoint" />
+      <p v-else class="muted small">Loading…</p>
+    </template>
+
+    <template v-else-if="tab === 'permissions'">
+      <PermissionMatrix v-if="tree" :tree="tree" @dirty="matrixDirty = $event" @open="openEndpoint" />
       <p v-else class="muted small">Loading…</p>
     </template>
 
@@ -142,8 +173,8 @@ async function save() {
     </template>
 
     <template #footer>
-      <span v-if="tab === 'endpoints' && settingsChanged" class="muted small grow">Settings have unsaved changes.</span>
-      <button @click="emit('close')">{{ tab === 'settings' || settingsChanged ? 'Cancel' : 'Close' }}</button>
+      <span v-if="tab !== 'settings' && settingsChanged" class="muted small grow">Settings have unsaved changes.</span>
+      <button @click="requestClose">{{ tab === 'settings' || settingsChanged ? 'Cancel' : 'Close' }}</button>
       <button v-if="tab === 'settings' || settingsChanged" class="primary" :disabled="saving" @click="save">
         Save
       </button>

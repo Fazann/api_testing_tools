@@ -10,7 +10,11 @@ import type {
   Environment,
   Folder,
   ImportResult,
+  MatrixReport,
+  PermissionMatrix,
   PreviousComparison,
+  RaceReport,
+  RaceTest,
   Request,
   Run,
   RunFilter,
@@ -77,6 +81,14 @@ export const api = {
     call<Run>('RunCollection', opId, collectionId, folderId, envId, confirmed),
   cancel: (opId: string) => call<boolean>('Cancel', opId),
 
+  getRaceTest: (requestId: string) => call<RaceTest | null>('GetRaceTest', requestId),
+  runRaceTest: (opId: string, t: RaceTest, envId: string, confirmed: boolean) =>
+    call<RaceReport>('RunRaceTest', opId, t, envId, confirmed),
+  getPermissionMatrix: (collectionId: string) => call<PermissionMatrix>('GetPermissionMatrix', collectionId),
+  savePermissionMatrix: (m: PermissionMatrix) => call<PermissionMatrix>('SavePermissionMatrix', m),
+  runPermissionMatrix: (opId: string, collectionId: string, envId: string, confirmed: boolean) =>
+    call<MatrixReport>('RunPermissionMatrix', opId, collectionId, envId, confirmed),
+
   getBaseline: (requestId: string, envId: string) => call<Baseline | null>('GetBaseline', requestId, envId),
   approveBaseline: (input: {
     requestId: string;
@@ -118,6 +130,12 @@ export const api = {
 export function onRunProgress(cb: (p: RunProgress) => void): () => void {
   if (!window.runtime?.EventsOn) return () => {};
   return window.runtime.EventsOn('run:progress', (p) => cb(p as RunProgress));
+}
+
+/** Subscribes to permission-matrix progress events. Returns an unsubscribe function. */
+export function onMatrixProgress(cb: (p: RunProgress) => void): () => void {
+  if (!window.runtime?.EventsOn) return () => {};
+  return window.runtime.EventsOn('matrix:progress', (p) => cb(p as RunProgress));
 }
 
 export function errorMessage(e: unknown): string {

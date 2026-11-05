@@ -12,6 +12,7 @@ import (
 
 	"api-test-kits/internal/collectionio"
 	"api-test-kits/internal/domain"
+	"api-test-kits/internal/security"
 	"api-test-kits/internal/service"
 	"api-test-kits/internal/storage"
 )
@@ -108,6 +109,31 @@ func (a *App) RunCollection(opID, collectionID, folderID, envID string, confirme
 }
 
 func (a *App) Cancel(opID string) bool { return a.svc.Cancel(opID) }
+
+// ---- security tests ----
+
+func (a *App) GetRaceTest(requestID string) (*domain.RaceTest, error) {
+	return a.svc.GetRaceTest(a.ctx, requestID)
+}
+
+func (a *App) RunRaceTest(opID string, t domain.RaceTest, envID string, confirmed bool) (security.RaceReport, error) {
+	return a.svc.RunRaceTest(a.ctx, opID, t, envID, confirmed)
+}
+
+func (a *App) GetPermissionMatrix(collectionID string) (domain.PermissionMatrix, error) {
+	return a.svc.GetPermissionMatrix(a.ctx, collectionID)
+}
+
+func (a *App) SavePermissionMatrix(m domain.PermissionMatrix) (domain.PermissionMatrix, error) {
+	return a.svc.SavePermissionMatrix(a.ctx, m)
+}
+
+// RunPermissionMatrix emits "matrix:progress" events while it runs.
+func (a *App) RunPermissionMatrix(opID, collectionID, envID string, confirmed bool) (security.MatrixReport, error) {
+	return a.svc.RunPermissionMatrix(a.ctx, opID, collectionID, envID, confirmed, func(done, total int, res domain.RunResult) {
+		runtime.EventsEmit(a.ctx, "matrix:progress", RunProgress{OpID: opID, Done: done, Total: total, Result: res})
+	})
+}
 
 // ---- baselines ----
 

@@ -17,7 +17,7 @@ const ui = useUi();
 const runner = useRunner();
 const envs = useEnvironments();
 const exporting = ref<Collection | null>(null);
-const editing = ref<{ collection: Collection; tab: 'endpoints' | 'settings' } | null>(null);
+const editing = ref<{ collection: Collection; tab: 'endpoints' | 'permissions' | 'settings' } | null>(null);
 
 async function newCollection() {
   const name = await ui.prompt({ title: 'New collection', value: 'My API tests', confirmLabel: 'Create' });
@@ -47,6 +47,7 @@ function menu(c: Collection) {
     { label: 'New folder', action: () => newFolder(c) },
     { label: 'Run collection', action: () => runner.runCollection(c.id, '', c.name) },
     { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
+    { label: 'Permission matrix…', action: () => (editing.value = { collection: c, tab: 'permissions' }) },
     { label: 'Settings & auth…', action: () => (editing.value = { collection: c, tab: 'settings' }) },
     { label: 'Duplicate', action: () => ws.duplicateCollection(c.id).catch(ui.error) },
     { label: 'Export…', action: () => (exporting.value = c) },

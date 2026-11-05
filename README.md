@@ -8,10 +8,12 @@ A free, local-first desktop app for testing HTTP APIs, checking business rules, 
 - **Assertions** — status, headers, JSON fields (`eq`, `≠`, `>`, `≥`, `<`, `≤`, contains, regex, type), response time, valid JSON, required fields, body text, and aggregates (`count`/`sum`/`min`/`max`) with tolerance — e.g. “item amounts sum to `total` within 0.005”.
 - **Regression comparison** — approve a baseline per request and environment (whole body, selected fields, or **structure only**), ignore dynamic fields (`meta.request_id`, `items[*].updated_at`, `**.timestamp`), numeric tolerance, order-independent diff of added / removed / changed / type-changed fields, and comparison with the previous run.
 - **Schema regression** — a structure-only baseline records field names, JSON types, optional and nullable fields (merged across array items) and fails a run only when a field appears, disappears or changes type, so endpoints whose values change on every call need no ignore list. See [docs/schema-regression.md](docs/schema-regression.md).
+- **Race-condition tests** — a request's **Race test** tab sends 2–50 copies at the same moment and checks what a correct server guarantees under concurrency: at most *n* successes (double spend, double redeem), unique IDs, no 5xx, and a before/after state check that catches lost updates. See [docs/race-test.md](docs/race-test.md).
+- **Permission matrix** — a collection's **⋯ → Permission matrix…** runs endpoints as every role (roles override variables such as `token`; one can send no credentials) and shows a grid of expected vs actual access, flagging broken access control and IDOR. Approve the observed grid once and later runs catch regressions. See [docs/permission-matrix.md](docs/permission-matrix.md).
 - **History & reports** — SQLite history with filters by collection, request, status and date; self-contained HTML and JSON reports with secrets removed.
 - **Import/export** — documented, versioned JSON format; also imports **OpenAPI 3 / Swagger 2** (`swagger.json`, `openapi.yaml`) as a ready-to-run collection. Imports are treated as untrusted.
 
-See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md) and [docs/schema-regression.md](docs/schema-regression.md).
+See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md), [docs/schema-regression.md](docs/schema-regression.md) and [docs/security-tests.md](docs/security-tests.md).
 
 ## Quick start
 
