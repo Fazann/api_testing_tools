@@ -298,7 +298,7 @@ func TestNoSecretsInHistoryOrReports(t *testing.T) {
 	if len(findings) != 1 {
 		t.Fatalf("expected one secret finding, got %+v", findings)
 	}
-	exported, _ := f.svc.ExportCollection(ctx, f.tree.Collection.ID, []string{f.env.ID}, false)
+	exported, _ := f.svc.ExportCollection(ctx, f.tree.Collection.ID, []string{f.env.ID}, false, false)
 	if strings.Contains(string(exported), testToken) {
 		t.Fatal("collection export leaked the token")
 	}

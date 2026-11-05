@@ -10,10 +10,11 @@ A free, local-first desktop app for testing HTTP APIs, checking business rules, 
 - **Schema regression** — a structure-only baseline records field names, JSON types, optional and nullable fields (merged across array items) and fails a run only when a field appears, disappears or changes type, so endpoints whose values change on every call need no ignore list. See [docs/schema-regression.md](docs/schema-regression.md).
 - **Race-condition tests** — a request's **Race test** tab sends 2–50 copies at the same moment and checks what a correct server guarantees under concurrency: at most *n* successes (double spend, double redeem), unique IDs, no 5xx, and a before/after state check that catches lost updates. See [docs/race-test.md](docs/race-test.md).
 - **Permission matrix** — a collection's **⋯ → Permission matrix…** runs endpoints as every role (roles override variables such as `token`; one can send no credentials) and shows a grid of expected vs actual access, flagging broken access control and IDOR. Approve the observed grid once and later runs catch regressions. See [docs/permission-matrix.md](docs/permission-matrix.md).
+- **CLI for CI** — `test-tool-kit-cli run wallet.collection.json --env Staging --junit junit.xml` runs a collection headlessly (pure Go, no GUI libraries), compares with the baselines included in the export, writes JUnit/HTML/JSON reports and exits non-zero on failure; secrets come from `APIGUARD_VAR_*` environment variables. `--collection NAME` runs straight from the app's database for scheduled local checks. See [docs/cli.md](docs/cli.md).
 - **History & reports** — SQLite history with filters by collection, request, status and date; self-contained HTML and JSON reports with secrets removed.
 - **Import/export** — documented, versioned JSON format; also imports **OpenAPI 3 / Swagger 2** (`swagger.json`, `openapi.yaml`) as a ready-to-run collection. Imports are treated as untrusted.
 
-See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md), [docs/schema-regression.md](docs/schema-regression.md) and [docs/security-tests.md](docs/security-tests.md).
+See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md), [docs/schema-regression.md](docs/schema-regression.md), [docs/security-tests.md](docs/security-tests.md) and [docs/cli.md](docs/cli.md).
 
 ## Quick start
 
@@ -54,6 +55,8 @@ make test              # frontend + Go tests
 make build-linux       # Linux binary for this architecture
 make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
 make build-windows     # Windows amd64 + arm64 .exe (cross-compiles from Linux, no C toolchain needed)
+make build-cli         # headless CLI for CI → build/bin/test-tool-kit-cli (pure Go)
+make release-cli       # CLI for Linux, Windows and macOS (amd64 + arm64) → release/
 make release           # tests, then packaged builds of every platform this host can build → release/
 ```
 

@@ -189,8 +189,8 @@ func (a *App) ExportPreview(collectionID string, envIDs []string) ([]collectioni
 // ExportCollection writes the collection to a user-chosen file. The frontend
 // must show ExportPreview findings and get confirmation before passing
 // includeSecrets=true.
-func (a *App) ExportCollection(collectionID string, envIDs []string, includeSecrets bool) (string, error) {
-	data, err := a.svc.ExportCollection(a.ctx, collectionID, envIDs, includeSecrets)
+func (a *App) ExportCollection(collectionID string, envIDs []string, includeSecrets, includeBaselines bool) (string, error) {
+	data, err := a.svc.ExportCollection(a.ctx, collectionID, envIDs, includeSecrets, includeBaselines)
 	if err != nil {
 		return "", err
 	}

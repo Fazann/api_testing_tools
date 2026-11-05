@@ -101,7 +101,7 @@ A baseline is not automatically the truth. The user must review and approve a ne
 
 ### Workflow D: Verify reports and scheduled jobs
 
-For the MVP, test report APIs or endpoints that expose job status and generated data. Later, add optional CLI execution so users can run collections from cron, systemd timers, or CI pipelines and send results to a notification endpoint.
+For the MVP, test report APIs or endpoints that expose job status and generated data. The CLI (`test-tool-kit-cli`, see [cli.md](cli.md)) runs collections from cron, systemd timers, or CI pipelines; sending results to a notification endpoint is still open.
 
 Do not promise that a desktop GUI process can run jobs while the computer is powered off.
 
@@ -201,8 +201,11 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 
 ### P1 — After MVP feedback
 
-- CLI mode for running exported collections
-- CI integration examples for GitHub Actions and other CI systems
+- ~~CLI mode for running exported collections~~ — done: `test-tool-kit-cli` ([cli.md](cli.md)). Pure Go, runs an export
+  (optionally with baselines) or a collection from the app database, writes JUnit/HTML/JSON reports, exit codes
+  0/1/2/3/130, secrets from `APIGUARD_VAR_*`
+- ~~CI integration examples for GitHub Actions and other CI systems~~ — done: GitHub Actions and GitLab CI in
+  [cli.md](cli.md)
 - Scheduled local test runs
 - Notifications through a configurable webhook
 - CSV export for selected tabular results
@@ -247,7 +250,7 @@ These set the product apart from general-purpose API clients. Guides: [race-test
 - Support cancellation; redact secrets from results, history and reports.
 
 **Not yet done:** including race tests and matrices in collection export and duplication; dedicated sections in HTML
-reports; running them from the planned CLI.
+reports; running them from the CLI.
 
 ### P2 — Only after validating demand
 
@@ -664,7 +667,7 @@ Assumption: one developer working approximately 5–10 hours per week. Estimates
 - Publish source code if using an open-source model.
 - Add issue templates and a public roadmap.
 - Track opt-in, privacy-respecting product metrics or rely on direct user feedback.
-- Consider a CLI after desktop usage is validated.
+- Consider a CLI after desktop usage is validated (a first version exists: [cli.md](cli.md)).
 
 ---
 

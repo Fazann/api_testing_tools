@@ -15,6 +15,7 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 | `requests`        | array     | See below                                                      |
 | `environments`    | array     | Optional. `name`, `protected`, `variables`                     |
 | `secretsIncluded` | boolean   | `true` only if the user chose to export secret values          |
+| `baselines`       | array     | Optional. Approved baselines, when **Include baselines** was ticked; see [Baselines](#baselines) |
 
 IDs in a file only link folders and requests to each other. **Every ID is regenerated on import**, so importing can never overwrite existing data.
 
@@ -163,6 +164,39 @@ Unless the user explicitly opts in (after a warning that lists them), exports bl
 - values of secret collection variables;
 - literal (non-`{{variable}}`) `auth.token`, `auth.password` and `auth.keyValue`;
 - literal values of credential headers (`Authorization`, `Cookie`, `X-Api-Key`, …).
+
+## Baselines
+
+Added when **Include baselines** is ticked in the export dialog, so a regression check can run on another machine or
+in CI with [`test-tool-kit-cli`](cli.md). Files without this field are still version 1; builds that do not know it
+ignore it.
+
+```json
+"baselines": [
+  {
+    "requestId": "r-balance",
+    "environment": "Staging",
+    "mode": "values",
+    "snapshot": { "data": { "balance": 150.25, "currency": "USD" } },
+    "selectedPaths": [],
+    "ignoredPaths": ["meta.request_id", "meta.generated_at"],
+    "tolerance": 0.005
+  }
+]
+```
+
+| Field | Notes |
+| --- | --- |
+| `requestId` | ID of a request in the same file. |
+| `environment` | The environment's **name**, or `""` for a baseline approved without an environment. Names are used because IDs differ between machines. |
+| `mode` | `values` (default) or `schema`. In schema mode `snapshot` is the inferred structure (see [schema-regression.md](schema-regression.md#stored-format)). |
+| `snapshot` | The approved JSON. With `selectedPaths` it maps each path to its approved value. Bodies were redacted when they were approved. |
+| `selectedPaths`, `ignoredPaths`, `tolerance` | The comparison rules, as on the request's **Baseline** tab. |
+
+On import a baseline is attached to the environment with that name, either from the same file or one that already
+exists. Baselines whose environment exists in neither place are skipped and counted in the import message. The CLI
+attaches baselines for `--env NAME` even when the file has no environment of that name. At most 20,000 baselines; a
+request may have one per environment.
 
 ## Import validation
 

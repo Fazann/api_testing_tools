@@ -2,10 +2,7 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
@@ -14,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
+	"api-test-kits/internal/appdata"
 	"api-test-kits/internal/service"
 	"api-test-kits/internal/storage"
 )
@@ -27,27 +25,12 @@ var assets embed.FS
 //go:embed build/appicon.png
 var appIcon []byte
 
-const dataDirName = "api-regression-guard"
-
-// dataDir returns where the local database lives. APIGUARD_DATA_DIR overrides
-// it, which is useful for portable installs and testing.
-func dataDir() (string, error) {
-	if d := os.Getenv("APIGUARD_DATA_DIR"); d != "" {
-		return d, nil
-	}
-	base, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot locate the user configuration directory: %w", err)
-	}
-	return filepath.Join(base, dataDirName), nil
-}
-
 func main() {
-	dir, err := dataDir()
+	path, err := appdata.DatabasePath()
 	if err != nil {
 		log.Fatal(err)
 	}
-	store, err := storage.Open(filepath.Join(dir, "data.db"))
+	store, err := storage.Open(path)
 	if err != nil {
 		log.Fatalf("open local database: %v", err)
 	}
@@ -79,7 +62,7 @@ func main() {
 		},
 		Linux: &linux.Options{
 			Icon:                appIcon,
-			ProgramName:         dataDirName,
+			ProgramName:         appdata.DirName,
 			WebviewGpuPolicy:    linux.WebviewGpuPolicyOnDemand,
 			WindowIsTranslucent: false,
 		},

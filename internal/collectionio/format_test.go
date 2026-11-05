@@ -126,3 +126,57 @@ func TestReadDropsUnknownFolderParents(t *testing.T) {
 		t.Fatal("requests with unknown parents should move to the top level")
 	}
 }
+
+func TestBaselinesRoundTripWithNewRequestIDs(t *testing.T) {
+	doc := Export(sampleTree(), nil, false, "test", time.Now())
+	doc.Baselines = []Baseline{
+		{RequestID: "r1", Environment: "Staging", Mode: domain.BaselineSchema, Snapshot: []byte(`{"type":["object"]}`)},
+		{RequestID: "r2", Snapshot: []byte(`{"a":1}`), IgnoredPaths: []string{"meta.id"}, Tolerance: 0.01},
+	}
+	var buf bytes.Buffer
+	if err := Write(&buf, doc); err != nil {
+		t.Fatal(err)
+	}
+	imp, err := Read(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(imp.Baselines) != 2 {
+		t.Fatalf("expected 2 baselines, got %d", len(imp.Baselines))
+	}
+	b0, b1 := imp.Baselines[0], imp.Baselines[1]
+	if b0.Baseline.RequestID != imp.Tree.Requests[0].ID || b1.Baseline.RequestID != imp.Tree.Requests[1].ID {
+		t.Fatal("baselines must point at the regenerated request IDs")
+	}
+	if b0.Environment != "Staging" || b0.Baseline.Mode != domain.BaselineSchema || b1.Baseline.Mode != domain.BaselineValues {
+		t.Fatalf("unexpected baselines %+v", imp.Baselines)
+	}
+	if b1.Baseline.Tolerance != 0.01 || b1.Baseline.IgnoredPaths[0] != "meta.id" {
+		t.Fatalf("rules lost: %+v", b1.Baseline)
+	}
+}
+
+func TestBaselinesAreValidated(t *testing.T) {
+	cases := map[string]Baseline{
+		"does not match a request": {RequestID: "nope", Snapshot: []byte(`{}`)},
+		"unknown mode":             {RequestID: "r1", Mode: "magic", Snapshot: []byte(`{}`)},
+		"valid JSON":               {RequestID: "r1", Snapshot: []byte(`{`)},
+		"tolerance":                {RequestID: "r1", Snapshot: []byte(`{}`), Tolerance: -1},
+	}
+	for want, b := range cases {
+		doc := Export(sampleTree(), nil, false, "test", time.Now())
+		doc.Baselines = []Baseline{b}
+		var buf bytes.Buffer
+		Write(&buf, doc)
+		if _, err := Read(&buf); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: got %v", want, err)
+		}
+	}
+	doc := Export(sampleTree(), nil, false, "test", time.Now())
+	doc.Baselines = []Baseline{{RequestID: "r1", Snapshot: []byte(`{}`)}, {RequestID: "r1", Snapshot: []byte(`{}`)}}
+	var buf bytes.Buffer
+	Write(&buf, doc)
+	if _, err := Read(&buf); err == nil || !strings.Contains(err.Error(), "two baselines") {
+		t.Errorf("duplicate baseline: got %v", err)
+	}
+}

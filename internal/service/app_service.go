@@ -808,7 +808,7 @@ func (s *Service) CompareWithPrevious(ctx context.Context, runID, resultID strin
 
 // ---- reports ----
 
-// ExportReport renders a stored run as "json" or "html".
+// ExportReport renders a stored run as "json", "html" or "junit" (JUnit XML).
 func (s *Service) ExportReport(ctx context.Context, runID, format string) ([]byte, error) {
 	run, err := s.store.GetRun(ctx, runID)
 	if err != nil {
@@ -822,6 +822,8 @@ func (s *Service) ExportReport(ctx context.Context, runID, format string) ([]byt
 		err = reports.WriteJSON(&buf, rep)
 	case "html":
 		err = reports.WriteHTML(&buf, rep)
+	case "junit":
+		err = reports.WriteJUnit(&buf, rep)
 	default:
 		return nil, fmt.Errorf("unknown report format %q", format)
 	}
@@ -879,13 +881,26 @@ func (s *Service) exportInputs(ctx context.Context, collectionID string, envIDs 
 }
 
 // ExportCollection serializes a collection (and optional environments).
-// Secrets are blanked unless includeSecrets is true.
-func (s *Service) ExportCollection(ctx context.Context, collectionID string, envIDs []string, includeSecrets bool) ([]byte, error) {
+// Secrets are blanked unless includeSecrets is true. With includeBaselines,
+// the approved baselines of every environment are added (bodies in baselines
+// were redacted when they were approved).
+func (s *Service) ExportCollection(ctx context.Context, collectionID string, envIDs []string, includeSecrets, includeBaselines bool) ([]byte, error) {
 	tree, envs, err := s.exportInputs(ctx, collectionID, envIDs)
 	if err != nil {
 		return nil, err
 	}
 	doc := collectionio.Export(tree, envs, includeSecrets, Version, time.Now())
+	if includeBaselines {
+		list, err := s.store.ListCollectionBaselines(ctx, collectionID)
+		if err != nil {
+			return nil, err
+		}
+		for _, nb := range list {
+			b := nb.Baseline
+			doc.Baselines = append(doc.Baselines, collectionio.Baseline{RequestID: b.RequestID, Environment: nb.EnvironmentName,
+				Mode: b.Mode, Snapshot: b.Snapshot, SelectedPaths: b.SelectedPaths, IgnoredPaths: b.IgnoredPaths, Tolerance: b.Tolerance})
+		}
+	}
 	var buf bytes.Buffer
 	err = collectionio.Write(&buf, doc)
 	return buf.Bytes(), err
@@ -897,6 +912,10 @@ type ImportResult struct {
 	Requests     int               `json:"requests"`
 	Folders      int               `json:"folders"`
 	Environments int               `json:"environments"`
+	Baselines    int               `json:"baselines"`
+	// BaselinesSkipped counts baselines whose environment exists neither in
+	// the file nor on this machine.
+	BaselinesSkipped int `json:"baselinesSkipped"`
 }
 
 // ImportCollection validates untrusted data and stores it with fresh IDs.
@@ -905,16 +924,53 @@ func (s *Service) ImportCollection(ctx context.Context, data []byte) (ImportResu
 	if err != nil {
 		return ImportResult{}, err
 	}
+	return s.ImportParsed(ctx, imp)
+}
+
+// ImportParsed stores an already validated import. Baselines are attached
+// to the imported environment with the same name, else to an existing one.
+func (s *Service) ImportParsed(ctx context.Context, imp *collectionio.Imported) (ImportResult, error) {
 	if err := s.store.ImportTree(ctx, imp.Tree); err != nil {
 		return ImportResult{}, err
 	}
-	for _, e := range imp.Environments {
-		if _, err := s.store.SaveEnvironment(ctx, e); err != nil {
-			return ImportResult{}, fmt.Errorf("collection imported, but environment %q failed: %w", e.Name, err)
+	envByName := map[string]string{}
+	if len(imp.Baselines) > 0 {
+		existing, err := s.store.ListEnvironments(ctx)
+		if err != nil {
+			return ImportResult{}, err
+		}
+		for _, e := range existing {
+			if _, dup := envByName[e.Name]; !dup {
+				envByName[e.Name] = e.ID
+			}
 		}
 	}
+	for _, e := range imp.Environments {
+		saved, err := s.store.SaveEnvironment(ctx, e)
+		if err != nil {
+			return ImportResult{}, fmt.Errorf("collection imported, but environment %q failed: %w", e.Name, err)
+		}
+		envByName[saved.Name] = saved.ID
+	}
+	res := ImportResult{Requests: len(imp.Tree.Requests), Folders: len(imp.Tree.Folders), Environments: len(imp.Environments)}
+	for _, ib := range imp.Baselines {
+		b := ib.Baseline
+		if ib.Environment != "" {
+			id, ok := envByName[ib.Environment]
+			if !ok {
+				res.BaselinesSkipped++
+				continue
+			}
+			b.EnvironmentID = id
+		}
+		if _, err := s.store.SaveBaseline(ctx, b); err != nil {
+			return res, fmt.Errorf("collection imported, but a baseline failed: %w", err)
+		}
+		res.Baselines++
+	}
 	c, err := s.store.GetCollection(ctx, imp.Tree.Collection.ID)
-	return ImportResult{Collection: c, Requests: len(imp.Tree.Requests), Folders: len(imp.Tree.Folders), Environments: len(imp.Environments)}, err
+	res.Collection = c
+	return res, err
 }
 
 // ---- settings and data management ----
@@ -922,6 +978,15 @@ func (s *Service) ImportCollection(ctx context.Context, data []byte) (ImportResu
 func (s *Service) GetSettings() domain.Settings {
 	_, st := s.current()
 	return st
+}
+
+// UseSettings applies settings for this process only, without storing them.
+// The CLI uses it so command-line flags never change the desktop app's settings.
+func (s *Service) UseSettings(st domain.Settings) error {
+	if err := st.Validate(); err != nil {
+		return err
+	}
+	return s.applySettings(st)
 }
 
 func (s *Service) SaveSettings(ctx context.Context, st domain.Settings) error {

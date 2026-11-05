@@ -274,6 +274,9 @@ export interface ImportResult {
   requests: number;
   folders: number;
   environments: number;
+  baselines: number;
+  /** Baselines whose environment exists neither in the file nor on this machine. */
+  baselinesSkipped: number;
 }
 
 export interface Settings {

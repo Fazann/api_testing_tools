@@ -15,6 +15,7 @@ const ui = useUi();
 const envIds = ref<string[]>([]);
 const findings = ref<SecretFinding[]>([]);
 const includeSecrets = ref(false);
+const includeBaselines = ref(false);
 const busy = ref(false);
 
 const hasSecrets = computed(() => findings.value.length > 0);
@@ -42,7 +43,12 @@ async function doExport() {
   }
   busy.value = true;
   try {
-    const path = await api.exportCollection(props.collection.id, envIds.value, includeSecrets.value);
+    const path = await api.exportCollection(
+      props.collection.id,
+      envIds.value,
+      includeSecrets.value,
+      includeBaselines.value,
+    );
     if (path) {
       ui.toast(`Exported to ${path}`, 'success');
       emit('close');
@@ -67,6 +73,14 @@ async function doExport() {
       >
       <span v-if="envs.list.length === 0" class="muted small">No environments defined.</span>
     </div>
+    <label class="row baselines">
+      <input v-model="includeBaselines" type="checkbox" />
+      <span>
+        <strong>Include baselines</strong> — approved baselines of every environment, so the regression check also runs
+        on another machine or in CI with <code>test-tool-kit-cli</code>. Baselines hold response bodies (already
+        redacted when approved).
+      </span>
+    </label>
     <div v-if="hasSecrets" class="callout">
       <strong>This export contains secrets</strong>
       <ul class="small">
@@ -86,3 +100,9 @@ async function doExport() {
     </template>
   </ModalFrame>
 </template>
+
+<style scoped>
+.baselines {
+  align-items: flex-start;
+}
+</style>

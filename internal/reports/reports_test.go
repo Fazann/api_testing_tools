@@ -71,3 +71,34 @@ func TestHTMLIsEscapedAndSelfContained(t *testing.T) {
 		}
 	}
 }
+
+func TestJUnitReport(t *testing.T) {
+	run := sampleRun()
+	run.Results = append(run.Results,
+		domain.RunResult{ID: "y", Status: domain.StatusError, Error: "network: connection refused",
+			Request: domain.RequestSummary{Name: "Down", Method: "POST"}},
+		domain.RunResult{ID: "z", Status: domain.StatusPassed, DurationMs: 1500,
+			Request: domain.RequestSummary{Name: "Health", Method: "GET"}, Response: &domain.ResponseSummary{StatusCode: 200}})
+	run.Tally()
+	var buf bytes.Buffer
+	if err := WriteJUnit(&buf, Build(run, Meta{Secrets: []string{"SUPERSECRET"}}, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`<testsuites name="Wallet" tests="3" failures="1" errors="1"`,
+		`<property name="environment" value="Staging">`,
+		`<testcase name="GET Balance &lt;script&gt;" classname="Wallet" time="0.042">`,
+		`type="AssertionFailure"`,
+		`~ echo changed: old →`,
+		`<error message="network: connection refused" type="RequestError">`,
+		`<testcase name="GET Health" classname="Wallet" time="1.500">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "SUPERSECRET") || strings.Contains(out, "<script>") {
+		t.Fatalf("JUnit report leaked a secret or unescaped markup:\n%s", out)
+	}
+}

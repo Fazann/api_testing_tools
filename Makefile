@@ -25,7 +25,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help deps tools doctor dev run build test test-go test-frontend lint fmt frontend \
         build-linux build-debian build-windows build-windows-amd64 build-windows-arm64 build-darwin \
-        release release-windows-installer icons clean
+        release release-windows-installer icons clean build-cli release-cli
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -99,6 +99,12 @@ build-darwin: ## macOS universal .app (macOS host only)
 	scripts/build.sh --skip-tests --no-package -v $(VERSION) darwin
 
 # ---- release ----
+
+build-cli: ## Build the headless CLI for this machine (build/bin/test-tool-kit-cli, pure Go)
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o build/bin/test-tool-kit-cli$(if $(filter windows,$(HOST_OS)),.exe,) ./cmd/test-tool-kit-cli
+
+release-cli: ## Cross-compile and package the CLI for Linux, Windows and macOS (release/)
+	scripts/build-cli.sh -v $(VERSION)
 
 release: ## Test, then build and package every platform this host can build (release/)
 	scripts/build.sh -v $(VERSION) all

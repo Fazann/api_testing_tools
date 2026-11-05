@@ -38,6 +38,26 @@ type Document struct {
 	Environments []domain.Environment `json:"environments,omitempty"`
 	// SecretsIncluded is true when the user chose to export secret values.
 	SecretsIncluded bool `json:"secretsIncluded"`
+	// Baselines are optional approved baselines, so a regression check can run
+	// on another machine or in CI. Older builds ignore this field.
+	Baselines []Baseline `json:"baselines,omitempty"`
+}
+
+// MaxBaselines bounds how many baselines one file may carry.
+const MaxBaselines = 20_000
+
+// Baseline is an approved baseline in an export. Environments are referenced
+// by name, because environment IDs differ between machines.
+type Baseline struct {
+	// RequestID is the ID of a request in the same file.
+	RequestID string `json:"requestId"`
+	// Environment is the environment's name, or "" for "no environment".
+	Environment   string              `json:"environment"`
+	Mode          domain.BaselineMode `json:"mode"`
+	Snapshot      json.RawMessage     `json:"snapshot"`
+	SelectedPaths []string            `json:"selectedPaths"`
+	IgnoredPaths  []string            `json:"ignoredPaths"`
+	Tolerance     float64             `json:"tolerance"`
 }
 
 // SecretFinding describes a secret value that an export would contain.
@@ -185,6 +205,15 @@ func (e *ValidationError) Error() string {
 type Imported struct {
 	Tree         domain.CollectionTree
 	Environments []domain.Environment
+	// Baselines point at the new request IDs. Their EnvironmentID is empty;
+	// Environment names the environment to attach them to.
+	Baselines []ImportedBaseline
+}
+
+// ImportedBaseline is a validated baseline waiting for its environment.
+type ImportedBaseline struct {
+	Baseline    domain.Baseline
+	Environment string
 }
 
 // Read parses and validates an import file. All IDs are regenerated so an
@@ -246,6 +275,9 @@ func validate(doc Document) (*Imported, error) {
 	if len(doc.Environments) > MaxEnvironments {
 		add("too many environments (%d, max %d)", len(doc.Environments), MaxEnvironments)
 	}
+	if len(doc.Baselines) > MaxBaselines {
+		add("too many baselines (%d, max %d)", len(doc.Baselines), MaxBaselines)
+	}
 	if len(problems) > 0 {
 		return nil, &ValidationError{Problems: problems}
 	}
@@ -303,5 +335,69 @@ func validate(doc Document) (*Imported, error) {
 		return nil, &ValidationError{Problems: problems}
 	}
 	tree := storage.ReassignIDs(domain.CollectionTree{Collection: c, Folders: doc.Folders, Requests: reqs})
-	return &Imported{Tree: tree, Environments: envs}, nil
+	// ReassignIDs keeps the order of requests, so old and new IDs line up by index.
+	newID := map[string]string{}
+	for i, r := range doc.Requests {
+		if r.ID != "" {
+			newID[r.ID] = tree.Requests[i].ID
+		}
+	}
+	baselines, bproblems := validateBaselines(doc.Baselines, newID)
+	if len(bproblems) > 0 {
+		return nil, &ValidationError{Problems: bproblems}
+	}
+	return &Imported{Tree: tree, Environments: envs, Baselines: baselines}, nil
+}
+
+func validateBaselines(list []Baseline, newID map[string]string) ([]ImportedBaseline, []string) {
+	var out []ImportedBaseline
+	var problems []string
+	seen := map[[2]string]bool{}
+	for i, b := range list {
+		label := fmt.Sprintf("baseline %d", i+1)
+		id, ok := newID[b.RequestID]
+		if !ok {
+			problems = append(problems, label+": requestId does not match a request in the file")
+			continue
+		}
+		key := [2]string{id, b.Environment}
+		if seen[key] {
+			problems = append(problems, label+": a request has two baselines for the same environment")
+			continue
+		}
+		seen[key] = true
+		if b.Mode == "" {
+			b.Mode = domain.BaselineValues
+		}
+		if b.Mode != domain.BaselineValues && b.Mode != domain.BaselineSchema {
+			problems = append(problems, fmt.Sprintf("%s: unknown mode %q", label, b.Mode))
+		}
+		if len(b.Snapshot) == 0 || !json.Valid(b.Snapshot) {
+			problems = append(problems, label+": snapshot must be valid JSON")
+		}
+		if b.Tolerance < 0 || b.Tolerance != b.Tolerance {
+			problems = append(problems, label+": tolerance must not be negative")
+		}
+		if len(b.Environment) > domain.MaxNameLength {
+			problems = append(problems, label+": environment name is too long")
+		}
+		for _, p := range append(append([]string{}, b.SelectedPaths...), b.IgnoredPaths...) {
+			if len(p) > 1024 {
+				problems = append(problems, label+": a path is too long")
+				break
+			}
+		}
+		out = append(out, ImportedBaseline{Environment: b.Environment, Baseline: domain.Baseline{
+			RequestID: id, Mode: b.Mode, Snapshot: b.Snapshot, Tolerance: b.Tolerance,
+			SelectedPaths: nonNilStrings(b.SelectedPaths), IgnoredPaths: nonNilStrings(b.IgnoredPaths),
+		}})
+	}
+	return out, problems
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

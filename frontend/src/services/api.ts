@@ -114,8 +114,8 @@ export const api = {
 
   exportPreview: (collectionId: string, envIds: string[]) =>
     call<SecretFinding[]>('ExportPreview', collectionId, envIds),
-  exportCollection: (collectionId: string, envIds: string[], includeSecrets: boolean) =>
-    call<string>('ExportCollection', collectionId, envIds, includeSecrets),
+  exportCollection: (collectionId: string, envIds: string[], includeSecrets: boolean, includeBaselines: boolean) =>
+    call<string>('ExportCollection', collectionId, envIds, includeSecrets, includeBaselines),
   importCollection: () => call<ImportResult | null>('ImportCollection'),
 
   getSettings: () => call<Settings>('GetSettings'),

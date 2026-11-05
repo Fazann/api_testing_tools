@@ -428,3 +428,39 @@ func nonNilLogs(l []domain.ScriptLog) []domain.ScriptLog {
 	}
 	return l
 }
+
+// NamedBaseline is a baseline with the name of its environment ("" for none).
+type NamedBaseline struct {
+	Baseline        domain.Baseline
+	EnvironmentName string
+}
+
+// ListCollectionBaselines returns every baseline of the collection's requests.
+func (s *Store) ListCollectionBaselines(ctx context.Context, collectionID string) ([]NamedBaseline, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT b.id, b.request_id, IFNULL(b.environment_id, ''), b.mode, b.response_snapshot,
+		b.selected_paths_json, b.ignored_paths_json, b.tolerance, b.created_at, b.updated_at, IFNULL(e.name, '')
+		FROM baselines b JOIN requests r ON r.id = b.request_id LEFT JOIN environments e ON e.id = b.environment_id
+		WHERE r.collection_id = ? ORDER BY r.sort_order, r.name, IFNULL(e.name, '')`, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NamedBaseline
+	for rows.Next() {
+		var nb NamedBaseline
+		b := &nb.Baseline
+		var snap, selected, ignored, created, updated, mode string
+		if err := rows.Scan(&b.ID, &b.RequestID, &b.EnvironmentID, &mode, &snap, &selected, &ignored, &b.Tolerance,
+			&created, &updated, &nb.EnvironmentName); err != nil {
+			return nil, err
+		}
+		b.Snapshot = json.RawMessage(snap)
+		b.Mode = domain.BaselineMode(mode)
+		unmarshalLenient(selected, &b.SelectedPaths)
+		unmarshalLenient(ignored, &b.IgnoredPaths)
+		b.SelectedPaths, b.IgnoredPaths = nonNil(b.SelectedPaths), nonNil(b.IgnoredPaths)
+		b.CreatedAt, b.UpdatedAt = parseTS(created), parseTS(updated)
+		out = append(out, nb)
+	}
+	return out, rows.Err()
+}

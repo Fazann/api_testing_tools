@@ -32,7 +32,11 @@ async function importCollection() {
     await ws.load();
     ui.toast(
       `Imported "${res.collection.name}": ${res.requests} requests, ${res.folders} folders, ` +
-        `${res.environments} environments`,
+        `${res.environments} environments` +
+        (res.baselines ? `, ${res.baselines} baselines` : '') +
+        (res.baselinesSkipped
+          ? ` (${res.baselinesSkipped} baselines skipped: their environment is not on this machine)`
+          : ''),
       'success',
     );
     if (res.environments > 0) await envs.load();
