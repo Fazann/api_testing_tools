@@ -263,3 +263,27 @@ func TestDamagedJSONColumnsDoNotCrash(t *testing.T) {
 		t.Fatalf("damaged row should load with defaults: %v %+v", err, got)
 	}
 }
+
+func TestRenameCollectionKeepsOtherFields(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	c, err := s.SaveCollection(ctx, domain.Collection{Name: "Old", Description: "d",
+		Variables: []domain.Variable{{Key: "token", Value: "abc"}}, PreRequestScript: "pm.test('x')"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.RenameCollection(ctx, c.ID, "New")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "New" || got.Description != "d" || len(got.Variables) != 1 || got.Variables[0].Value != "abc" ||
+		got.PreRequestScript != "pm.test('x')" {
+		t.Fatalf("rename changed more than the name: %+v", got)
+	}
+	if _, err := s.RenameCollection(ctx, c.ID, "  "); err == nil {
+		t.Fatal("empty name must fail")
+	}
+	if _, err := s.RenameCollection(ctx, "missing", "X"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: got %v, want ErrNotFound", err)
+	}
+}

@@ -113,6 +113,10 @@ func (s *Service) SaveCollection(ctx context.Context, c domain.Collection) (doma
 	return s.store.SaveCollection(ctx, c)
 }
 
+func (s *Service) RenameCollection(ctx context.Context, id, name string) (domain.Collection, error) {
+	return s.store.RenameCollection(ctx, id, strings.TrimSpace(name))
+}
+
 // InheritCollectionAuth makes every request in the collection use the
 // collection's auth, returning how many requests were changed.
 func (s *Service) InheritCollectionAuth(ctx context.Context, collectionID string) (int, error) {

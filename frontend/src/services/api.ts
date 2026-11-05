@@ -58,6 +58,7 @@ export const api = {
   listCollections: () => call<Collection[]>('ListCollections'),
   getCollectionTree: (id: string) => call<CollectionTree>('GetCollectionTree', id),
   saveCollection: (c: Partial<Collection>) => call<Collection>('SaveCollection', c),
+  renameCollection: (id: string, name: string) => call<Collection>('RenameCollection', id, name),
   inheritCollectionAuth: (id: string) => call<number>('InheritCollectionAuth', id),
   duplicateCollection: (id: string) => call<Collection>('DuplicateCollection', id),
   deleteCollection: (id: string) => call<void>('DeleteCollection', id),

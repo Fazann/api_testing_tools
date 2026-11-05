@@ -50,6 +50,10 @@ func (a *App) SaveCollection(c domain.Collection) (domain.Collection, error) {
 	return a.svc.SaveCollection(a.ctx, c)
 }
 
+func (a *App) RenameCollection(id, name string) (domain.Collection, error) {
+	return a.svc.RenameCollection(a.ctx, id, name)
+}
+
 func (a *App) InheritCollectionAuth(collectionID string) (int, error) {
 	return a.svc.InheritCollectionAuth(a.ctx, collectionID)
 }

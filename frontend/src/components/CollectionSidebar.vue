@@ -56,10 +56,16 @@ function menu(c: Collection) {
     { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
     { label: 'Permission matrix…', action: () => (editing.value = { collection: c, tab: 'permissions' }) },
     { label: 'Settings & auth…', action: () => (editing.value = { collection: c, tab: 'settings' }) },
+    { label: 'Rename', action: () => rename(c) },
     { label: 'Duplicate', action: () => ws.duplicateCollection(c.id).catch(ui.error) },
     { label: 'Export…', action: () => (exporting.value = c) },
     { label: 'Delete', danger: true, action: () => remove(c) },
   ];
+}
+
+async function rename(c: Collection) {
+  const name = await ui.prompt({ title: 'Rename collection', value: c.name, confirmLabel: 'Rename' });
+  if (name && name.trim() !== c.name) await ws.renameCollection(c.id, name).catch(ui.error);
 }
 
 async function newFolder(c: Collection) {

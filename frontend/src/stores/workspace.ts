@@ -57,6 +57,12 @@ export const useWorkspace = defineStore('workspace', () => {
     await load();
   }
 
+  /** Renames without resending the rest of the collection, so script-updated variables are kept. */
+  async function renameCollection(id: string, name: string) {
+    await api.renameCollection(id, name);
+    await load();
+  }
+
   /** Makes every request in the collection use the collection's auth; returns how many changed. */
   async function inheritCollectionAuth(id: string) {
     const changed = await api.inheritCollectionAuth(id);
@@ -175,6 +181,7 @@ export const useWorkspace = defineStore('workspace', () => {
     toggle,
     createCollection,
     updateCollection,
+    renameCollection,
     inheritCollectionAuth,
     duplicateCollection,
     deleteCollection,

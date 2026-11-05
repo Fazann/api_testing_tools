@@ -97,6 +97,19 @@ func (s *Store) SaveCollection(ctx context.Context, c domain.Collection) (domain
 	return c, err
 }
 
+// RenameCollection changes only the collection's name, leaving variables,
+// auth and scripts untouched so a stale copy can't overwrite them.
+func (s *Store) RenameCollection(ctx context.Context, id, name string) (domain.Collection, error) {
+	if err := domain.ValidateName("collection name", name); err != nil {
+		return domain.Collection{}, err
+	}
+	if err := s.execOne(ctx, `UPDATE collections SET name = ?, updated_at = ? WHERE id = ?`,
+		name, ts(time.Now().UTC()), id); err != nil {
+		return domain.Collection{}, err
+	}
+	return s.GetCollection(ctx, id)
+}
+
 // InheritCollectionAuth switches every request in the collection to inherit
 // the collection's auth and returns how many requests changed.
 func (s *Store) InheritCollectionAuth(ctx context.Context, collectionID string) (int, error) {
