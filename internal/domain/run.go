@@ -79,27 +79,40 @@ type RunResult struct {
 	Response         *ResponseSummary  `json:"response,omitempty"`
 	AssertionResults []AssertionResult `json:"assertionResults"`
 	Regression       *RegressionResult `json:"regression,omitempty"`
-	Logs             []ScriptLog       `json:"logs,omitempty"`
-	DurationMs       int64             `json:"durationMs"`
-	Status           ResultStatus      `json:"status"`
-	Error            string            `json:"error,omitempty"`
-	CreatedAt        time.Time         `json:"createdAt"`
+	// Performance compares the duration with earlier responses; nil when the
+	// check is off or the request is not saved.
+	Performance *PerformanceResult `json:"performance,omitempty"`
+	Logs        []ScriptLog        `json:"logs,omitempty"`
+	DurationMs  int64              `json:"durationMs"`
+	Status      ResultStatus       `json:"status"`
+	Error       string             `json:"error,omitempty"`
+	CreatedAt   time.Time          `json:"createdAt"`
 }
+
+// Run kinds.
+const (
+	RunKindNormal = "run"
+	RunKindBurst  = "burst"
+)
 
 // Run is a single execution of one request or a whole collection.
 type Run struct {
-	ID              string       `json:"id"`
-	CollectionID    string       `json:"collectionId"`
-	CollectionName  string       `json:"collectionName"`
-	EnvironmentName string       `json:"environmentName"`
-	Status          ResultStatus `json:"status"`
-	StartedAt       time.Time    `json:"startedAt"`
-	FinishedAt      *time.Time   `json:"finishedAt,omitempty"`
-	PassedCount     int          `json:"passedCount"`
-	FailedCount     int          `json:"failedCount"`
-	ErrorCount      int          `json:"errorCount"`
-	DurationMs      int64        `json:"durationMs"`
-	Results         []RunResult  `json:"results,omitempty"`
+	ID              string `json:"id"`
+	CollectionID    string `json:"collectionId"`
+	CollectionName  string `json:"collectionName"`
+	EnvironmentName string `json:"environmentName"`
+	EnvironmentID   string `json:"environmentId,omitempty"`
+	// Kind is RunKindNormal, or RunKindBurst for race tests and permission
+	// matrices, which response-time trends leave out.
+	Kind        string       `json:"kind,omitempty"`
+	Status      ResultStatus `json:"status"`
+	StartedAt   time.Time    `json:"startedAt"`
+	FinishedAt  *time.Time   `json:"finishedAt,omitempty"`
+	PassedCount int          `json:"passedCount"`
+	FailedCount int          `json:"failedCount"`
+	ErrorCount  int          `json:"errorCount"`
+	DurationMs  int64        `json:"durationMs"`
+	Results     []RunResult  `json:"results,omitempty"`
 }
 
 // Tally recomputes counts and overall status from Results.

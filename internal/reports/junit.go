@@ -152,6 +152,9 @@ func FailureDetails(res domain.RunResult) []string {
 			out = append(out, "  "+DiffLine(d))
 		}
 	}
+	if p := res.Performance; p != nil && p.Slower && p.Mode == domain.PerformanceFail {
+		out = append(out, "response time: "+p.Message)
+	}
 	return out
 }
 

@@ -19,7 +19,7 @@ const runner = useRunner();
 const envs = useEnvironments();
 const exporting = ref<Collection | null>(null);
 const curlTarget = ref<Collection | null>(null);
-const editing = ref<{ collection: Collection; tab: 'endpoints' | 'permissions' | 'settings' } | null>(null);
+const editing = ref<{ collection: Collection; tab: 'endpoints' | 'times' | 'permissions' | 'settings' } | null>(null);
 
 async function newCollection() {
   const name = await ui.prompt({ title: 'New collection', value: 'My API tests', confirmLabel: 'Create' });
@@ -54,6 +54,7 @@ function menu(c: Collection) {
     { label: 'New folder', action: () => newFolder(c) },
     { label: 'Run collection', action: () => runner.runCollection(c.id, '', c.name) },
     { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
+    { label: 'Response times…', action: () => (editing.value = { collection: c, tab: 'times' }) },
     { label: 'Permission matrix…', action: () => (editing.value = { collection: c, tab: 'permissions' }) },
     { label: 'Settings & auth…', action: () => (editing.value = { collection: c, tab: 'settings' }) },
     { label: 'Rename', action: () => rename(c) },

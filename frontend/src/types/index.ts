@@ -195,6 +195,8 @@ export interface RunResult {
   response?: ResponseSummary;
   assertionResults: AssertionResult[];
   regression?: RegressionResult;
+  /** Response-time check against earlier responses; absent when off or unsaved. */
+  performance?: PerformanceResult;
   /** console output from scripts, already redacted. */
   logs?: ScriptLog[];
   durationMs: number;
@@ -409,4 +411,74 @@ export interface MatrixReport {
   warnings: number;
   unset: number;
   errors: number;
+}
+
+// ---- response times ----
+
+export type PerformanceMode = 'off' | 'warn' | 'fail';
+
+export interface PerformanceCheck {
+  requestId: string;
+  mode: PerformanceMode;
+  /** Slower than usual from this multiple of the median… */
+  factor: number;
+  /** …and at least this many milliseconds more. */
+  minDeltaMs: number;
+  /** How many recent responses the median is taken from. */
+  window: number;
+  /** Earlier responses needed before checking. */
+  minSamples: number;
+  updatedAt?: string;
+}
+
+export interface PerformanceResult {
+  mode: PerformanceMode;
+  referenceMs: number;
+  thresholdMs: number;
+  samples: number;
+  needed: number;
+  ratio: number;
+  slower: boolean;
+  message: string;
+}
+
+export interface ResponseTimePoint {
+  runId: string;
+  resultId: string;
+  at: string;
+  durationMs: number;
+  status: ResultStatus;
+  statusCode: number;
+  slower: boolean;
+}
+
+export interface ResponseTimeStats {
+  count: number;
+  minMs: number;
+  medianMs: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
+export interface ResponseTimeTrend {
+  requestId: string;
+  points: ResponseTimePoint[];
+  stats: ResponseTimeStats;
+  check: PerformanceCheck;
+  /** Reference and limit the next response will be checked against. */
+  next: PerformanceResult;
+}
+
+export interface ResponseTimeRow {
+  requestId: string;
+  name: string;
+  method: Method;
+  parentId: string;
+  stats: ResponseTimeStats;
+  lastMs: number;
+  /** Median of the latest 5 vs the earlier ones, in percent; null without enough history. */
+  changePct: number | null;
+  recent: number[];
+  lastSlower: boolean;
+  mode: PerformanceMode;
 }

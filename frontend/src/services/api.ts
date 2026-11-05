@@ -11,11 +11,14 @@ import type {
   Folder,
   ImportResult,
   MatrixReport,
+  PerformanceCheck,
   PermissionMatrix,
   PreviousComparison,
   RaceReport,
   RaceTest,
   Request,
+  ResponseTimeRow,
+  ResponseTimeTrend,
   Run,
   RunFilter,
   RunProgress,
@@ -82,6 +85,12 @@ export const api = {
     call<Run>('RunCollection', opId, collectionId, folderId, envId, confirmed),
   cancel: (opId: string) => call<boolean>('Cancel', opId),
 
+  getPerformanceCheck: (requestId: string) => call<PerformanceCheck>('GetPerformanceCheck', requestId),
+  savePerformanceCheck: (c: PerformanceCheck) => call<PerformanceCheck>('SavePerformanceCheck', c),
+  getResponseTimeTrend: (requestId: string, envId: string) =>
+    call<ResponseTimeTrend>('GetResponseTimeTrend', requestId, envId),
+  getCollectionResponseTimes: (collectionId: string, envId: string) =>
+    call<ResponseTimeRow[]>('GetCollectionResponseTimes', collectionId, envId),
   getRaceTest: (requestId: string) => call<RaceTest | null>('GetRaceTest', requestId),
   runRaceTest: (opId: string, t: RaceTest, envId: string, confirmed: boolean) =>
     call<RaceReport>('RunRaceTest', opId, t, envId, confirmed),

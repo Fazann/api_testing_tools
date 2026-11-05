@@ -22,6 +22,8 @@ const baseline = ref<Baseline | null>(null);
 const previous = ref<PreviousComparison | null>(null);
 
 const resp = computed(() => props.result.response);
+/** Only shown when the response was actually checked and found slower. */
+const perf = computed(() => props.result.performance ?? null);
 const failedTests = computed(() => props.result.assertionResults.filter((a) => !a.passed).length);
 const logs = computed(() => props.result.logs ?? []);
 // Results saved in history before the backend fix carry "diffs": null for a matching baseline.
@@ -86,6 +88,9 @@ async function copyBody() {
       <template v-if="resp">
         <strong :class="statusClass">{{ resp.status || resp.statusCode }}</strong>
         <span class="muted">{{ formatDuration(result.durationMs) }}</span>
+        <span v-if="perf?.slower" class="perf-slow" :class="perf.mode" :title="perf.message"
+          >▲ {{ perf.ratio }}× slower than usual{{ perf.mode === 'fail' ? ' (fails)' : '' }}</span
+        >
         <span class="muted"
           >{{ formatBytes(resp.bodyBytes) }}<span v-if="resp.truncated" class="warn"> (truncated at limit)</span></span
         >
@@ -215,6 +220,13 @@ async function copyBody() {
 </template>
 
 <style scoped>
+.perf-slow {
+  color: var(--warn);
+  font-weight: 600;
+}
+.perf-slow.fail {
+  color: var(--fail);
+}
 .response {
   display: flex;
   flex-direction: column;

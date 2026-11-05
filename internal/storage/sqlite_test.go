@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -285,5 +286,119 @@ func TestRenameCollectionKeepsOtherFields(t *testing.T) {
 	}
 	if _, err := s.RenameCollection(ctx, "missing", "X"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown id: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestResponseTimesFilterKindEnvironmentAndLegacyRuns(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	c, _ := s.SaveCollection(ctx, domain.Collection{Name: "C"})
+	r, _ := s.SaveRequest(ctx, domain.Request{CollectionID: c.ID, Name: "R", Method: "GET", URLTemplate: "http://x"})
+	env, _ := s.SaveEnvironment(ctx, domain.Environment{Name: "Local"})
+	at := time.Now().UTC().Add(-time.Hour)
+	save := func(id, kind, envID, envName string, ms int64, status domain.ResultStatus, withResponse bool) {
+		t.Helper()
+		at = at.Add(time.Minute)
+		res := domain.RunResult{ID: id + "-r", RequestID: r.ID, DurationMs: ms, Status: status, CreatedAt: at}
+		if withResponse {
+			res.Response = &domain.ResponseSummary{StatusCode: 200}
+		}
+		run := domain.Run{ID: id, Kind: kind, EnvironmentID: envID, EnvironmentName: envName, StartedAt: at,
+			Status: status, Results: []domain.RunResult{res}}
+		if err := s.SaveRun(ctx, run, -1, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("legacy", domain.RunKindNormal, "", "Local", 10, domain.StatusPassed, true)
+	if _, err := s.db.ExecContext(ctx, `UPDATE runs SET environment_id = NULL WHERE id = 'legacy'`); err != nil {
+		t.Fatal(err)
+	}
+	save("a", domain.RunKindNormal, env.ID, "Local", 20, domain.StatusFailed, true)
+	save("burst", domain.RunKindBurst, env.ID, "Local", 999, domain.StatusPassed, true)
+	save("error", domain.RunKindNormal, env.ID, "Local", 999, domain.StatusError, false)
+	save("other-env", domain.RunKindNormal, "someone-else", "Local", 999, domain.StatusPassed, true)
+	save("no-env", domain.RunKindNormal, "", "", 30, domain.StatusPassed, true)
+	save("b", domain.RunKindNormal, env.ID, "Local", 40, domain.StatusPassed, true)
+
+	pts, err := s.ResponseTimes(ctx, r.ID, env.ID, env.Name, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []int64
+	for _, p := range pts {
+		got = append(got, p.DurationMs)
+	}
+	if fmt.Sprint(got) != "[10 20 40]" || pts[0].StatusCode != 200 {
+		t.Fatalf("want legacy, a, b oldest first, got %v", got)
+	}
+	if pts, _ := s.ResponseTimes(ctx, r.ID, env.ID, env.Name, 2); len(pts) != 2 || pts[1].DurationMs != 40 {
+		t.Fatalf("limit keeps the latest: %+v", pts)
+	}
+	if pts, _ := s.ResponseTimes(ctx, r.ID, "", "", 10); len(pts) != 1 || pts[0].DurationMs != 30 {
+		t.Fatalf("no environment: %+v", pts)
+	}
+	byReq, err := s.CollectionResponseTimes(ctx, c.ID, env.ID, env.Name, 2)
+	if err != nil || len(byReq[r.ID]) != 2 || byReq[r.ID][0].DurationMs != 20 {
+		t.Fatalf("collection: %+v %v", byReq, err)
+	}
+
+	if _, err := s.SavePerformanceCheck(ctx, domain.PerformanceCheck{RequestID: r.ID, Mode: "loud"}); err == nil {
+		t.Fatal("unknown mode must fail")
+	}
+	if _, err := s.SavePerformanceCheck(ctx, domain.PerformanceCheck{RequestID: "missing"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown request: %v", err)
+	}
+	saved, err := s.SavePerformanceCheck(ctx, domain.PerformanceCheck{RequestID: r.ID, Mode: domain.PerformanceFail})
+	if err != nil || saved.Factor != 1.5 || saved.Window != 20 {
+		t.Fatalf("defaults fill zero fields: %+v %v", saved, err)
+	}
+	if got, _ := s.GetPerformanceCheck(ctx, r.ID); got.Mode != domain.PerformanceFail {
+		t.Fatalf("round trip: %+v", got)
+	}
+	if err := s.DeleteRequest(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetPerformanceCheck(ctx, r.ID); got.Mode != domain.PerformanceWarn {
+		t.Fatal("the check is deleted with its request")
+	}
+}
+
+// Migration 0007 marks race tests and permission matrices saved before it
+// (runs that sent one request more than once) so trends leave them out.
+func TestMigration0007MarksOldBurstRuns(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	c, _ := s.SaveCollection(ctx, domain.Collection{Name: "C"})
+	r, _ := s.SaveRequest(ctx, domain.Request{CollectionID: c.ID, Name: "R", Method: "GET", URLTemplate: "http://x"})
+	now := time.Now().UTC()
+	res := func(id string) domain.RunResult {
+		return domain.RunResult{ID: id, RequestID: r.ID, Status: domain.StatusPassed, CreatedAt: now}
+	}
+	for _, run := range []domain.Run{
+		{ID: "normal", StartedAt: now, Results: []domain.RunResult{res("n1")}},
+		{ID: "race", StartedAt: now, Results: []domain.RunResult{res("r1"), res("r2"), res("r3")}},
+	} {
+		if err := s.SaveRun(ctx, run, -1, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Roll the schema back to before 0007, keeping the rows, and migrate again.
+	for _, q := range []string{
+		`ALTER TABLE runs DROP COLUMN environment_id`, `ALTER TABLE runs DROP COLUMN kind`,
+		`ALTER TABLE run_results DROP COLUMN performance_json`, `DROP TABLE performance_checks`,
+		`DELETE FROM schema_migrations WHERE version = 7`,
+	} {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := s.migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]string{"normal": domain.RunKindNormal, "race": domain.RunKindBurst} {
+		run, err := s.GetRun(ctx, id)
+		if err != nil || run.Kind != want || run.EnvironmentID != "" {
+			t.Fatalf("%s: kind %q env %q, want %q (%v)", id, run.Kind, run.EnvironmentID, want, err)
+		}
 	}
 }

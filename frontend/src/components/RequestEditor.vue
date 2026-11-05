@@ -14,6 +14,7 @@ import BaselinePanel from './BaselinePanel.vue';
 import CollectionSettingsDialog from './CollectionSettingsDialog.vue';
 import CurlExportDialog from './CurlExportDialog.vue';
 import KeyValueTable from './KeyValueTable.vue';
+import PerformancePanel from './PerformancePanel.vue';
 import RaceTestPanel from './RaceTestPanel.vue';
 import ScriptEditor from './ScriptEditor.vue';
 import VariableInput from './VariableInput.vue';
@@ -23,7 +24,17 @@ const runner = useRunner();
 const envs = useEnvironments();
 const ui = useUi();
 
-type Tab = 'params' | 'headers' | 'body' | 'auth' | 'scripts' | 'tests' | 'baseline' | 'race' | 'options';
+type Tab =
+  | 'params'
+  | 'headers'
+  | 'body'
+  | 'auth'
+  | 'scripts'
+  | 'tests'
+  | 'baseline'
+  | 'performance'
+  | 'race'
+  | 'options';
 const tab = ref<Tab>('tests');
 const editingCollection = ref<Collection | null>(null);
 const copyingCurl = ref(false);
@@ -101,6 +112,7 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
   },
   { id: 'tests', label: 'Tests', count: req.value.assertions.filter((a) => a.enabled).length },
   { id: 'baseline', label: 'Baseline' },
+  { id: 'performance', label: 'Performance' },
   { id: 'race', label: 'Race test' },
   { id: 'options', label: 'Options' },
 ]);
@@ -195,6 +207,7 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
       />
       <AssertionEditor v-else-if="tab === 'tests'" :assertions="req.assertions" />
       <BaselinePanel v-else-if="tab === 'baseline'" />
+      <PerformancePanel v-else-if="tab === 'performance'" />
       <RaceTestPanel v-else-if="tab === 'race'" />
       <div v-else-if="tab === 'options'" class="stack options">
         <label class="field"

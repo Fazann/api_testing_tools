@@ -60,7 +60,7 @@ main{max-width:1100px;margin:0 auto}h1{font-size:22px;margin:0 0 4px}h2{font-siz
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:24px}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}.tile b{display:block;font-size:22px}
 .badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid currentColor}
-.passed{color:var(--pass)}.failed{color:var(--fail)}.error,.cancelled{color:var(--err)}
+.passed{color:var(--pass)}.failed{color:var(--fail)}.warn{color:var(--err)}.error,.cancelled{color:var(--err)}
 details.result{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--card)}
 details.result>summary{cursor:pointer;padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;list-style:none}
 details.result>summary::-webkit-details-marker{display:none}
@@ -122,6 +122,9 @@ footer{margin-top:24px;font-size:12px}
       {{range .Diffs}}<tr class="{{.Kind}}"><td>{{.Kind}}</td><td><code>{{.Path}}</code></td><td><code>{{.Before}}</code></td><td><code>{{.After}}</code></td></tr>{{end}}
     </table></div>{{end}}
     {{end}}
+    {{with .Performance}}{{if .Checked}}
+    <h3>Response time: <span class="{{if .Slower}}{{if eq .Mode "fail"}}failed{{else}}warn{{end}}{{else}}passed{{end}}">{{.Message}}</span></h3>
+    {{end}}{{end}}
     {{with .Response}}
     <h3>Response · {{.Status}} · {{bytes .BodyBytes}}{{if .Truncated}} (truncated){{end}}</h3>
     {{if .Redirects}}<p class="muted">Redirects: {{range .Redirects}}<code>{{.}}</code> {{end}}</p>{{end}}

@@ -34,13 +34,13 @@ func runScope(env *domain.Environment, c *domain.Collection) *runner.Scope {
 }
 
 func (s *Service) newRun(c *domain.Collection, env *domain.Environment) domain.Run {
-	run := domain.Run{ID: uuid.NewString(), StartedAt: time.Now().UTC()}
+	// Race tests and matrices send requests concurrently, so their durations
+	// are left out of response-time trends.
+	run := domain.Run{ID: uuid.NewString(), StartedAt: time.Now().UTC(), Kind: domain.RunKindBurst}
 	if c != nil {
 		run.CollectionID, run.CollectionName = c.ID, c.Name
 	}
-	if env != nil {
-		run.EnvironmentName = env.Name
-	}
+	run.EnvironmentID, run.EnvironmentName = envKey(env)
 	return run
 }
 

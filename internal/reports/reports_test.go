@@ -102,3 +102,38 @@ func TestJUnitReport(t *testing.T) {
 		t.Fatalf("JUnit report leaked a secret or unescaped markup:\n%s", out)
 	}
 }
+
+func TestReportsExplainSlowResponses(t *testing.T) {
+	run := sampleRun()
+	slow := domain.PerformanceResult{Mode: domain.PerformanceFail, Samples: 5, Needed: 5, ReferenceMs: 100,
+		ThresholdMs: 200, Slower: true, Message: "450 ms is slower than usual"}
+	warn := slow
+	warn.Mode, warn.Message = domain.PerformanceWarn, "300 ms is slower than usual (warning)"
+	run.Results = append(run.Results,
+		domain.RunResult{ID: "slow", Status: domain.StatusFailed, DurationMs: 450, Performance: &slow,
+			Request: domain.RequestSummary{Name: "Search", Method: "GET"}, Response: &domain.ResponseSummary{StatusCode: 200}},
+		domain.RunResult{ID: "warn", Status: domain.StatusPassed, DurationMs: 300, Performance: &warn,
+			Request: domain.RequestSummary{Name: "List", Method: "GET"}, Response: &domain.ResponseSummary{StatusCode: 200}})
+	run.Tally()
+	rep := Build(run, Meta{}, time.Now())
+
+	var junit bytes.Buffer
+	if err := WriteJUnit(&junit, rep); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(junit.String(), "response time: 450 ms is slower than usual") {
+		t.Errorf("JUnit must explain a response-time failure:\n%s", junit.String())
+	}
+	if strings.Contains(junit.String(), "(warning)") {
+		t.Error("a warning is not a JUnit failure")
+	}
+	var html bytes.Buffer
+	if err := WriteHTML(&html, rep); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`<span class="failed">450 ms is slower`, `<span class="warn">300 ms is slower`} {
+		if !strings.Contains(html.String(), want) {
+			t.Errorf("HTML report missing %q", want)
+		}
+	}
+}

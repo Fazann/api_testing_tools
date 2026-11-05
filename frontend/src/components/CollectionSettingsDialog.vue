@@ -9,12 +9,16 @@ import { useWorkspace } from '../stores/workspace';
 import type { Collection, Request } from '../types';
 import AuthEditor from './AuthEditor.vue';
 import CollectionEndpoints from './CollectionEndpoints.vue';
+import CollectionResponseTimes from './CollectionResponseTimes.vue';
 import ModalFrame from './ModalFrame.vue';
 import PermissionMatrix from './PermissionMatrix.vue';
 import ScriptEditor from './ScriptEditor.vue';
 import VariableTable from './VariableTable.vue';
 
-const props = defineProps<{ collection: Collection; initialTab?: 'endpoints' | 'permissions' | 'settings' }>();
+const props = defineProps<{
+  collection: Collection;
+  initialTab?: 'endpoints' | 'times' | 'permissions' | 'settings';
+}>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
 const ui = useUi();
@@ -111,12 +115,18 @@ async function save() {
       <button :class="{ active: tab === 'endpoints' }" role="tab" @click="tab = 'endpoints'">
         Endpoints<span v-if="tree" class="count">{{ tree.requests.length }}</span>
       </button>
+      <button :class="{ active: tab === 'times' }" role="tab" @click="tab = 'times'">Response times</button>
       <button :class="{ active: tab === 'permissions' }" role="tab" @click="tab = 'permissions'">Permissions</button>
       <button :class="{ active: tab === 'settings' }" role="tab" @click="tab = 'settings'">Settings &amp; auth</button>
     </nav>
 
     <template v-if="tab === 'endpoints'">
       <CollectionEndpoints v-if="tree" :tree="tree" @open="openEndpoint" />
+      <p v-else class="muted small">Loading…</p>
+    </template>
+
+    <template v-else-if="tab === 'times'">
+      <CollectionResponseTimes v-if="tree" :tree="tree" @open="openEndpoint" />
       <p v-else class="muted small">Loading…</p>
     </template>
 

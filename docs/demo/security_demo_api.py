@@ -1,4 +1,4 @@
-"""Demo API for docs/race-test.md and docs/permission-matrix.md.
+"""Demo API for docs/race-test.md, docs/permission-matrix.md and docs/performance.md.
 
 It has deliberate race-condition and access-control bugs next to correct
 versions of the same endpoints. Run: python3 docs/demo/security_demo_api.py
@@ -6,6 +6,7 @@ Reset its state with: curl -X POST http://localhost:8090/reset
 """
 import json, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 lock = threading.Lock()
 state = {"balance": 100.0, "racy_used": False, "safe_used": False, "seq": 0}
@@ -55,6 +56,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         user = self.user()
+        if self.path.startswith("/slow"):            # GET /slow?ms=300 answers after 300 ms (max 10 s)
+            q = parse_qs(urlparse(self.path).query)
+            raw = (q.get("ms") or ["0"])[0]
+            if not raw.isdigit():
+                return self.send(400, {"error": "ms must be a whole number of milliseconds"})
+            ms = min(int(raw), 10_000)
+            time.sleep(ms / 1000)
+            return self.send(200, {"data": {"waitedMs": ms}})
         if self.path == "/wallet":
             return self.send(200, {"data": {"balance": state["balance"]}})
         if self.path == "/users/alice/wallet":       # BUG: any signed-in user can read it

@@ -190,6 +190,10 @@ baselines, so there is nothing to export:
 The database is found the same way as the app does it, or at `$APIGUARD_DATA_DIR` / `--data-dir DIR`. The app can
 stay open meanwhile.
 
+`NAME` is matched against the collection's **current** name, ignoring case. If you rename the collection in the app
+(**⋯ → Rename**), update the cron job too. If two collections have the same name, the CLI stops and asks you to rename
+one. See [collections.md](collections.md#rename).
+
 ## How it works
 
 The CLI loads the collection into an **in-memory database** and runs it through the same engine as the app:
@@ -200,6 +204,8 @@ variables, collection auth, pre-request and post-response scripts, assertions an
   `--collection` reads the app's database but never changes it, and CLI runs do not appear in the app's History.
   Keep the reports instead.
 - Race tests and permission matrices are not run by the CLI yet.
+- **No response-time regression check.** The in-memory database has no earlier responses to compare with, so a slowdown
+  never fails a CLI run. Use **Response time** tests for a fixed budget in CI. See [performance.md](performance.md#limits).
 
 ## Export format
 

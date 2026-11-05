@@ -98,6 +98,24 @@ func (a *App) PreflightRequest(r domain.Request, envID string) ([]service.Warnin
 	return a.svc.Preflight(a.ctx, []domain.Request{r}, nil, envID)
 }
 
+// ---- response times ----
+
+func (a *App) GetPerformanceCheck(requestID string) (domain.PerformanceCheck, error) {
+	return a.svc.GetPerformanceCheck(a.ctx, requestID)
+}
+
+func (a *App) SavePerformanceCheck(c domain.PerformanceCheck) (domain.PerformanceCheck, error) {
+	return a.svc.SavePerformanceCheck(a.ctx, c)
+}
+
+func (a *App) GetResponseTimeTrend(requestID, envID string) (domain.ResponseTimeTrend, error) {
+	return a.svc.GetResponseTimeTrend(a.ctx, requestID, envID)
+}
+
+func (a *App) GetCollectionResponseTimes(collectionID, envID string) ([]domain.ResponseTimeRow, error) {
+	return a.svc.GetCollectionResponseTimes(a.ctx, collectionID, envID)
+}
+
 func (a *App) PreflightCollection(collectionID, folderID, envID string) ([]service.Warning, error) {
 	return a.svc.PreflightCollection(a.ctx, collectionID, folderID, envID)
 }

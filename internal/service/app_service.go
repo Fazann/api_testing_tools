@@ -500,6 +500,10 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 			items[i].Baseline = b
 		}
 	}
+	perfIn, err := s.perfInputs(ctx, reqs, env)
+	if err != nil {
+		return domain.Run{}, err
+	}
 
 	opCtx, done := s.beginOp(ctx, opID)
 	defer done()
@@ -509,17 +513,20 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 		CollectionID:   collectionID,
 		CollectionName: collectionName,
 		StartedAt:      time.Now().UTC(),
+		Kind:           domain.RunKindNormal,
 	}
-	if env != nil {
-		run.EnvironmentName = env.Name
-	}
+	run.EnvironmentID, run.EnvironmentName = envKey(env)
 	finished := 0
-	run.Results = runner.New(client).RunAll(opCtx, items, scope, st.Concurrency, func(_ int, res domain.RunResult) {
+	run.Results = runner.New(client).RunAll(opCtx, items, scope, st.Concurrency, func(i int, res domain.RunResult) {
 		finished++
 		if progress != nil {
+			applyPerformance(&res, perfIn[i])
 			progress(finished, len(items), res)
 		}
 	})
+	for i := range run.Results {
+		applyPerformance(&run.Results[i], perfIn[i])
+	}
 	end := time.Now().UTC()
 	run.FinishedAt = &end
 	run.DurationMs = end.Sub(run.StartedAt).Milliseconds()

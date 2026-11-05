@@ -177,10 +177,15 @@ func (s *Store) SaveRun(ctx context.Context, run domain.Run, bodyLimit, retain i
 		if run.FinishedAt != nil {
 			finished = ts(*run.FinishedAt)
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO runs (id, collection_id, collection_name, environment_name, status, started_at, finished_at,
-			passed_count, failed_count, error_count, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			run.ID, nullable(run.CollectionID), run.CollectionName, run.EnvironmentName, string(run.Status), ts(run.StartedAt), finished,
-			run.PassedCount, run.FailedCount, run.ErrorCount, run.DurationMs)
+		kind := run.Kind
+		if kind == "" {
+			kind = domain.RunKindNormal
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO runs (id, collection_id, collection_name, environment_name, environment_id, kind,
+			status, started_at, finished_at, passed_count, failed_count, error_count, duration_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			run.ID, nullable(run.CollectionID), run.CollectionName, run.EnvironmentName, run.EnvironmentID, kind,
+			string(run.Status), ts(run.StartedAt), finished, run.PassedCount, run.FailedCount, run.ErrorCount, run.DurationMs)
 		if err != nil {
 			return err
 		}
@@ -194,9 +199,12 @@ func (s *Store) SaveRun(ctx context.Context, run domain.Run, bodyLimit, retain i
 				}
 				resp = mustJSON(r)
 			}
-			var reg any
+			var reg, perf any
 			if res.Regression != nil {
 				reg = mustJSON(res.Regression)
+			}
+			if res.Performance != nil {
+				perf = mustJSON(res.Performance)
 			}
 			// The request may have been deleted while the run was in progress.
 			var reqID any
@@ -210,9 +218,9 @@ func (s *Store) SaveRun(ctx context.Context, run domain.Run, bodyLimit, retain i
 				}
 			}
 			_, err := tx.ExecContext(ctx, `INSERT INTO run_results (id, run_id, request_id, request_summary_json, response_summary_json,
-				assertion_results_json, regression_json, logs_json, error, duration_ms, status, sort_order, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				res.ID, run.ID, reqID, mustJSON(res.Request), resp, mustJSON(res.AssertionResults), reg, mustJSON(nonNilLogs(res.Logs)),
+				assertion_results_json, regression_json, performance_json, logs_json, error, duration_ms, status, sort_order, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				res.ID, run.ID, reqID, mustJSON(res.Request), resp, mustJSON(res.AssertionResults), reg, perf, mustJSON(nonNilLogs(res.Logs)),
 				res.Error, res.DurationMs, string(res.Status), i, ts(res.CreatedAt))
 			if err != nil {
 				return err
@@ -294,7 +302,8 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	}
 	run := runs[0]
 	rows, err := s.db.QueryContext(ctx, `SELECT id, IFNULL(request_id, ''), request_summary_json, IFNULL(response_summary_json, ''),
-		assertion_results_json, IFNULL(regression_json, ''), logs_json, error, duration_ms, status, created_at FROM run_results WHERE run_id = ? ORDER BY sort_order`, id)
+		assertion_results_json, IFNULL(regression_json, ''), IFNULL(performance_json, ''), logs_json, error, duration_ms, status, created_at
+		FROM run_results WHERE run_id = ? ORDER BY sort_order`, id)
 	if err != nil {
 		return run, err
 	}
@@ -302,8 +311,8 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	run.Results = []domain.RunResult{}
 	for rows.Next() {
 		var r domain.RunResult
-		var reqJSON, respJSON, assertJSON, regJSON, logsJSON, created string
-		if err := rows.Scan(&r.ID, &r.RequestID, &reqJSON, &respJSON, &assertJSON, &regJSON, &logsJSON, &r.Error, &r.DurationMs, &r.Status, &created); err != nil {
+		var reqJSON, respJSON, assertJSON, regJSON, perfJSON, logsJSON, created string
+		if err := rows.Scan(&r.ID, &r.RequestID, &reqJSON, &respJSON, &assertJSON, &regJSON, &perfJSON, &logsJSON, &r.Error, &r.DurationMs, &r.Status, &created); err != nil {
 			return run, err
 		}
 		r.RunID = id
@@ -321,6 +330,10 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 			r.Regression = &domain.RegressionResult{}
 			unmarshalLenient(regJSON, r.Regression)
 		}
+		if perfJSON != "" {
+			r.Performance = &domain.PerformanceResult{}
+			unmarshalLenient(perfJSON, r.Performance)
+		}
 		r.CreatedAt = parseTS(created)
 		run.Results = append(run.Results, r)
 	}
@@ -328,11 +341,11 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 }
 
 func (s *Store) listRunsByID(ctx context.Context, id string) ([]domain.Run, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, IFNULL(collection_id, ''), collection_name, environment_name, status, started_at, IFNULL(finished_at, ''),
-		passed_count, failed_count, error_count, duration_ms FROM runs WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, IFNULL(collection_id, ''), collection_name, environment_name, IFNULL(environment_id, ''),
+		kind, status, started_at, IFNULL(finished_at, ''), passed_count, failed_count, error_count, duration_ms FROM runs WHERE id = ?`, id)
 	var r domain.Run
 	var started, finished string
-	err := row.Scan(&r.ID, &r.CollectionID, &r.CollectionName, &r.EnvironmentName, &r.Status, &started, &finished,
+	err := row.Scan(&r.ID, &r.CollectionID, &r.CollectionName, &r.EnvironmentName, &r.EnvironmentID, &r.Kind, &r.Status, &started, &finished,
 		&r.PassedCount, &r.FailedCount, &r.ErrorCount, &r.DurationMs)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

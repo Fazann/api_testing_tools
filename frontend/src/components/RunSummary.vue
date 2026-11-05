@@ -24,6 +24,7 @@ const counts = computed(() => {
   }
   return c;
 });
+const slower = computed(() => props.results.filter((r) => r.performance?.slower).length);
 const shown = computed(() => (onlyProblems.value ? props.results.filter((r) => r.status !== 'passed') : props.results));
 
 function firstProblem(r: RunResult): string {
@@ -31,6 +32,7 @@ function firstProblem(r: RunResult): string {
   const a = r.assertionResults.find((x) => !x.passed);
   if (a) return a.message;
   if (r.regression && !r.regression.passed) return r.regression.message ?? 'Baseline differences';
+  if (r.performance?.slower && r.performance.mode === 'fail') return r.performance.message;
   return '';
 }
 </script>
@@ -55,6 +57,9 @@ function firstProblem(r: RunResult): string {
       <div class="tile">
         <span class="muted small">Errors</span><b class="warn">{{ counts.error }}</b>
       </div>
+      <div v-if="slower" class="tile" title="Responses that took much longer than their recent median">
+        <span class="muted small">Slower than usual</span><b class="warn">▲ {{ slower }}</b>
+      </div>
       <div class="tile">
         <span class="muted small">Duration</span><b>{{ run ? formatDuration(run.durationMs) : '…' }}</b>
       </div>
@@ -77,6 +82,9 @@ function firstProblem(r: RunResult): string {
         <strong class="name">{{ r.request.name }}</strong>
         <span v-if="r.response" class="muted">{{ r.response.statusCode }}</span>
         <span class="muted">{{ formatDuration(r.durationMs) }}</span>
+        <span v-if="r.performance?.slower" class="slow small" :title="r.performance.message"
+          >▲ {{ r.performance.ratio }}× slower</span
+        >
         <span class="problem fail small">{{ firstProblem(r) }}</span>
       </button>
       <div v-if="openId === r.id" class="detail">
@@ -88,6 +96,11 @@ function firstProblem(r: RunResult): string {
 </template>
 
 <style scoped>
+.slow {
+  color: var(--warn);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
