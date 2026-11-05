@@ -36,7 +36,8 @@ func newDiffer(opts Options) *differ {
 	if opts.MaxDiffs <= 0 {
 		opts.MaxDiffs = defaultMaxDiffs
 	}
-	return &differ{opts: opts, ignore: compilePatterns(opts.IgnoredPaths)}
+	// out starts empty, not nil, so a match is sent to the UI as "diffs": [] rather than null.
+	return &differ{opts: opts, ignore: compilePatterns(opts.IgnoredPaths), out: []domain.DiffEntry{}}
 }
 
 // walkAt compares a value found at a selected path. A missing side (nil

@@ -23,7 +23,7 @@ else
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help deps tools doctor dev run build test test-go test-frontend lint fmt frontend \
+.PHONY: help deps tools doctor dev run build test test-go test-frontend lint fmt frontend check hooks \
         build-linux build-debian build-windows build-windows-amd64 build-windows-arm64 build-darwin \
         release release-windows-installer icons clean build-cli release-cli
 
@@ -73,6 +73,13 @@ test-go: frontend ## Go tests (main.go embeds frontend/dist, so it is built firs
 lint: frontend/node_modules ## Frontend formatting/line-length checks and go vet
 	cd frontend && npm run lint
 	$(GO) vet ./...
+
+check: frontend/node_modules ## Regression check: lint, typecheck, gofmt, go vet and all tests
+	scripts/check.sh
+
+hooks: ## Install the git pre-commit hook that runs the regression check on staged changes
+	git config core.hooksPath scripts/git-hooks
+	@echo "Pre-commit regression check installed (skip once with: git commit --no-verify)"
 
 fmt: frontend/node_modules ## Format Go and frontend code
 	gofmt -w $(shell git ls-files '*.go' 2>/dev/null || find . -name '*.go' -not -path './frontend/*')

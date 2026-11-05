@@ -8,6 +8,7 @@ import { useUi } from '../stores/ui';
 import { useWorkspace } from '../stores/workspace';
 import type { Collection } from '../types';
 import CollectionSettingsDialog from './CollectionSettingsDialog.vue';
+import CurlImportDialog from './CurlImportDialog.vue';
 import ExportDialog from './ExportDialog.vue';
 import MenuButton from './MenuButton.vue';
 import TreeFolder from './TreeFolder.vue';
@@ -17,6 +18,7 @@ const ui = useUi();
 const runner = useRunner();
 const envs = useEnvironments();
 const exporting = ref<Collection | null>(null);
+const curlTarget = ref<Collection | null>(null);
 const editing = ref<{ collection: Collection; tab: 'endpoints' | 'permissions' | 'settings' } | null>(null);
 
 async function newCollection() {
@@ -48,6 +50,7 @@ async function importCollection() {
 function menu(c: Collection) {
   return [
     { label: 'New request', action: () => ws.createRequest(c.id).catch(ui.error) },
+    { label: 'New request from cURL…', action: () => (curlTarget.value = c) },
     { label: 'New folder', action: () => newFolder(c) },
     { label: 'Run collection', action: () => runner.runCollection(c.id, '', c.name) },
     { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
@@ -116,6 +119,7 @@ async function remove(c: Collection) {
       </div>
     </div>
     <ExportDialog v-if="exporting" :collection="exporting" @close="exporting = null" />
+    <CurlImportDialog v-if="curlTarget" :collection-id="curlTarget.id" @close="curlTarget = null" />
     <CollectionSettingsDialog
       v-if="editing"
       :collection="editing.collection"

@@ -1,0 +1,110 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+
+import { toCurl } from '../services/curl';
+import { hasVariables } from '../services/variables';
+import { useEnvironments } from '../stores/environments';
+import { useUi } from '../stores/ui';
+import { useWorkspace } from '../stores/workspace';
+import type { Request } from '../types';
+import ModalFrame from './ModalFrame.vue';
+
+const props = defineProps<{ request: Request }>();
+const emit = defineEmits<{ close: [] }>();
+const ws = useWorkspace();
+const envs = useEnvironments();
+const ui = useUi();
+
+const collection = computed(() => ws.collections.find((c) => c.id === props.request.collectionId) ?? null);
+const fill = ref(true);
+const includeSecrets = ref(false);
+
+const usesVariables = computed(() => {
+  const r = props.request;
+  const auth = r.auth.type === 'inherit' ? collection.value?.auth : r.auth;
+  return [
+    r.url,
+    r.body,
+    ...r.headers.flatMap((h) => [h.key, h.value]),
+    ...r.query.flatMap((q) => [q.key, q.value]),
+    auth?.token,
+    auth?.username,
+    auth?.password,
+    auth?.keyName,
+    auth?.keyValue,
+  ].some(hasVariables);
+});
+
+const command = computed(() =>
+  toCurl(props.request, {
+    collectionAuth: collection.value?.auth,
+    resolve:
+      fill.value && usesVariables.value
+        ? {
+            environment: envs.selected,
+            collectionVariables: collection.value?.variables ?? [],
+            includeSecrets: includeSecrets.value,
+          }
+        : undefined,
+  }),
+);
+
+const hasScripts = computed(
+  () =>
+    !!(props.request.preRequestScript?.trim() || collection.value?.preRequestScript?.trim()) ||
+    !!props.request.postResponseScript?.trim(),
+);
+
+async function copy() {
+  try {
+    await navigator.clipboard.writeText(command.value);
+    ui.toast('Copied cURL command', 'success');
+    emit('close');
+  } catch (e) {
+    ui.error(e);
+  }
+}
+</script>
+
+<template>
+  <ModalFrame :title="`Copy “${request.name}” as cURL`" wide @close="emit('close')">
+    <div v-if="usesVariables" class="stack options">
+      <label class="row small">
+        <input v-model="fill" type="checkbox" />
+        Fill in variables from
+        {{ envs.selected ? `“${envs.selected.name}”` : 'the collection (no environment selected)' }}
+      </label>
+      <label class="row small" :class="{ muted: !fill }">
+        <input v-model="includeSecrets" type="checkbox" :disabled="!fill" />
+        Include secret values (otherwise they stay as <code v-pre>{{ name }}</code
+        >)
+      </label>
+    </div>
+    <pre class="mono command">{{ command }}</pre>
+    <p v-if="fill && includeSecrets" class="callout small">
+      The command contains secret values. Avoid pasting it into chats, tickets or shell history you share.
+    </p>
+    <p v-if="hasScripts" class="muted small">Scripts are not included; curl sends the request as written.</p>
+    <template #footer>
+      <button @click="emit('close')">Close</button>
+      <button class="primary" @click="copy">Copy to clipboard</button>
+    </template>
+  </ModalFrame>
+</template>
+
+<style scoped>
+.options {
+  gap: 4px;
+}
+.command {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 50vh;
+  overflow: auto;
+}
+</style>

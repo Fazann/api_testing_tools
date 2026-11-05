@@ -1,6 +1,8 @@
 package regression
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"api-test-kits/internal/assertions"
@@ -127,5 +129,44 @@ func TestBaselineWholeDocumentAndErrors(t *testing.T) {
 	}
 	if _, err := Snapshot([]byte(`<html>`), nil); err == nil {
 		t.Fatal("non-JSON snapshot must fail")
+	}
+}
+
+// A matching response must report "diffs": [] and not null: the UI reads
+// diffs.length, and a null crashed the response panel, leaving Send stuck on
+// "Sending…".
+func TestMatchingResultsEncodeEmptyDiffs(t *testing.T) {
+	body := []byte(`{"data":{"id":1,"tags":["a"]}}`)
+	snap, err := Snapshot(body, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, err := Snapshot(body, []string{"data.id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shape, err := SchemaSnapshot(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]domain.Baseline{
+		"values":         {Snapshot: snap},
+		"selected paths": {Snapshot: selected, SelectedPaths: []string{"data.id"}},
+		"schema":         {Snapshot: shape, Mode: domain.BaselineSchema},
+	}
+	for name, b := range cases {
+		t.Run(name, func(t *testing.T) {
+			res := Compare(b, body, false)
+			if !res.Passed {
+				t.Fatalf("expected a match, got %+v", res)
+			}
+			out, _ := json.Marshal(res)
+			if !strings.Contains(string(out), `"diffs":[]`) {
+				t.Fatalf("diffs must encode as [], got %s", out)
+			}
+		})
+	}
+	if out, _ := json.Marshal(Diff(map[string]any{"a": 1.0}, map[string]any{"a": 1.0}, Options{})); string(out) != "[]" {
+		t.Fatalf("Diff of equal values must encode as [], got %s", out)
 	}
 }

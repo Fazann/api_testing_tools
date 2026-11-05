@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Blocks the commit when lint, type checks, vet or tests fail for the staged changes.
+# Installed by `make hooks`; skip once with `git commit --no-verify`.
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh" --staged

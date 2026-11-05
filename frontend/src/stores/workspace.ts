@@ -108,8 +108,9 @@ export const useWorkspace = defineStore('workspace', () => {
     savedSnapshot.value = JSON.stringify(draft.value);
   }
 
-  async function createRequest(collectionId: string, parentId = '') {
-    const saved = await api.saveRequest(newRequest(collectionId, parentId));
+  /** Creates and opens a request; `fields` overrides the defaults, e.g. from a pasted cURL command. */
+  async function createRequest(collectionId: string, parentId = '', fields: Partial<Request> = {}) {
+    const saved = await api.saveRequest({ ...newRequest(collectionId, parentId), ...clone(fields) });
     expanded.value[collectionId] = true;
     if (parentId) expanded.value[parentId] = true;
     await loadTree(collectionId);

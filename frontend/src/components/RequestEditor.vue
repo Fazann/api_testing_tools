@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import { looksLikeCurl, parseCurl } from '../services/curl';
 import { isDestructive } from '../services/model';
 import { useEnvironments } from '../stores/environments';
 import { useRunner } from '../stores/runner';
@@ -11,6 +12,7 @@ import AssertionEditor from './AssertionEditor.vue';
 import AuthEditor from './AuthEditor.vue';
 import BaselinePanel from './BaselinePanel.vue';
 import CollectionSettingsDialog from './CollectionSettingsDialog.vue';
+import CurlExportDialog from './CurlExportDialog.vue';
 import KeyValueTable from './KeyValueTable.vue';
 import RaceTestPanel from './RaceTestPanel.vue';
 import ScriptEditor from './ScriptEditor.vue';
@@ -24,6 +26,7 @@ const ui = useUi();
 type Tab = 'params' | 'headers' | 'body' | 'auth' | 'scripts' | 'tests' | 'baseline' | 'race' | 'options';
 const tab = ref<Tab>('tests');
 const editingCollection = ref<Collection | null>(null);
+const copyingCurl = ref(false);
 
 const req = computed(() => ws.draft!);
 const count = (rows: { key: string; enabled: boolean }[]) => rows.filter((r) => r.enabled && r.key).length;
@@ -46,6 +49,35 @@ async function save() {
     ui.toast('Saved', 'success');
   } catch (e) {
     ui.error(e);
+  }
+}
+
+// Pasting a cURL command into the URL bar fills in the whole request, like "New request from cURL".
+function onUrlPaste(e: ClipboardEvent) {
+  const pasted = e.clipboardData?.getData('text/plain') ?? '';
+  if (!looksLikeCurl(pasted)) return;
+  e.preventDefault();
+  try {
+    const { request, warnings } = parseCurl(pasted);
+    const r = req.value;
+    if (r.name === 'New request') r.name = request.name;
+    Object.assign(r, {
+      method: request.method,
+      url: request.url,
+      // The URL already carries the query string.
+      query: [],
+      headers: request.headers,
+      body: request.body,
+      bodyType: request.bodyType,
+      auth: request.auth,
+      timeoutMs: request.timeoutMs,
+    });
+    ui.toast(
+      'Filled in the request from cURL. Save to keep it.' + (warnings.length ? ` Note: ${warnings.join('; ')}.` : ''),
+      warnings.length ? 'info' : 'success',
+    );
+  } catch (err) {
+    ui.toast(`Could not read the cURL command: ${(err as Error).message}`, 'error');
   }
 }
 
@@ -79,6 +111,9 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
     <div class="row title">
       <input v-model="req.name" class="name grow" aria-label="Request name" maxlength="200" />
       <span v-if="ws.dirty" class="muted small">Unsaved</span>
+      <button class="ghost small" title="Copy this request as a cURL command" @click="copyingCurl = true">
+        Copy as cURL
+      </button>
       <span
         v-if="isDestructive(req.method)"
         class="small"
@@ -92,7 +127,13 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
       <select v-model="req.method" class="method" :class="req.method" aria-label="HTTP method">
         <option v-for="m in METHODS" :key="m" :value="m">{{ m }}</option>
       </select>
-      <VariableInput v-model="req.url" class="grow" placeholder="{{base_url}}/path" aria-label="URL" />
+      <VariableInput
+        v-model="req.url"
+        class="grow"
+        placeholder="{{base_url}}/path or paste a cURL command"
+        aria-label="URL"
+        @paste="onUrlPaste"
+      />
       <button v-if="runner.sendingOp" type="button" class="danger" @click="runner.cancelSend()">Cancel</button>
       <button v-else type="submit" class="primary" title="Send (Ctrl+Enter)">Send</button>
       <button type="button" :disabled="!ws.dirty" title="Save (Ctrl+S)" @click="save">Save</button>
@@ -165,6 +206,7 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
         >
       </div>
     </div>
+    <CurlExportDialog v-if="copyingCurl" :request="req" @close="copyingCurl = false" />
     <CollectionSettingsDialog
       v-if="editingCollection"
       :collection="editingCollection"

@@ -24,6 +24,8 @@ const previous = ref<PreviousComparison | null>(null);
 const resp = computed(() => props.result.response);
 const failedTests = computed(() => props.result.assertionResults.filter((a) => !a.passed).length);
 const logs = computed(() => props.result.logs ?? []);
+// Results saved in history before the backend fix carry "diffs": null for a matching baseline.
+const regressionDiffs = computed(() => props.result.regression?.diffs ?? []);
 const body = computed(() => (resp.value ? prettyBody(resp.value.body, resp.value.contentType) : ''));
 /** Colored tokens when the body is valid JSON (and not too large to highlight). */
 const bodyTokens = computed(() => {
@@ -92,7 +94,7 @@ async function copyBody() {
         {{ result.assertionResults.length - failedTests }}/{{ result.assertionResults.length }} tests passed
       </span>
       <span v-if="result.regression" :class="result.regression.passed ? 'pass' : 'fail'">
-        {{ result.regression.passed ? 'Matches baseline' : `${result.regression.diffs.length} baseline difference(s)` }}
+        {{ result.regression.passed ? 'Matches baseline' : `${regressionDiffs.length} baseline difference(s)` }}
       </span>
       <span class="spacer" />
       <span class="muted small">{{ formatTime(result.createdAt) }}</span>
@@ -113,7 +115,7 @@ async function copyBody() {
         }}</span>
       </button>
       <button v-if="result.regression" :class="{ active: tab === 'regression' }" role="tab" @click="tab = 'regression'">
-        Baseline diff<span class="count">{{ result.regression.diffs.length }}</span>
+        Baseline diff<span class="count">{{ regressionDiffs.length }}</span>
       </button>
       <button :class="{ active: tab === 'body' }" role="tab" :disabled="!resp" @click="tab = 'body'">Body</button>
       <button :class="{ active: tab === 'headers' }" role="tab" :disabled="!resp" @click="tab = 'headers'">
@@ -131,7 +133,7 @@ async function copyBody() {
       <AssertionResults v-if="tab === 'tests'" :results="result.assertionResults" />
       <div v-else-if="tab === 'regression' && result.regression" class="stack">
         <p :class="result.regression.passed ? 'pass' : 'fail'">{{ result.regression.message }}</p>
-        <DiffTable v-if="result.regression.diffs.length" :diffs="result.regression.diffs" />
+        <DiffTable v-if="regressionDiffs.length" :diffs="regressionDiffs" />
         <p v-if="!result.regression.passed && allowApprove" class="muted small">
           If this change is intended, review the response and choose <strong>Approve as baseline…</strong>. Otherwise,
           fix the regression.
@@ -174,7 +176,7 @@ async function copyBody() {
               <li v-for="(m, i) in previous.newlyFailing" :key="i">{{ m }}</li>
             </ul>
           </div>
-          <DiffTable v-if="previous.diffs.length" :diffs="previous.diffs" />
+          <DiffTable v-if="previous.diffs?.length" :diffs="previous.diffs" />
           <p v-else class="muted">Response bodies are identical (or not comparable JSON).</p>
         </template>
       </div>

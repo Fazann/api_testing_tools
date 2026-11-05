@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import { useOpenRequest } from '../services/navigation';
 import { useRunner } from '../stores/runner';
 import { useUi } from '../stores/ui';
 import { useWorkspace } from '../stores/workspace';
 import type { CollectionTree, Folder, Request } from '../types';
+import CurlExportDialog from './CurlExportDialog.vue';
+import CurlImportDialog from './CurlImportDialog.vue';
 import MenuButton from './MenuButton.vue';
 
 const props = defineProps<{ tree: CollectionTree; parentId: string; depth: number }>();
@@ -17,10 +19,13 @@ const openRequest = useOpenRequest();
 const folders = computed(() => props.tree.folders.filter((f) => f.parentId === props.parentId));
 const requests = computed(() => props.tree.requests.filter((r) => r.parentId === props.parentId));
 const collectionId = computed(() => props.tree.collection.id);
+const curlFolder = ref<Folder | null>(null);
+const curlRequest = ref<Request | null>(null);
 
 function folderMenu(f: Folder) {
   return [
     { label: 'New request', action: () => ws.createRequest(collectionId.value, f.id).catch(ui.error) },
+    { label: 'New request from cURL…', action: () => (curlFolder.value = f) },
     { label: 'New folder', action: () => newFolder(f.id) },
     { label: 'Run folder', action: () => runner.runCollection(collectionId.value, f.id, f.name) },
     { label: 'Rename', action: () => renameFolder(f) },
@@ -32,6 +37,8 @@ function requestMenu(r: Request) {
   return [
     { label: 'Rename', action: () => renameRequest(r) },
     { label: 'Duplicate', action: () => ws.duplicateRequest(r).catch(ui.error) },
+    // The open request may have unsaved edits; copy what the editor shows.
+    { label: 'Copy as cURL…', action: () => (curlRequest.value = ws.draft?.id === r.id ? ws.draft : r) },
     { label: 'Delete', danger: true, action: () => deleteRequest(r) },
   ];
 }
@@ -106,6 +113,13 @@ async function deleteRequest(r: Request) {
       Empty
     </li>
   </ul>
+  <CurlImportDialog
+    v-if="curlFolder"
+    :collection-id="collectionId"
+    :parent-id="curlFolder.id"
+    @close="curlFolder = null"
+  />
+  <CurlExportDialog v-if="curlRequest" :request="curlRequest" @close="curlRequest = null" />
 </template>
 
 <style scoped>

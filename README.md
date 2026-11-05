@@ -13,6 +13,7 @@ A free, local-first desktop app for testing HTTP APIs, checking business rules, 
 - **CLI for CI** — `test-tool-kit-cli run wallet.collection.json --env Staging --junit junit.xml` runs a collection headlessly (pure Go, no GUI libraries), compares with the baselines included in the export, writes JUnit/HTML/JSON reports and exits non-zero on failure; secrets come from `APIGUARD_VAR_*` environment variables. `--collection NAME` runs straight from the app's database for scheduled local checks. See [docs/cli.md](docs/cli.md).
 - **History & reports** — SQLite history with filters by collection, request, status and date; self-contained HTML and JSON reports with secrets removed.
 - **Import/export** — documented, versioned JSON format; also imports **OpenAPI 3 / Swagger 2** (`swagger.json`, `openapi.yaml`) as a ready-to-run collection. Imports are treated as untrusted.
+- **cURL** — paste a cURL command (e.g. from the browser's *Copy as cURL*) into the URL bar or use **New request from cURL…** on a collection or folder; **Copy as cURL** turns any request back into a command, optionally filling in variables (secrets stay as `{{name}}` unless you opt in).
 
 See [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md), [docs/schema-regression.md](docs/schema-regression.md), [docs/security-tests.md](docs/security-tests.md) and [docs/cli.md](docs/cli.md).
 
@@ -52,6 +53,8 @@ make dev               # run with hot reload
 make run               # build for this machine and start the app
 make build             # build for this machine → build/bin/test-tool-kit
 make test              # frontend + Go tests
+make check             # regression check: lint, typecheck, gofmt, go vet and all tests
+make hooks             # run that check on staged changes before every commit (skip: git commit --no-verify)
 make build-linux       # Linux binary for this architecture
 make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
 make build-windows     # Windows amd64 + arm64 .exe (cross-compiles from Linux, no C toolchain needed)
