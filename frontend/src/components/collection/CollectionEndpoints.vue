@@ -7,16 +7,18 @@ import DataTable from '@/components/base/DataTable.vue';
 import FilterChip from '@/components/base/FilterChip.vue';
 import MethodBadge from '@/components/base/MethodBadge.vue';
 import { apiVersion, compareVersions } from '@/services/model';
+import { requestBadge } from '@/services/socket';
 import { useWorkspace } from '@/stores/workspace';
-import type { CollectionTree, Method, Request } from '@/types';
+import type { CollectionTree, Request } from '@/types';
 
 const props = defineProps<{ tree: CollectionTree }>();
 const emit = defineEmits<{ open: [request: Request] }>();
 const ws = useWorkspace();
 
-const METHODS: Method[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+// HTTP methods, then the badges of WebSocket and Socket.IO requests.
+const BADGES: string[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'WS', 'SIO'];
 
-const method = ref<Method | ''>('');
+const method = ref('');
 /** '' = all versions, NO_VERSION = requests without a detected version. */
 const version = ref('');
 const NO_VERSION = '\u0000none';
@@ -79,17 +81,17 @@ const ordered = computed(() => {
 });
 
 const counts = computed(() => {
-  const c: Partial<Record<Method, number>> = {};
-  for (const r of props.tree.requests) c[r.method] = (c[r.method] ?? 0) + 1;
+  const c: Record<string, number> = {};
+  for (const r of props.tree.requests) c[requestBadge(r)] = (c[requestBadge(r)] ?? 0) + 1;
   return c;
 });
-const presentMethods = computed(() => METHODS.filter((m) => counts.value[m]));
+const presentMethods = computed(() => BADGES.filter((m) => counts.value[m]));
 
 const visible = computed(() => {
   const q = query.value.trim().toLowerCase();
   return ordered.value.filter(
     (r) =>
-      (!method.value || r.method === method.value) &&
+      (!method.value || requestBadge(r) === method.value) &&
       (!version.value || (versions.value[r.id] || NO_VERSION) === version.value) &&
       (!q ||
         r.name.toLowerCase().includes(q) ||
@@ -174,7 +176,7 @@ const columns = computed(() => [
         empty="No endpoints match this filter."
         @row-click="(r) => emit('open', r)"
       >
-        <template #cell-method="{ row }"><MethodBadge :method="row.method" /></template>
+        <template #cell-method="{ row }"><MethodBadge :method="requestBadge(row)" /></template>
         <template #cell-version="{ row }">{{ versions[row.id] || '—' }}</template>
         <template #cell-folder="{ row }">{{ folderPaths[row.parentId] ?? '' }}</template>
         <template #cell-tests="{ row }">{{ tests(row) || '—' }}</template>

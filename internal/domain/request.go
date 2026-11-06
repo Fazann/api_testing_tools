@@ -14,6 +14,15 @@ var SupportedMethods = []string{
 	http.MethodDelete, http.MethodHead, http.MethodOptions,
 }
 
+// MayModifyData reports whether running the request may change server state:
+// an HTTP request with a destructive method, or a socket test that sends messages.
+func (r *Request) MayModifyData() bool {
+	if r.Kind.IsSocket() {
+		return r.Socket.SendsMessages()
+	}
+	return IsDestructiveMethod(r.Method)
+}
+
 // IsDestructiveMethod reports whether a method may modify server state.
 func IsDestructiveMethod(method string) bool {
 	switch strings.ToUpper(method) {
@@ -103,12 +112,19 @@ func (a Auth) Effective(collection Auth) Auth {
 	return collection
 }
 
-// Request is a saved HTTP request definition with its assertions.
+// Request is a saved request definition with its assertions. Kind selects
+// HTTP (the default), WebSocket or Socket.IO; socket requests use URL,
+// headers, query, auth, timeout and the pre-request script like HTTP
+// requests, plus Socket. Their test is Socket.Steps; Method is always GET (the
+// WebSocket handshake) and Body, Assertions and the post-response script are
+// not used.
 type Request struct {
-	ID              string      `json:"id"`
-	CollectionID    string      `json:"collectionId"`
-	ParentID        string      `json:"parentId"`
-	Name            string      `json:"name"`
+	ID           string `json:"id"`
+	CollectionID string `json:"collectionId"`
+	ParentID     string `json:"parentId"`
+	Name         string `json:"name"`
+	// Kind is KindHTTP when empty, so older exports keep working.
+	Kind            RequestKind `json:"kind"`
 	Method          string      `json:"method"`
 	URLTemplate     string      `json:"url"`
 	Headers         []KeyValue  `json:"headers"`
@@ -122,17 +138,30 @@ type Request struct {
 	Assertions      []Assertion `json:"assertions"`
 	// PreRequestScript runs before variables are resolved and the request is
 	// sent; PostResponseScript runs after the response arrives (see internal/scripting).
-	PreRequestScript   string    `json:"preRequestScript"`
-	PostResponseScript string    `json:"postResponseScript"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
+	PreRequestScript   string `json:"preRequestScript"`
+	PostResponseScript string `json:"postResponseScript"`
+	// Socket is set for WebSocket and Socket.IO requests.
+	Socket    *SocketConfig `json:"socket,omitempty"`
+	CreatedAt time.Time     `json:"createdAt"`
+	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
 // Normalize fills defaults so that partially specified requests behave predictably.
 func (r *Request) Normalize() {
+	if r.Kind == "" {
+		r.Kind = KindHTTP
+	}
 	r.Method = strings.ToUpper(strings.TrimSpace(r.Method))
-	if r.Method == "" {
+	if r.Method == "" || r.Kind.IsSocket() {
 		r.Method = http.MethodGet
+	}
+	if r.Kind.IsSocket() {
+		if r.Socket == nil {
+			r.Socket = &SocketConfig{}
+		}
+		r.Socket.normalize(r.Kind)
+	} else {
+		r.Socket = nil
 	}
 	r.URLTemplate = strings.TrimSpace(r.URLTemplate)
 	if r.BodyType == "" {
@@ -163,6 +192,18 @@ func (r *Request) Normalize() {
 func (r *Request) Validate() error {
 	if err := ValidateName("request name", r.Name); err != nil {
 		return err
+	}
+	switch r.Kind {
+	case KindHTTP:
+	case KindWebSocket, KindSocketIO:
+		if r.Socket == nil {
+			return fmt.Errorf("socket settings are missing")
+		}
+		if err := r.Socket.validate(r.Kind); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported request kind %q", r.Kind)
 	}
 	if !isSupportedMethod(r.Method) {
 		return fmt.Errorf("unsupported HTTP method %q", r.Method)

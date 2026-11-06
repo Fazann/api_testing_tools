@@ -60,11 +60,108 @@ export interface Assertion {
   enabled: boolean;
 }
 
+/** The protocol of a request. Socket requests keep a connection open (see SocketConfig). */
+export type RequestKind = 'http' | 'websocket' | 'socketio';
+export const REQUEST_KINDS: { value: RequestKind; label: string }[] = [
+  { value: 'http', label: 'HTTP' },
+  { value: 'websocket', label: 'WebSocket' },
+  { value: 'socketio', label: 'Socket.IO' },
+];
+
+export type SocketBodyType = 'json' | 'text';
+
+/** A message to send: saved for the console, or the payload of a send step. */
+export interface SocketMessage {
+  id: string;
+  name: string;
+  /** Socket.IO event name; WebSocket messages ignore it. */
+  event: string;
+  body: string;
+  bodyType: SocketBodyType;
+  /** Ask the Socket.IO server to acknowledge the event. */
+  ack?: boolean;
+}
+
+export type SocketStepKind = 'send' | 'expect' | 'wait';
+
+export interface SocketStep {
+  id: string;
+  kind: SocketStepKind;
+  description?: string;
+  enabled: boolean;
+  message: SocketMessage;
+  /** Expect: only this Socket.IO event ('' = any message). */
+  event?: string;
+  /** Expect: the acknowledgement of a sent event instead of an event. */
+  expectAck?: boolean;
+  /** Expect: checks on the message body. */
+  assertions: Assertion[];
+  /** How long an expect step waits, or how long a wait step pauses. */
+  timeoutMs: number;
+}
+
+export interface SocketConfig {
+  /** Offered in Sec-WebSocket-Protocol (WebSocket only). */
+  subprotocols: string[];
+  /** Socket.IO server path; the URL's path is the namespace. */
+  path: string;
+  /** JSON object sent with the Socket.IO CONNECT packet (socket.handshake.auth). */
+  authPayload: string;
+  messages: SocketMessage[];
+  steps: SocketStep[];
+}
+
+export interface SocketFrame {
+  direction: 'sent' | 'received' | 'system';
+  event?: string;
+  /** Message text; for Socket.IO the event's argument as JSON. Binary frames are base64. */
+  data: string;
+  binary?: boolean;
+  ack?: boolean;
+  /** Milliseconds since the connection opened. */
+  atMs: number;
+  truncated?: boolean;
+}
+
+export interface SocketTranscript {
+  kind: RequestKind;
+  subprotocol?: string;
+  sessionId?: string;
+  frames: SocketFrame[];
+  dropped?: number;
+  closeCode?: number;
+  closeReason?: string;
+}
+
+/** A console connection that has just opened. */
+export interface SocketSession {
+  sessionId: string;
+  kind: RequestKind;
+  url: string;
+  subprotocol?: string;
+  engineSessionId?: string;
+  statusCode: number;
+  headers: KeyValue[];
+  logs?: ScriptLog[];
+}
+
+/** Something that happened on a console connection. */
+export interface SocketEvent {
+  sessionId: string;
+  frame?: SocketFrame;
+  closed?: boolean;
+  closeCode?: number;
+  error?: string;
+}
+
 export interface Request {
   id: string;
   collectionId: string;
   parentId: string;
   name: string;
+  /** 'http' when absent (older data). */
+  kind: RequestKind;
+  /** Always GET for socket requests (the WebSocket handshake). */
   method: Method;
   url: string;
   headers: KeyValue[];
@@ -80,6 +177,8 @@ export interface Request {
   preRequestScript: string;
   /** JavaScript run after the response arrives (pm.test, pm.environment.set, ...). */
   postResponseScript: string;
+  /** Set for WebSocket and Socket.IO requests. */
+  socket?: SocketConfig;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -155,7 +254,7 @@ export interface ResponseSummary {
 export interface AssertionResult {
   assertionId: string;
   /** 'script' is a pm.test() result from a post-response script; its name is in description. */
-  kind: AssertionKind | 'script';
+  kind: AssertionKind | 'script' | 'socket_step';
   path?: string;
   operator?: Operator;
   description?: string;
@@ -199,6 +298,8 @@ export interface RunResult {
   performance?: PerformanceResult;
   /** console output from scripts, already redacted. */
   logs?: ScriptLog[];
+  /** Message transcript of a WebSocket or Socket.IO test. */
+  socket?: SocketTranscript;
   durationMs: number;
   status: ResultStatus;
   error?: string;

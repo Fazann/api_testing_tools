@@ -8,7 +8,8 @@ import { SCRIPT_PLACEHOLDERS, SCRIPT_SNIPPETS, type ScriptPhase } from '@/servic
 
 const pre = defineModel<string>('pre', { required: true });
 const post = defineModel<string>('post', { required: true });
-defineProps<{ scope?: 'request' | 'collection' }>();
+// `preOnly` hides the post-response script, for socket requests (their test has steps instead of a response).
+const props = defineProps<{ scope?: 'request' | 'collection'; preOnly?: boolean }>();
 
 const phase = ref<ScriptPhase>('pre');
 const snippet = ref('');
@@ -23,7 +24,7 @@ const code = computed({
 const snippets = computed(() => SCRIPT_SNIPPETS.filter((s) => s.phase === phase.value));
 const phaseTabs = computed(() => [
   { id: 'pre' as const, label: 'Pre-request', count: pre.value.trim() ? '✓' : '' },
-  { id: 'post' as const, label: 'Post-response', count: post.value.trim() ? '✓' : '' },
+  { id: 'post' as const, label: 'Post-response', count: post.value.trim() ? '✓' : '', hidden: props.preOnly },
 ]);
 const snippetOptions = computed(() => [
   { value: '', label: 'Insert snippet…', disabled: true },

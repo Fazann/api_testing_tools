@@ -42,6 +42,9 @@ type Prepared struct {
 	HTTP     httpclient.Request
 	Redactor *redact.Redactor
 	Summary  domain.RequestSummary
+	// Socket is set for WebSocket and Socket.IO requests: their settings with
+	// every {{variable}} resolved. HTTP.URL and HTTP.Header are the handshake.
+	Socket *domain.SocketConfig
 }
 
 // MissingVariablesError lists variables referenced but not defined.
@@ -122,6 +125,11 @@ func Prepare(req domain.Request, env *domain.Environment) (*Prepared, error) {
 		}
 	}
 
+	var sock *domain.SocketConfig
+	if req.Kind.IsSocket() {
+		sock = resolveSocket(*req.Socket, res, env)
+	}
+
 	if missing := res.Missing(); len(missing) > 0 {
 		return nil, &MissingVariablesError{Names: missing}
 	}
@@ -131,6 +139,9 @@ func Prepare(req domain.Request, env *domain.Environment) (*Prepared, error) {
 		return nil, fmt.Errorf("invalid URL %q: %w", red.String(rawURL), err)
 	}
 	if u.Scheme == "" {
+		if req.Kind.IsSocket() {
+			return nil, fmt.Errorf("URL %q must start with ws://, wss://, http:// or https://", red.String(rawURL))
+		}
 		return nil, fmt.Errorf("URL %q must start with http:// or https://", red.String(rawURL))
 	}
 	if len(query) > 0 {
@@ -154,15 +165,49 @@ func Prepare(req domain.Request, env *domain.Environment) (*Prepared, error) {
 			CredentialHeaders: credentialHeaders,
 		},
 		Redactor: red,
+		Socket:   sock,
 	}
 	p.Summary = domain.RequestSummary{
 		Name:    req.Name,
-		Method:  req.Method,
+		Method:  req.Kind.Badge(req.Method),
 		URL:     red.URL(finalURL),
 		Headers: red.HTTPHeader(header),
 		Body:    red.String(truncateString(string(body), 64<<10)),
 	}
 	return p, nil
+}
+
+// resolveSocket substitutes variables in everything a socket request sends:
+// subprotocols, the Socket.IO auth payload, saved messages and test steps
+// (including the expected values of their checks).
+func resolveSocket(c domain.SocketConfig, res *environments.Resolver, env *domain.Environment) *domain.SocketConfig {
+	out := c
+	out.Subprotocols = make([]string, len(c.Subprotocols))
+	for i, p := range c.Subprotocols {
+		out.Subprotocols[i] = res.Resolve(p)
+	}
+	out.AuthPayload = res.Resolve(c.AuthPayload)
+	out.Messages = make([]domain.SocketMessage, len(c.Messages))
+	for i, m := range c.Messages {
+		out.Messages[i] = ResolveSocketMessage(m, res)
+	}
+	out.Steps = make([]domain.SocketStep, len(c.Steps))
+	for i, s := range c.Steps {
+		if s.Enabled {
+			s.Message = ResolveSocketMessage(s.Message, res)
+			s.Event = res.Resolve(s.Event)
+			s.Assertions = resolveAssertions(s.Assertions, env)
+		}
+		out.Steps[i] = s
+	}
+	return &out
+}
+
+// ResolveSocketMessage substitutes variables in a message's event and body.
+func ResolveSocketMessage(m domain.SocketMessage, res *environments.Resolver) domain.SocketMessage {
+	m.Event = res.Resolve(m.Event)
+	m.Body = res.Resolve(m.Body)
+	return m
 }
 
 // headerUsesSecret reports whether a header row references a secret variable.
@@ -213,10 +258,11 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 	if scope == nil {
 		scope = NewScope(nil)
 	}
+	req.Normalize()
 	result := domain.RunResult{
 		ID:               uuid.NewString(),
 		RequestID:        req.ID,
-		Request:          domain.RequestSummary{Name: req.Name, Method: strings.ToUpper(req.Method)},
+		Request:          domain.RequestSummary{Name: req.Name, Method: req.Kind.Badge(req.Method)},
 		AssertionResults: []domain.AssertionResult{},
 		CreatedAt:        r.now().UTC(),
 	}
@@ -240,50 +286,26 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 		}
 		return result
 	}
-	newInput := func(phase scripting.Phase, s script, sreq scripting.Request) scripting.Input {
-		in := scripting.Input{Phase: phase, Script: s.source, Name: s.name, RequestName: req.Name, RequestID: req.ID,
-			Request: sreq, Vars: scope.Vars, Locals: locals}
-		if e, _ := scope.Vars.Environment(); e != nil {
-			in.EnvironmentName = e.Name
-		}
-		return in
-	}
-	collect := func(phase scripting.Phase, out scripting.Output) {
-		for _, l := range out.Logs {
-			logs = append(logs, domain.ScriptLog{Phase: string(phase), Level: l.Level, Message: l.Message})
-		}
-	}
+	collect := func(phase scripting.Phase, out scripting.Output) { logs = append(logs, scriptLogs(phase, out)...) }
 
-	req.Normalize()
-	for _, s := range scripts(script{"collection pre-request script", scope.PreRequestScript}, script{"pre-request script", req.PreRequestScript}) {
-		out, err := scripting.Run(ctx, newInput(scripting.PreRequest, s, scriptRequest(req)))
-		collect(scripting.PreRequest, out)
-		if err != nil {
-			result.Status = domain.StatusError
-			if ctx.Err() != nil {
-				result.Status = domain.StatusCancelled
-			}
-			result.Error = s.name + " failed: " + err.Error()
-			return finish(nil)
-		}
-		applyScriptRequest(&req, out.Request)
-	}
-	if err := req.Validate(); err != nil {
-		result.Status = domain.StatusError
-		result.Error = "the request is invalid after the pre-request script ran: " + err.Error()
-		return finish(nil)
-	}
-
-	env := scope.Vars.Resolved(locals)
-	prepared, err := Prepare(req, env)
+	req, env, prepared, preLogs, err := PreRequest(ctx, req, scope, locals)
+	logs = append(logs, preLogs...)
 	if err != nil {
 		result.Status = domain.StatusError
-		// Prepare errors never contain unredacted secrets, but be defensive.
-		result.Error = redact.New(env.SecretValues()...).String(err.Error())
+		if ctx.Err() != nil {
+			result.Status = domain.StatusCancelled
+		}
+		result.Error = err.Error()
 		return finish(nil)
 	}
 	red := prepared.Redactor
 	result.Request = prepared.Summary
+	if req.Kind.IsSocket() {
+		// Socket tests have steps instead of a response: no post-response
+		// scripts, assertions or baseline.
+		r.runSocket(ctx, req, prepared, &result)
+		return finish(red)
+	}
 
 	start := r.now()
 	resp, err := r.client.Do(ctx, prepared.HTTP)
@@ -334,7 +356,7 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 	scriptResp := &scripting.Response{Code: resp.StatusCode, Status: resp.Status, Header: resp.Header, Body: resp.Body,
 		DurationMs: resp.Duration.Milliseconds(), Size: resp.BodyBytes}
 	for _, s := range scripts(script{"collection post-response script", scope.PostResponseScript}, script{"post-response script", req.PostResponseScript}) {
-		in := newInput(scripting.PostResponse, s, sent)
+		in := scriptInput(scripting.PostResponse, s, sent, req, scope, locals)
 		in.Response = scriptResp
 		out, err := scripting.Run(ctx, in)
 		collect(scripting.PostResponse, out)
@@ -369,6 +391,53 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 		result.Error = scriptErr
 	}
 	return finish(red)
+}
+
+// PreRequest runs the collection's and the request's pre-request scripts on
+// req, validates the result and prepares it against the variables in scope.
+// It returns the request as the scripts left it, the resolved environment, and
+// the script logs (not yet redacted). Variable changes stay in scope.Vars.
+func PreRequest(ctx context.Context, req domain.Request, scope *Scope, locals map[string]string) (domain.Request, *domain.Environment, *Prepared, []domain.ScriptLog, error) {
+	if scope == nil {
+		scope = NewScope(nil)
+	}
+	var logs []domain.ScriptLog
+	req.Normalize()
+	for _, s := range scripts(script{"collection pre-request script", scope.PreRequestScript}, script{"pre-request script", req.PreRequestScript}) {
+		out, err := scripting.Run(ctx, scriptInput(scripting.PreRequest, s, scriptRequest(req), req, scope, locals))
+		logs = append(logs, scriptLogs(scripting.PreRequest, out)...)
+		if err != nil {
+			return req, nil, nil, logs, errors.New(s.name + " failed: " + err.Error())
+		}
+		applyScriptRequest(&req, out.Request)
+	}
+	if err := req.Validate(); err != nil {
+		return req, nil, nil, logs, errors.New("the request is invalid after the pre-request script ran: " + err.Error())
+	}
+	env := scope.Vars.Resolved(locals)
+	prepared, err := Prepare(req, env)
+	if err != nil {
+		// Prepare errors never contain unredacted secrets, but be defensive.
+		return req, env, nil, logs, errors.New(redact.New(env.SecretValues()...).String(err.Error()))
+	}
+	return req, env, prepared, logs, nil
+}
+
+func scriptInput(phase scripting.Phase, s script, sreq scripting.Request, req domain.Request, scope *Scope, locals map[string]string) scripting.Input {
+	in := scripting.Input{Phase: phase, Script: s.source, Name: s.name, RequestName: req.Name, RequestID: req.ID,
+		Request: sreq, Vars: scope.Vars, Locals: locals}
+	if e, _ := scope.Vars.Environment(); e != nil {
+		in.EnvironmentName = e.Name
+	}
+	return in
+}
+
+func scriptLogs(phase scripting.Phase, out scripting.Output) []domain.ScriptLog {
+	logs := make([]domain.ScriptLog, 0, len(out.Logs))
+	for _, l := range out.Logs {
+		logs = append(logs, domain.ScriptLog{Phase: string(phase), Level: l.Level, Message: l.Message})
+	}
+	return logs
 }
 
 func scriptRequest(req domain.Request) scripting.Request {

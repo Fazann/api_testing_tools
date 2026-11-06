@@ -19,7 +19,7 @@ const COLUMNS = [
       <span :class="row.passed ? 'pass' : 'fail'">{{ row.passed ? '✔ Pass' : '✘ Fail' }}</span>
     </template>
     <template #cell-kind="{ row }">
-      {{ row.kind === 'script' ? 'Script test' : KIND_LABELS[row.kind] }}
+      {{ row.kind === 'script' ? 'Script test' : row.kind === 'socket_step' ? 'Socket step' : KIND_LABELS[row.kind] }}
       <code v-if="row.path">{{ row.path }}</code>
       <span v-if="row.operator" class="muted"> {{ OPERATOR_LABELS[row.operator] ?? row.operator }}</span>
       <div v-if="row.description" class="muted small">{{ row.description }}</div>

@@ -30,6 +30,9 @@ const (
 	// AssertScript is a pm.test() result from a post-response script. It only
 	// appears in results, never in a request's saved assertions.
 	AssertScript AssertionKind = "script"
+	// AssertSocketStep is the outcome of one socket test step. It only
+	// appears in results.
+	AssertSocketStep AssertionKind = "socket_step"
 )
 
 type Operator string

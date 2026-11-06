@@ -124,6 +124,16 @@ func sanitizeRun(run domain.Run, red *redact.Redactor) domain.Run {
 			ars[j] = a
 		}
 		r.AssertionResults = ars
+		if r.Socket != nil {
+			tr := *r.Socket
+			frames := make([]domain.SocketFrame, len(tr.Frames))
+			for j, f := range tr.Frames {
+				f.Event, f.Data = red.String(f.Event), red.String(f.Data)
+				frames[j] = f
+			}
+			tr.Frames, tr.CloseReason = frames, red.String(tr.CloseReason)
+			r.Socket = &tr
+		}
 		if r.Regression != nil {
 			reg := *r.Regression
 			diffs := make([]domain.DiffEntry, len(reg.Diffs))

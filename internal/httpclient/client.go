@@ -100,6 +100,9 @@ func (e *Error) Unwrap() error { return e.Err }
 type Client struct {
 	opts      Options
 	transport *http.Transport
+	// dial and tlsConfig are shared with WebSocket connections (see websocket.go).
+	dial      func(ctx context.Context, network, addr string) (net.Conn, error)
+	tlsConfig *tls.Config
 }
 
 // New builds a client from opts.
@@ -161,7 +164,7 @@ func New(opts Options) (*Client, error) {
 	default:
 		return nil, fmt.Errorf("unknown proxy mode %q", opts.ProxyMode)
 	}
-	return &Client{opts: opts, transport: t}, nil
+	return &Client{opts: opts, transport: t, dial: dialer.DialContext, tlsConfig: tlsCfg}, nil
 }
 
 // Options returns the effective options.

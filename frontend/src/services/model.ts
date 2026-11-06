@@ -11,6 +11,7 @@ export function newRequest(collectionId: string, parentId = ''): Request {
     collectionId,
     parentId,
     name: 'New request',
+    kind: 'http',
     method: 'GET',
     url: '{{base_url}}/',
     headers: [],

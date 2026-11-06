@@ -40,11 +40,13 @@ type Service struct {
 	client   *httpclient.Client
 	settings domain.Settings
 	ops      map[string]context.CancelFunc
+	// sockets are the open console connections, by session ID.
+	sockets map[string]*socketSession
 }
 
 // New creates a service backed by store.
 func New(store *storage.Store) (*Service, error) {
-	s := &Service{store: store, ops: map[string]context.CancelFunc{}}
+	s := &Service{store: store, ops: map[string]context.CancelFunc{}, sockets: map[string]*socketSession{}}
 	st, err := store.GetSettings(context.Background())
 	if err != nil {
 		return nil, err
@@ -252,8 +254,8 @@ func (s *Service) Preflight(ctx context.Context, reqs []domain.Request, required
 	var destructive []string
 	for _, r := range reqs {
 		r.Normalize()
-		if domain.IsDestructiveMethod(r.Method) {
-			destructive = append(destructive, r.Method+" "+r.Name)
+		if r.MayModifyData() {
+			destructive = append(destructive, r.Kind.Badge(r.Method)+" "+r.Name)
 		}
 		prepared, err := runner.Prepare(r, env)
 		var missing *runner.MissingVariablesError
@@ -483,11 +485,7 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 	if err != nil {
 		return domain.Run{}, err
 	}
-	scope := runner.NewScope(env)
-	if c != nil {
-		scope = &runner.Scope{Vars: scripting.NewVariables(env, c.Variables),
-			PreRequestScript: c.PreRequestScript, PostResponseScript: c.PostResponseScript}
-	}
+	scope := runScope(env, c)
 	client, st := s.current()
 	items := make([]runner.Item, len(reqs))
 	for i, r := range reqs {

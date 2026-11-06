@@ -14,14 +14,18 @@ import CurlExportDialog from '@/components/collection/CurlExportDialog.vue';
 import PerformancePanel from '@/components/performance/PerformancePanel.vue';
 import BaselinePanel from '@/components/response/BaselinePanel.vue';
 import RaceTestPanel from '@/components/security/RaceTestPanel.vue';
+import SocketMessagesEditor from '@/components/socket/SocketMessagesEditor.vue';
+import SocketSettings from '@/components/socket/SocketSettings.vue';
+import SocketStepsEditor from '@/components/socket/SocketStepsEditor.vue';
 import VariableInput from '@/components/variables/VariableInput.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { looksLikeCurl, parseCurl } from '@/services/curl';
+import { isSocket, sendsMessages, setRequestKind } from '@/services/socket';
 import { useEnvironments } from '@/stores/environments';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
-import { METHODS, type Collection, type Request } from '@/types';
+import { METHODS, REQUEST_KINDS, type Collection, type Request, type RequestKind } from '@/types';
 import { isDestructive } from '@/utils/http';
 
 import AssertionEditor from './AssertionEditor.vue';
@@ -44,12 +48,21 @@ type Tab =
   | 'baseline'
   | 'performance'
   | 'race'
+  | 'messages'
   | 'options';
 const tab = ref<Tab>('tests');
 const editingCollection = ref<Collection | null>(null);
 const copyingCurl = ref(false);
 
 const req = computed(() => ws.draft!);
+const socket = computed(() => isSocket(req.value.kind));
+const mayModify = computed(() => (socket.value ? sendsMessages(req.value.socket) : isDestructive(req.value.method)));
+function changeKind(kind: RequestKind | undefined) {
+  if (!kind) return;
+  setRequestKind(req.value, kind);
+  const hidden: Tab[] = socket.value ? ['body', 'baseline', 'performance', 'race'] : ['messages'];
+  if (hidden.includes(tab.value)) tab.value = 'tests';
+}
 const count = (rows: { key: string; enabled: boolean }[]) => rows.filter((r) => r.enabled && r.key).length || '';
 const bodyAllowed = computed(() => req.value.method !== 'GET' && req.value.method !== 'HEAD');
 const jsonError = computed(() => {
@@ -115,8 +128,22 @@ const BODY_TYPES: { value: Request['bodyType']; label: string }[] = [
   { value: 'text', label: 'TEXT' },
 ];
 
-// Tabs show a count only when there is something to count.
-const tabs = computed<TabItem<Tab>[]>(() => [
+// Tabs show a count only when there is something to count. Socket requests have no body, baseline,
+// response-time check or race test, but saved messages and test steps.
+const tabs = computed<TabItem<Tab>[]>(() =>
+  socket.value
+    ? [
+        { id: 'params', label: 'Params', count: count(req.value.query) },
+        { id: 'headers', label: 'Headers', count: count(req.value.headers) },
+        { id: 'auth', label: req.value.auth.type === 'inherit' ? 'Auth (inherited)' : 'Auth' },
+        { id: 'messages', label: 'Messages', count: req.value.socket?.messages.length || '' },
+        { id: 'scripts', label: 'Scripts', count: req.value.preRequestScript?.trim() ? 1 : '' },
+        { id: 'tests', label: 'Tests', count: req.value.socket?.steps.filter((s) => s.enabled).length || '' },
+        { id: 'options', label: 'Options' },
+      ]
+    : httpTabs.value,
+);
+const httpTabs = computed<TabItem<Tab>[]>(() => [
   { id: 'params', label: 'Params', count: count(req.value.query) },
   { id: 'headers', label: 'Headers', count: count(req.value.headers) },
   { id: 'body', label: 'Body' },
@@ -139,11 +166,17 @@ const tabs = computed<TabItem<Tab>[]>(() => [
     <div class="row title">
       <BaseInput v-model="req.name" class="name grow" aria-label="Request name" maxlength="200" />
       <span v-if="ws.dirty" class="muted small">Unsaved</span>
-      <BaseButton variant="ghost" small title="Copy this request as a cURL command" @click="copyingCurl = true">
+      <BaseButton
+        v-if="!socket"
+        variant="ghost"
+        small
+        title="Copy this request as a cURL command"
+        @click="copyingCurl = true"
+      >
         Copy as cURL
       </BaseButton>
       <span
-        v-if="isDestructive(req.method)"
+        v-if="mayModify"
         class="small"
         :class="envs.selected?.protected ? 'fail' : 'warn'"
         :title="envs.selected?.protected ? 'Requires confirmation in protected environments' : ''"
@@ -153,6 +186,14 @@ const tabs = computed<TabItem<Tab>[]>(() => [
     </div>
     <form class="row urlbar" @submit.prevent="runner.send()">
       <SelectField
+        :model-value="req.kind ?? 'http'"
+        class="kind"
+        :options="REQUEST_KINDS"
+        aria-label="Request type"
+        @update:model-value="changeKind"
+      />
+      <SelectField
+        v-if="!socket"
         v-model="req.method"
         class="method"
         :class="req.method"
@@ -162,12 +203,24 @@ const tabs = computed<TabItem<Tab>[]>(() => [
       <VariableInput
         v-model="req.url"
         class="grow"
-        placeholder="{{base_url}}/path or paste a cURL command"
+        :placeholder="
+          socket
+            ? req.kind === 'socketio'
+              ? 'https://{{host}}/namespace'
+              : 'wss://{{host}}/path'
+            : '{{base_url}}/path or paste a cURL command'
+        "
         aria-label="URL"
-        @paste="onUrlPaste"
+        @paste="!socket && onUrlPaste($event)"
       />
       <BaseButton v-if="runner.sendingOp" variant="danger" @click="runner.cancelSend()">Cancel</BaseButton>
-      <BaseButton v-else type="submit" variant="primary" title="Send (Ctrl+Enter)">Send</BaseButton>
+      <BaseButton
+        v-else
+        type="submit"
+        variant="primary"
+        :title="socket ? 'Connect, run the test steps and record the result (Ctrl+Enter)' : 'Send (Ctrl+Enter)'"
+        >{{ socket ? 'Run test' : 'Send' }}</BaseButton
+      >
       <BaseButton :disabled="!ws.dirty" title="Save (Ctrl+S)" @click="save">Save</BaseButton>
     </form>
     <TabBar v-model="tab" :tabs="tabs" />
@@ -211,8 +264,12 @@ const tabs = computed<TabItem<Tab>[]>(() => [
         v-model:pre="req.preRequestScript"
         v-model:post="req.postResponseScript"
         scope="request"
+        :pre-only="socket"
       />
+      <SocketStepsEditor v-else-if="tab === 'tests' && socket && req.socket" :socket="req.socket" :kind="req.kind" />
       <AssertionEditor v-else-if="tab === 'tests'" :assertions="req.assertions" />
+      <SocketMessagesEditor v-else-if="tab === 'messages' && req.socket" :socket="req.socket" :kind="req.kind" />
+      <SocketSettings v-else-if="tab === 'options' && socket" :request="req" />
       <BaselinePanel v-else-if="tab === 'baseline'" />
       <PerformancePanel v-else-if="tab === 'performance'" />
       <RaceTestPanel v-else-if="tab === 'race'" />
@@ -254,6 +311,9 @@ const tabs = computed<TabItem<Tab>[]>(() => [
 }
 .urlbar {
   padding: 8px 16px;
+}
+.urlbar .kind {
+  width: 120px;
 }
 .urlbar .method {
   width: 105px;

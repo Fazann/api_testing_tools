@@ -199,7 +199,10 @@ func (s *Store) SaveRun(ctx context.Context, run domain.Run, bodyLimit, retain i
 				}
 				resp = mustJSON(r)
 			}
-			var reg, perf any
+			var reg, perf, sock any
+			if res.Socket != nil {
+				sock = mustJSON(limitTranscript(*res.Socket, bodyLimit))
+			}
 			if res.Regression != nil {
 				reg = mustJSON(res.Regression)
 			}
@@ -218,10 +221,11 @@ func (s *Store) SaveRun(ctx context.Context, run domain.Run, bodyLimit, retain i
 				}
 			}
 			_, err := tx.ExecContext(ctx, `INSERT INTO run_results (id, run_id, request_id, request_summary_json, response_summary_json,
-				assertion_results_json, regression_json, performance_json, logs_json, error, duration_ms, status, sort_order, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				assertion_results_json, regression_json, performance_json, logs_json, error, duration_ms, status, sort_order, created_at,
+				socket_json)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				res.ID, run.ID, reqID, mustJSON(res.Request), resp, mustJSON(res.AssertionResults), reg, perf, mustJSON(nonNilLogs(res.Logs)),
-				res.Error, res.DurationMs, string(res.Status), i, ts(res.CreatedAt))
+				res.Error, res.DurationMs, string(res.Status), i, ts(res.CreatedAt), sock)
 			if err != nil {
 				return err
 			}
@@ -302,7 +306,8 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	}
 	run := runs[0]
 	rows, err := s.db.QueryContext(ctx, `SELECT id, IFNULL(request_id, ''), request_summary_json, IFNULL(response_summary_json, ''),
-		assertion_results_json, IFNULL(regression_json, ''), IFNULL(performance_json, ''), logs_json, error, duration_ms, status, created_at
+		assertion_results_json, IFNULL(regression_json, ''), IFNULL(performance_json, ''), logs_json, error, duration_ms, status, created_at,
+		IFNULL(socket_json, '')
 		FROM run_results WHERE run_id = ? ORDER BY sort_order`, id)
 	if err != nil {
 		return run, err
@@ -311,8 +316,9 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	run.Results = []domain.RunResult{}
 	for rows.Next() {
 		var r domain.RunResult
-		var reqJSON, respJSON, assertJSON, regJSON, perfJSON, logsJSON, created string
-		if err := rows.Scan(&r.ID, &r.RequestID, &reqJSON, &respJSON, &assertJSON, &regJSON, &perfJSON, &logsJSON, &r.Error, &r.DurationMs, &r.Status, &created); err != nil {
+		var reqJSON, respJSON, assertJSON, regJSON, perfJSON, logsJSON, created, sockJSON string
+		if err := rows.Scan(&r.ID, &r.RequestID, &reqJSON, &respJSON, &assertJSON, &regJSON, &perfJSON, &logsJSON, &r.Error,
+			&r.DurationMs, &r.Status, &created, &sockJSON); err != nil {
 			return run, err
 		}
 		r.RunID = id
@@ -333,6 +339,10 @@ func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 		if perfJSON != "" {
 			r.Performance = &domain.PerformanceResult{}
 			unmarshalLenient(perfJSON, r.Performance)
+		}
+		if sockJSON != "" {
+			r.Socket = &domain.SocketTranscript{}
+			unmarshalLenient(sockJSON, r.Socket)
 		}
 		r.CreatedAt = parseTS(created)
 		run.Results = append(run.Results, r)
@@ -476,4 +486,28 @@ func (s *Store) ListCollectionBaselines(ctx context.Context, collectionID string
 		out = append(out, nb)
 	}
 	return out, rows.Err()
+}
+
+// limitTranscript keeps a socket transcript within the history body limit
+// (as for response bodies): frames are kept in order until their data adds up
+// to the limit; the rest are counted as dropped. A negative limit keeps everything.
+func limitTranscript(t domain.SocketTranscript, limit int) domain.SocketTranscript {
+	if limit < 0 {
+		return t
+	}
+	frames := make([]domain.SocketFrame, 0, len(t.Frames))
+	used := 0
+	for i, f := range t.Frames {
+		if used >= limit {
+			t.Dropped += len(t.Frames) - i
+			break
+		}
+		if room := limit - used; len(f.Data) > room {
+			f.Data, f.Truncated = f.Data[:room], true
+		}
+		used += len(f.Data)
+		frames = append(frames, f)
+	}
+	t.Frames = frames
+	return t
 }

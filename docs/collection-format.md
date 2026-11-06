@@ -44,6 +44,45 @@ IDs in a file only link folders and requests to each other. **Every ID is regene
 - `method`: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
 - `bodyType`: `none`, `json`, `text`
 - `auth.type`: `none`; `bearer` (`token`); `basic` (`username`, `password`); `apikey` (`keyName`, `keyValue`, `keyIn`: `header` | `query`); `inherit` — use the collection's `auth`
+- `kind` (optional): `http` (default), `websocket` or `socketio`. Socket requests also have `socket` (below); their
+  `method` is always `GET`.
+
+### Socket requests
+
+```json
+{
+  "name": "Chat events",
+  "kind": "socketio",
+  "url": "{{base_url}}/chat",
+  "auth": { "type": "inherit" },
+  "timeoutMs": 10000,
+  "socket": {
+    "subprotocols": [],
+    "path": "/socket.io/",
+    "authPayload": "{\"token\": \"{{token}}\"}",
+    "messages": [{ "id": "m1", "name": "Join", "event": "join", "body": "{\"room\": \"qa\"}", "bodyType": "json" }],
+    "steps": [
+      { "id": "s1", "kind": "send", "enabled": true, "message": { "event": "join", "body": "{\"room\": \"qa\"}", "bodyType": "json", "ack": true }, "assertions": [], "timeoutMs": 0 },
+      { "id": "s2", "kind": "expect", "enabled": true, "event": "join", "expectAck": true, "timeoutMs": 3000,
+        "message": { "event": "", "body": "", "bodyType": "text" },
+        "assertions": [{ "kind": "json_path", "path": "ok", "operator": "eq", "expected": true, "enabled": true }] },
+      { "id": "s3", "kind": "wait", "enabled": true, "timeoutMs": 200, "message": { "event": "", "body": "", "bodyType": "text" }, "assertions": [] }
+    ]
+  }
+}
+```
+
+- `socket.subprotocols`: offered in `Sec-WebSocket-Protocol` (WebSocket only).
+- `socket.path`: Socket.IO server path (default `/socket.io/`); the URL path is the namespace.
+- `socket.authPayload`: JSON object sent with the Socket.IO CONNECT packet, or `""`.
+- Messages (`messages[]`, `steps[].message`): `event` (required for Socket.IO, not `connect`, `disconnect` or other
+  reserved names), `body`, `bodyType` (`json` | `text`), `ack` (Socket.IO acknowledgement).
+- `steps[].kind`: `send`, `expect` (optional `event`, `expectAck`, `assertions` of kind `json_path`, `body`,
+  `valid_json`, `required_fields` or `aggregate`, `timeoutMs` 1–60000, default 5000) or `wait` (`timeoutMs` 1–60000).
+- At most 100 steps and 100 saved messages. Older versions of the app ignore `kind` and `socket` and import socket
+  requests as HTTP `GET` requests.
+
+See [sockets.md](sockets.md) for how tests run.
 
 ### Collection auth
 

@@ -83,10 +83,12 @@ type RunResult struct {
 	// check is off or the request is not saved.
 	Performance *PerformanceResult `json:"performance,omitempty"`
 	Logs        []ScriptLog        `json:"logs,omitempty"`
-	DurationMs  int64              `json:"durationMs"`
-	Status      ResultStatus       `json:"status"`
-	Error       string             `json:"error,omitempty"`
-	CreatedAt   time.Time          `json:"createdAt"`
+	// Socket is the message transcript of a WebSocket or Socket.IO test.
+	Socket     *SocketTranscript `json:"socket,omitempty"`
+	DurationMs int64             `json:"durationMs"`
+	Status     ResultStatus      `json:"status"`
+	Error      string            `json:"error,omitempty"`
+	CreatedAt  time.Time         `json:"createdAt"`
 }
 
 // Run kinds.

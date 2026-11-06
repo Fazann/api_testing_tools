@@ -125,6 +125,13 @@ footer{margin-top:24px;font-size:12px}
     {{with .Performance}}{{if .Checked}}
     <h3>Response time: <span class="{{if .Slower}}{{if eq .Mode "fail"}}failed{{else}}warn{{end}}{{else}}passed{{end}}">{{.Message}}</span></h3>
     {{end}}{{end}}
+    {{with .Socket}}
+    <h3>Messages · {{len .Frames}}{{if .Dropped}} (+{{.Dropped}} not kept){{end}}{{if .SessionID}} · session <code>{{.SessionID}}</code>{{end}}</h3>
+    <div class="wrap"><table>
+      <tr><th>Time</th><th></th><th>Event</th><th>Data</th></tr>
+      {{range .Frames}}<tr class="{{.Direction}}"><td>{{ms .AtMs}}</td><td>{{if eq .Direction "sent"}}↑ sent{{else if eq .Direction "received"}}↓ received{{if .Ack}} (ack){{end}}{{else}}·{{end}}</td><td><code>{{.Event}}</code></td><td><code>{{truncate .Data 2000}}</code>{{if .Binary}} <span class="muted">(binary, base64)</span>{{end}}</td></tr>{{end}}
+    </table></div>
+    {{end}}
     {{with .Response}}
     <h3>Response · {{.Status}} · {{bytes .BodyBytes}}{{if .Truncated}} (truncated){{end}}</h3>
     {{if .Redirects}}<p class="muted">Redirects: {{range .Redirects}}<code>{{.}}</code> {{end}}</p>{{end}}

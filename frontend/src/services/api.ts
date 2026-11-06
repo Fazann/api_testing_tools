@@ -25,6 +25,10 @@ import type {
   RunResult,
   SecretFinding,
   Settings,
+  SocketEvent,
+  SocketFrame,
+  SocketMessage,
+  SocketSession,
   Warning,
 } from '@/types';
 
@@ -134,7 +138,18 @@ export const api = {
   compactDatabase: () => call<void>('CompactDatabase'),
   deleteAllData: () => call<void>('DeleteAllData'),
   chooseCACertFile: () => call<string>('ChooseCACertFile'),
+
+  connectSocket: (sessionId: string, r: Request, envId: string, confirmed: boolean) =>
+    call<SocketSession>('ConnectSocket', sessionId, r, envId, confirmed),
+  sendSocketMessage: (sessionId: string, m: SocketMessage) => call<SocketFrame>('SendSocketMessage', sessionId, m),
+  disconnectSocket: (sessionId: string) => call<boolean>('DisconnectSocket', sessionId),
 };
+
+/** Subscribes to console socket events (messages and closes of every session). Returns an unsubscribe function. */
+export function onSocketEvent(cb: (e: SocketEvent) => void): () => void {
+  if (!window.runtime?.EventsOn) return () => {};
+  return window.runtime.EventsOn('socket:event', (e) => cb(e as SocketEvent));
+}
 
 /** Subscribes to collection-run progress events. Returns an unsubscribe function. */
 export function onRunProgress(cb: (p: RunProgress) => void): () => void {

@@ -11,6 +11,7 @@ import TextField from '@/components/base/TextField.vue';
 import AssertionResults from '@/components/response/AssertionResults.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { api } from '@/services/api';
+import { isSocket } from '@/services/socket';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
@@ -25,7 +26,9 @@ const req = computed(() => ws.draft!);
 const saved = computed(
   () => !!req.value.id && !!ws.trees[req.value.collectionId]?.requests.some((r) => r.id === req.value.id),
 );
-const others = computed(() => (ws.trees[req.value.collectionId]?.requests ?? []).filter((r) => r.id !== req.value.id));
+const others = computed(() =>
+  (ws.trees[req.value.collectionId]?.requests ?? []).filter((r) => r.id !== req.value.id && !isSocket(r.kind)),
+);
 
 function defaults(requestId: string): RaceTest {
   return {

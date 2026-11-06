@@ -117,6 +117,7 @@ describe('VariableInput', () => {
       collectionId: 'c1',
       parentId: '',
       name: 'R',
+      kind: 'http',
       method: 'GET',
       url: '{{api_root}}/x',
       headers: [],

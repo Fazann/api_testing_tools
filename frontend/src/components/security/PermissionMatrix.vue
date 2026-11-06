@@ -10,6 +10,7 @@ import MethodBadge from '@/components/base/MethodBadge.vue';
 import VariableTable from '@/components/variables/VariableTable.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { api, onMatrixProgress } from '@/services/api';
+import { isSocket } from '@/services/socket';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
 import type { Access, CollectionTree, MatrixCell, MatrixReport, PermissionMatrix, Request, Role } from '@/types';
@@ -47,7 +48,9 @@ onMounted(load);
 onBeforeUnmount(() => unsubscribe?.());
 
 const selected = computed(() => new Set(matrix.value?.requestIds ?? []));
-const chosen = computed(() => props.tree.requests.filter((r) => selected.value.has(r.id)));
+// Socket requests have no status code to judge access by, so the matrix only offers HTTP requests.
+const requests = computed(() => props.tree.requests.filter((r) => !isSocket(r.kind)));
+const chosen = computed(() => requests.value.filter((r) => selected.value.has(r.id)));
 const destructive = computed(() => chosen.value.filter((r) => isDestructive(r.method)));
 
 function toggleRequest(id: string) {
@@ -55,7 +58,7 @@ function toggleRequest(id: string) {
   m.requestIds = selected.value.has(id) ? m.requestIds.filter((x) => x !== id) : [...m.requestIds, id];
 }
 function selectWhere(pred: (r: Request) => boolean) {
-  matrix.value!.requestIds = props.tree.requests.filter(pred).map((r) => r.id);
+  matrix.value!.requestIds = requests.value.filter(pred).map((r) => r.id);
 }
 
 // ---- roles ----
@@ -317,7 +320,7 @@ const columns = computed(() => [
       <DataTable
         class="cells"
         :columns="columns"
-        :rows="tree.requests"
+        :rows="requests"
         :row-key="(r) => r.id"
         :row-class="(r) => ({ off: !selected.has(r.id) })"
       >
@@ -349,7 +352,7 @@ const columns = computed(() => [
           </BaseButton>
         </template>
       </DataTable>
-      <p v-if="tree.requests.length === 0" class="muted small">This collection has no requests.</p>
+      <p v-if="requests.length === 0" class="muted small">This collection has no HTTP requests.</p>
     </div>
 
     <div class="row actions">

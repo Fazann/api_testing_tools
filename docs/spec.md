@@ -126,6 +126,16 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 5. Rerun after authentication, role or middleware changes. A request allowed where deny is expected is reported as
    broken access control (including IDOR); a request denied where allow is expected is reported as lost access.
 
+### Workflow G: Test a WebSocket or Socket.IO API
+
+1. Create a request and set its type to **WebSocket** or **Socket.IO**; enter the URL (for Socket.IO the URL path is
+   the namespace) and the auth, headers or Socket.IO auth payload the server expects.
+2. Open the **Console**, connect, send messages or events and watch what arrives; save useful messages.
+3. Turn the exchange into a **test**: send steps, expect steps (event, acknowledgement and checks on the message body,
+   within a time limit) and waits.
+4. **Run test**. The steps run in order on one connection; the result lists each step and every message.
+5. Collection runs and the CLI run the test with the HTTP requests, so CI catches real-time regressions too.
+
 ---
 
 ## 4. MVP Feature Requirements
@@ -213,6 +223,7 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 - Request chaining and extracting values from prior responses
 - OpenAPI import
 - Test templates for common API patterns
+- ~~WebSocket and Socket.IO requests~~ — done, see the section below and [sockets.md](sockets.md)
 
 ### Business-security tests — implemented after the MVP
 
@@ -251,6 +262,50 @@ These set the product apart from general-purpose API clients. Guides: [race-test
 
 **Not yet done:** including race tests and matrices in collection export and duplication; dedicated sections in HTML
 reports; running them from the CLI.
+
+### WebSocket and Socket.IO requests — implemented after the MVP
+
+Real-time APIs regress like HTTP ones: a renamed event, a changed payload or a broken auth check. Guide:
+[sockets.md](sockets.md).
+
+#### Requests
+
+- A request has a **kind**: `http` (the default, also for older data), `websocket` or `socketio`. Socket requests share
+  URL, query, headers, auth (including inherited collection auth), timeout, variables and pre-request scripts with
+  HTTP requests, and always use `GET` for the handshake. Body, HTTP assertions and post-response scripts do not apply;
+  switching the kind keeps them so switching back restores them.
+- **WebSocket:** `ws://` and `wss://` URLs (`http(s)://` are converted); optional subprotocols.
+- **Socket.IO v3/v4:** Engine.IO protocol 4 over the WebSocket transport only. As in the official client, the URL path
+  is the namespace and the server path is a separate setting (default `/socket.io/`). An optional JSON-object auth
+  payload is sent with CONNECT; `connect_error` messages are shown. Ping/pong is handled; a server that stops pinging
+  ends the connection. Binary attachments, long-polling and Engine.IO 3 (Socket.IO v2) are not supported.
+- **Messages** have a body sent as JSON or text; Socket.IO messages also have an event name (reserved names such as
+  `connect` are rejected) and may ask for an acknowledgement. Saved messages are stored with the request.
+- Connections follow the HTTP client's rules: TLS verification and extra CA certificates, proxy setting, blocked
+  link-local and metadata destinations, no redirects. Incoming messages are bounded by the response size limit.
+
+#### Console
+
+- Connect, send (saved or ad-hoc) messages, see sent, received and connection messages live with timestamps; filter,
+  search and expand them. At most 1,000 messages per console and 20 open connections.
+- Connecting runs the same preflight checks as Send and the pre-request scripts (keeping the variables they set). In a
+  protected environment the user confirms first, because console messages may change data.
+- Console traffic is not stored in history.
+
+#### Tests
+
+- A socket request's test is an ordered list of steps on one connection: **send** a message, **expect** a received
+  message (optional Socket.IO event, acknowledgement or event, and checks on the body using the existing JSON path,
+  body, valid-JSON, required-fields and aggregate checks) within a timeout, or **wait**.
+- Expect steps match any not-yet-matched message received since connecting, so replies may arrive in any order; each
+  message satisfies at most one expect step. A failed expect reports how many candidates there were and why the
+  closest one failed.
+- The request timeout bounds connecting and the whole test. When it expires, the run is cancelled or the server closes
+  the connection, the remaining steps are reported as not run.
+- Results are ordinary run results: one result per step, the handshake as the response, and a transcript of every
+  message. They appear in history, collection runs, JSON/HTML/JUnit reports and the CLI; secrets are redacted.
+- Tests that send messages count as possibly modifying data in preflight warnings and protected environments.
+- Race tests, permission matrices, baselines and response-time checks stay HTTP-only.
 
 ### P2 — Only after validating demand
 
@@ -457,7 +512,9 @@ api-regression-guard/
 │   │   └── run.go
 │   ├── httpclient/
 │   │   ├── client.go
-│   │   └── safety.go
+│   │   ├── safety.go
+│   │   └── websocket.go      # WebSocket dialer with the same network rules
+│   ├── socket/               # WebSocket and Socket.IO connections (sockettest: local test servers)
 │   ├── runner/
 │   │   ├── runner.go
 │   │   └── concurrency.go
@@ -491,6 +548,7 @@ api-regression-guard/
 │   │   │   ├── run/
 │   │   │   ├── performance/
 │   │   │   ├── security/
+│   │   │   ├── socket/       # socket console, steps, messages, frame list
 │   │   │   └── variables/
 │   │   ├── composables/      # useAsyncAction
 │   │   ├── views/            # one per top-bar tab
@@ -541,6 +599,9 @@ Use SQLite migrations from the beginning.
 - `body_type`: text
 - `auth_json`: text with secret values excluded or encrypted as designed
 - `timeout_ms`: integer
+- `kind`: text — `http`, `websocket` or `socketio` (default `http`)
+- `socket_json`: text, optional — socket settings: subprotocols, Socket.IO path and auth payload, saved messages,
+  test steps
 - `created_at`: timestamp
 - `updated_at`: timestamp
 
@@ -593,6 +654,7 @@ Use SQLite migrations from the beginning.
 - `request_summary_json`: text with secrets removed
 - `response_summary_json`: text with secrets removed
 - `assertion_results_json`: text
+- `socket_json`: text, optional — message transcript of a socket test, within the history body limit
 - `duration_ms`: integer
 - `status`: text
 - `created_at`: timestamp
@@ -686,6 +748,7 @@ API clients can access sensitive systems, so security must be part of the MVP.
 11. Settings and data-management screen
 12. Race test tab on the request editor (settings, verdict, status-code counts, every response)
 13. Permissions tab in the collection dialog (roles, request × role grid, mismatch list)
+14. Socket request editor (type selector, Messages, test steps, socket options) with a live console and test result
 
 Keep the first version focused. Do not build a complex dashboard before the request and test workflows are reliable.
 

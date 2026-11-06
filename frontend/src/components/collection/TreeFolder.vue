@@ -5,6 +5,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import MenuButton from '@/components/base/MenuButton.vue';
 import MethodBadge from '@/components/base/MethodBadge.vue';
 import { useOpenRequest } from '@/services/navigation';
+import { requestBadge } from '@/services/socket';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
@@ -96,7 +97,7 @@ async function deleteRequest(r: Request) {
     <li v-for="r in requests" :key="r.id">
       <div class="node" :class="{ active: ws.draft?.id === r.id }" :style="{ paddingLeft: depth * 14 + 6 + 'px' }">
         <BaseButton variant="ghost" class="label" @click="openRequest(r)">
-          <MethodBadge :method="r.method" />
+          <MethodBadge :method="requestBadge(r)" />
           <span class="name">{{ r.name }}</span>
           <span
             v-if="ws.results[r.id]"

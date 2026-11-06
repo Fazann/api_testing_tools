@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
@@ -17,11 +19,13 @@ import {
 } from '@/services/model';
 import type { Assertion, AssertionKind } from '@/types';
 
-const props = defineProps<{ assertions: Assertion[] }>();
-const kinds = Object.keys(KIND_LABELS) as AssertionKind[];
-const KIND_OPTIONS = kinds.map((k) => ({ value: k, label: KIND_LABELS[k] }));
+// `kinds` limits the checks offered (socket messages have no status or headers); `compact` hides the help
+// texts, for check lists nested inside another editor.
+const props = defineProps<{ assertions: Assertion[]; kinds?: readonly AssertionKind[]; compact?: boolean }>();
+const kinds = computed(() => props.kinds ?? (Object.keys(KIND_LABELS) as AssertionKind[]));
+const KIND_OPTIONS = computed(() => kinds.value.map((k) => ({ value: k, label: KIND_LABELS[k] })));
 const FUNCTIONS = (['count', 'sum', 'min', 'max'] as const).map((f) => ({ value: f, label: f }));
-const QUICK_ADD: AssertionKind[] = [
+const ALL_QUICK_ADD: AssertionKind[] = [
   'status',
   'json_path',
   'header',
@@ -31,6 +35,7 @@ const QUICK_ADD: AssertionKind[] = [
   'valid_json',
   'body',
 ];
+const QUICK_ADD = computed(() => ALL_QUICK_ADD.filter((k) => kinds.value.includes(k)));
 const operatorOptions = (kind: AssertionKind) =>
   OPERATORS[kind].map((op) => ({ value: op, label: OPERATOR_LABELS[op] }));
 
@@ -93,7 +98,7 @@ function move(i: number, d: number) {
 
 <template>
   <div class="stack">
-    <CalloutBox v-if="assertions.length === 0" tone="info">
+    <CalloutBox v-if="assertions.length === 0 && !compact" tone="info">
       No tests yet. Add checks for the status code and the business values that matter, for example
       <code>data.balance</code> is a number or the item amounts sum to <code>total</code>.
     </CalloutBox>
@@ -152,7 +157,7 @@ function move(i: number, d: number) {
       <span class="muted small">Add:</span>
       <BaseButton v-for="k in QUICK_ADD" :key="k" @click="add(k)">{{ KIND_LABELS[k] }}</BaseButton>
     </div>
-    <p class="muted small">
+    <p v-if="!compact" class="muted small">
       Paths: <code>data.items[0].id</code>, <code>items[*].amount</code> (all items), <code>meta["request-id"]</code>.
       Expected values are JSON; compare to another field with <code>{"$path": "data.total"}</code>; use
       <code v-pre>{{ variables }}</code> from the environment.

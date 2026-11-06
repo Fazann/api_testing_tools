@@ -140,5 +140,14 @@ export const useRunner = defineStore('runner', () => {
     if (collectionRun.value?.running) await api.cancel(collectionRun.value.opId);
   }
 
-  return { sendingOp, collectionRun, send, cancelSend, runCollection, cancelCollectionRun };
+  return {
+    sendingOp,
+    collectionRun,
+    send,
+    cancelSend,
+    runCollection,
+    cancelCollectionRun,
+    reviewWarnings,
+    reloadVariables,
+  };
 });

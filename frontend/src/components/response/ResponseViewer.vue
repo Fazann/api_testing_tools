@@ -6,6 +6,7 @@ import CalloutBox from '@/components/base/CalloutBox.vue';
 import MethodBadge from '@/components/base/MethodBadge.vue';
 import StatusBadge from '@/components/base/StatusBadge.vue';
 import TabBar, { type Tab as TabItem } from '@/components/base/TabBar.vue';
+import SocketFrameList from '@/components/socket/SocketFrameList.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { api } from '@/services/api';
 import { HIGHLIGHT_LIMIT, highlightJson } from '@/services/highlight';
@@ -24,13 +25,15 @@ const ui = useUi();
 const envs = useEnvironments();
 const { run } = useAsyncAction();
 
-type Tab = 'body' | 'headers' | 'tests' | 'regression' | 'previous' | 'request' | 'console';
+type Tab = 'body' | 'headers' | 'tests' | 'regression' | 'previous' | 'request' | 'console' | 'messages';
 const tab = ref<Tab>('tests');
 const approving = ref(false);
 const baseline = ref<Baseline | null>(null);
 const previous = ref<PreviousComparison | null>(null);
 
 const resp = computed(() => props.result.response);
+/** Transcript of a WebSocket or Socket.IO test; such results have a handshake instead of a response body. */
+const transcript = computed(() => props.result.socket ?? null);
 /** Only shown when the response was actually checked and found slower. */
 const perf = computed(() => props.result.performance ?? null);
 const failedTests = computed(() => props.result.assertionResults.filter((a) => !a.passed).length);
@@ -60,10 +63,16 @@ const tabs = computed<TabItem<Tab>[]>(() => [
       : undefined,
     alert: failedTests.value > 0,
   },
+  { id: 'messages', label: 'Messages', count: transcript.value?.frames.length, hidden: !transcript.value },
   { id: 'regression', label: 'Baseline diff', count: regressionDiffs.value.length, hidden: !props.result.regression },
-  { id: 'body', label: 'Body', disabled: !resp.value },
-  { id: 'headers', label: 'Headers', count: resp.value?.headers?.length ?? undefined, disabled: !resp.value },
-  { id: 'previous', label: 'vs previous run', hidden: !props.requestId },
+  { id: 'body', label: 'Body', disabled: !resp.value, hidden: !!transcript.value },
+  {
+    id: 'headers',
+    label: transcript.value ? 'Handshake headers' : 'Headers',
+    count: resp.value?.headers?.length ?? undefined,
+    disabled: !resp.value,
+  },
+  { id: 'previous', label: 'vs previous run', hidden: !props.requestId || !!transcript.value },
   { id: 'request', label: 'Sent request' },
   { id: 'console', label: 'Console', count: logs.value.length, hidden: !logs.value.length },
 ]);
@@ -78,7 +87,7 @@ watch(
     previous.value = null;
     if (props.result.regression && !props.result.regression.passed) tab.value = 'regression';
     else if (failedTests.value > 0 || props.result.assertionResults.length > 0) tab.value = 'tests';
-    else tab.value = 'body';
+    else tab.value = transcript.value ? 'messages' : 'body';
   },
   { immediate: true },
 );
@@ -115,7 +124,12 @@ async function copyBody() {
         <span v-if="perf?.slower" class="perf-slow" :class="perf.mode" :title="perf.message"
           >▲ {{ perf.ratio }}× slower than usual{{ perf.mode === 'fail' ? ' (fails)' : '' }}</span
         >
-        <span class="muted"
+        <span v-if="transcript" class="muted"
+          >{{ transcript.frames.length }} messages<span v-if="transcript.dropped" class="warn">
+            (+{{ transcript.dropped }} not kept)</span
+          ></span
+        >
+        <span v-else class="muted"
           >{{ formatBytes(resp.bodyBytes) }}<span v-if="resp.truncated" class="warn"> (truncated at limit)</span></span
         >
       </template>
@@ -128,7 +142,7 @@ async function copyBody() {
       <span class="spacer" />
       <span class="muted small">{{ formatTime(result.createdAt) }}</span>
       <BaseButton
-        v-if="allowApprove && resp && requestId"
+        v-if="allowApprove && resp && requestId && !transcript"
         small
         title="Review and approve this response as the baseline"
         @click="openApprove"
@@ -140,6 +154,11 @@ async function copyBody() {
     <TabBar v-model="tab" :tabs="tabs" />
     <div class="tab-body">
       <AssertionResults v-if="tab === 'tests'" :results="result.assertionResults" />
+      <SocketFrameList
+        v-else-if="tab === 'messages' && transcript"
+        :frames="transcript.frames"
+        :kind="transcript.kind"
+      />
       <div v-else-if="tab === 'regression' && result.regression" class="stack">
         <p :class="result.regression.passed ? 'pass' : 'fail'">{{ result.regression.message }}</p>
         <DiffTable v-if="regressionDiffs.length" :diffs="regressionDiffs" />

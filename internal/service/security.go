@@ -96,11 +96,17 @@ func (s *Service) RunRaceTest(ctx context.Context, opID string, t domain.RaceTes
 	if err != nil {
 		return security.RaceReport{}, err
 	}
+	if req.Kind.IsSocket() {
+		return security.RaceReport{}, errors.New("race tests send HTTP requests; WebSocket and Socket.IO requests are not supported")
+	}
 	reqs := []domain.Request{req}
 	if t.Check != nil {
 		check, err := s.store.GetRequest(ctx, t.Check.RequestID)
 		if err != nil {
 			return security.RaceReport{}, errors.New("the state check's request no longer exists")
+		}
+		if check.Kind.IsSocket() {
+			return security.RaceReport{}, errors.New("the state check must be an HTTP request")
 		}
 		reqs = append(reqs, check)
 	}
@@ -267,7 +273,8 @@ func (s *Service) RunPermissionMatrix(ctx context.Context, opID, collectionID, e
 	}
 	var reqs []domain.Request
 	for _, r := range OrderedRequests(tree, "") {
-		if selected[r.ID] {
+		// Socket requests have no status code to judge access by.
+		if selected[r.ID] && !r.Kind.IsSocket() {
 			reqs = append(reqs, r)
 		}
 	}

@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+
 import BaseButton from '@/components/base/BaseButton.vue';
 import EmptyState from '@/components/base/EmptyState.vue';
+import TabBar from '@/components/base/TabBar.vue';
 import RequestEditor from '@/components/request/RequestEditor.vue';
 import ResponseViewer from '@/components/response/ResponseViewer.vue';
+import SocketConsole from '@/components/socket/SocketConsole.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
+import { isSocket } from '@/services/socket';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
@@ -12,6 +17,22 @@ const ws = useWorkspace();
 const ui = useUi();
 const { run } = useAsyncAction();
 const runner = useRunner();
+
+// Socket requests show their live console and the result of the last test run in tabs.
+const socket = computed(() => !!ws.draft && isSocket(ws.draft.kind));
+const socketTab = ref<'console' | 'result'>('console');
+const socketTabs = computed(() => [
+  { id: 'console' as const, label: 'Console' },
+  { id: 'result' as const, label: 'Test result', disabled: !ws.currentResult },
+]);
+watch(
+  () => ws.currentResult?.id,
+  (id) => (socketTab.value = id ? 'result' : 'console'),
+);
+watch(
+  () => ws.draft?.id,
+  () => (socketTab.value = 'console'),
+);
 
 async function quickStart() {
   const name = await ui.prompt({ title: 'New collection', value: 'My API tests', confirmLabel: 'Create' });
@@ -48,12 +69,18 @@ async function quickStart() {
   <div v-else class="split">
     <RequestEditor class="top" />
     <div class="bottom">
+      <TabBar v-if="socket" v-model="socketTab" class="socket-tabs" :tabs="socketTabs" />
       <EmptyState v-if="runner.sendingOp">
-        <p>Sending… <BaseButton small @click="runner.cancelSend()">Cancel (Esc)</BaseButton></p>
+        <p>
+          {{ socket ? 'Running the test…' : 'Sending…' }}
+          <BaseButton small @click="runner.cancelSend()">Cancel (Esc)</BaseButton>
+        </p>
       </EmptyState>
+      <SocketConsole v-else-if="socket && socketTab === 'console'" :request="ws.draft" />
       <ResponseViewer v-else-if="ws.currentResult" :result="ws.currentResult" :request-id="ws.draft.id" allow-approve />
       <EmptyState v-else small>
-        <p>Press <strong>Send</strong> (Ctrl+Enter) to run this request and its tests.</p>
+        <p v-if="socket">Press <strong>Run test</strong> (Ctrl+Enter) to connect and run the test steps.</p>
+        <p v-else>Press <strong>Send</strong> (Ctrl+Enter) to run this request and its tests.</p>
       </EmptyState>
     </div>
   </div>
@@ -82,6 +109,9 @@ async function quickStart() {
   flex: 1 1 50%;
   min-height: 200px;
   border-bottom: 1px solid var(--line);
+}
+.socket-tabs {
+  padding: 0 12px;
 }
 .bottom {
   flex: 1 1 50%;

@@ -36,8 +36,10 @@ func (s *Service) perfInputs(ctx context.Context, reqs []domain.Request, env *do
 	envID, envName := envKey(env)
 	out := make([]perfInput, len(reqs))
 	for i, r := range reqs {
-		if r.ID == "" {
-			continue // unsaved draft: no history
+		if r.ID == "" || r.Kind.IsSocket() {
+			// Unsaved drafts have no history; a socket test's duration
+			// includes its waits, so it says nothing about speed.
+			continue
 		}
 		c, err := s.store.GetPerformanceCheck(ctx, r.ID)
 		if err != nil {

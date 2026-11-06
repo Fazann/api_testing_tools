@@ -28,6 +28,9 @@ func NewApp(svc *service.Service) *App { return &App{svc: svc} }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
 
+// shutdown closes open socket connections so servers see a clean disconnect.
+func (a *App) shutdown(context.Context) { a.svc.CloseSockets() }
+
 // RunProgress is emitted as "run:progress" while a collection runs.
 type RunProgress struct {
 	OpID   string           `json:"opId"`
@@ -131,6 +134,22 @@ func (a *App) RunCollection(opID, collectionID, folderID, envID string, confirme
 }
 
 func (a *App) Cancel(opID string) bool { return a.svc.Cancel(opID) }
+
+// ---- WebSocket and Socket.IO console ----
+
+// ConnectSocket opens a console connection; received messages and the end of
+// the connection arrive as "socket:event" events (service.SocketEvent).
+func (a *App) ConnectSocket(sessionID string, r domain.Request, envID string, confirmed bool) (service.SocketSession, error) {
+	return a.svc.ConnectSocket(a.ctx, sessionID, r, envID, confirmed, func(ev service.SocketEvent) {
+		runtime.EventsEmit(a.ctx, "socket:event", ev)
+	})
+}
+
+func (a *App) SendSocketMessage(sessionID string, m domain.SocketMessage) (domain.SocketFrame, error) {
+	return a.svc.SendSocketMessage(sessionID, m)
+}
+
+func (a *App) DisconnectSocket(sessionID string) bool { return a.svc.DisconnectSocket(sessionID) }
 
 // ---- security tests ----
 

@@ -104,3 +104,79 @@ describe('RequestView send', () => {
     expect(wrapper.text()).toContain('1 baseline difference(s)');
   });
 });
+
+describe('RequestView with a socket request', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  const socketResult = result({
+    request: { name: 'Events', method: 'SIO', url: 'http://localhost/admin', headers: [] },
+    response: {
+      statusCode: 101,
+      status: '101 Switching Protocols',
+      headers: [],
+      body: '',
+      bodyBytes: 0,
+      truncated: false,
+      contentType: '',
+    },
+    assertionResults: [
+      {
+        assertionId: 's1',
+        kind: 'socket_step',
+        description: 'Step 1: send echo',
+        passed: true,
+        expected: '',
+        actual: '',
+        message: '',
+      },
+      {
+        assertionId: 's2',
+        kind: 'socket_step',
+        description: 'Step 2: expect a message echo',
+        passed: false,
+        expected: '',
+        actual: '',
+        message: 'nothing matched within 5000 ms',
+      },
+    ],
+    status: 'failed',
+    socket: {
+      kind: 'socketio',
+      sessionId: 'sid-1',
+      frames: [
+        { direction: 'system', data: 'connected', atMs: 0 },
+        { direction: 'sent', event: 'echo', data: '{"n":1}', atMs: 3 },
+        { direction: 'received', event: 'other', data: '{"n":2}', atMs: 8 },
+      ],
+    },
+  });
+
+  it('switches the editor to socket tabs, runs the test and shows steps and messages', async () => {
+    const { wrapper, calls } = setup(socketResult);
+    await wrapper.find('select[aria-label="Request type"]').setValue('socketio');
+    const tabs = wrapper.findAll('[role="tab"]').map((t) => t.text());
+    expect(tabs.join(' ')).toContain('Messages');
+    expect(tabs.join(' ')).not.toContain('Body');
+    expect(tabs.join(' ')).not.toContain('Race test');
+    expect(wrapper.find('select[aria-label="HTTP method"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Copy as cURL');
+    expect(wrapper.text()).toContain('Console');
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Run test')!
+      .trigger('click');
+    await flushPromises();
+    expect(calls).toEqual(['PreflightRequest', 'SendRequest']);
+    expect(wrapper.text()).toContain('nothing matched within 5000 ms');
+    expect(wrapper.text()).toContain('3 messages');
+    expect(wrapper.text()).not.toContain('Approve as baseline');
+
+    const messagesTab = wrapper.findAll('[role="tab"]').find((t) => t.text().startsWith('Messages3'))!;
+    await messagesTab.trigger('click');
+    expect(wrapper.text()).toContain('{"n":2}');
+  });
+});

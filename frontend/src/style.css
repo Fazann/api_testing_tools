@@ -228,6 +228,10 @@ button.ghost:hover:not(:disabled) {
 .method.OPTIONS {
   color: var(--fg-muted);
 }
+.method.WS,
+.method.SIO {
+  color: var(--accent);
+}
 
 .tabs {
   display: flex;
