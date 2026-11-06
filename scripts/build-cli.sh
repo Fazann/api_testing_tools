@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the headless CLI (test-tool-kit-cli) for every platform and packages it into release/.
+# Builds the headless CLI (api-test-kits-cli) for every platform and packages it into release/.
 #
 #   scripts/build-cli.sh [-v VERSION] [os/arch ...]
 #
@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-APP="test-tool-kit-cli"
+APP="api-test-kits-cli"
 MODULE="api-test-kits"
 RELEASE_DIR="$ROOT/release"
 VERSION=""
@@ -42,7 +42,7 @@ for t in "${TARGETS[@]}"; do
   [[ "$os" == windows ]] && bin="$APP.exe"
   echo "==> Building $t"
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
-    -ldflags "-s -w -X $MODULE/internal/service.Version=$VERSION" -o "$stage/$name/$bin" ./cmd/test-tool-kit-cli
+    -ldflags "-s -w -X $MODULE/internal/service.Version=$VERSION" -o "$stage/$name/$bin" ./cmd/api-test-kits-cli
   cp docs/cli.md "$stage/$name/README.md"
   [[ -f LICENSE ]] && cp LICENSE "$stage/$name/"
   if [[ "$os" == windows ]]; then

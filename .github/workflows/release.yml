@@ -1,0 +1,58 @@
+name: Release
+
+# Pushing a version tag (made by `make bump-patch` / `make release-patch`)
+# builds every package, writes the update manifest and publishes a GitHub
+# release. Installed apps read latest.json from the newest release and update
+# themselves in place.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      UPDATE_URL: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+      RELEASE_PAGE_URL: https://github.com/${{ github.repository }}/releases/tag/v{version}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags and history for the version and release notes
+      # actions/checkout fetches tags lightweight; get the annotated tag message too.
+      - run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev nsis zip
+      - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+
+      - name: Check the tag matches wails.json
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(sed -n 's/.*"productVersion": *"\([^"]*\)".*/\1/p' wails.json)"
+          [ "$want" = "$have" ] || { echo "tag $want but wails.json says $have; use make bump-patch" >&2; exit 1; }
+
+      - name: Linux + Windows builds and installers
+        run: scripts/build.sh -v "${GITHUB_REF_NAME#v}" --nsis all
+      - name: Debian package
+        run: scripts/build-debian.sh -v "${GITHUB_REF_NAME#v}"
+      - name: Update manifest
+        run: scripts/make-manifest.sh -v "${GITHUB_REF_NAME#v}"
+      - name: Checksums for everything
+        run: cd release && sha256sum $(ls | grep -v '^SHA256SUMS') > "SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --latest \
+            release/*"$v"* release/latest.json

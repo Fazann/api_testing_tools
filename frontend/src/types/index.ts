@@ -392,6 +392,7 @@ export interface Settings {
   proxyMode: 'none' | 'system' | 'custom';
   proxyUrl: string;
   allowSensitiveDestinations: boolean;
+  checkForUpdates: boolean;
 }
 
 export interface DataInfo {
@@ -402,6 +403,23 @@ export interface DataInfo {
   environments: number;
   runs: number;
   baselines: number;
+}
+
+/** Result of an update check (internal/updater.Info). */
+export interface UpdateInfo {
+  enabled: boolean;
+  current: string;
+  latest: string;
+  available: boolean;
+  notes: string;
+  pageUrl: string;
+  /** How the update is applied: replace, deb, installer, or manual (download it yourself). */
+  method: '' | 'replace' | 'deb' | 'installer' | 'manual';
+}
+
+export interface UpdateProgress {
+  done: number;
+  total: number;
 }
 
 export interface AppInfo {

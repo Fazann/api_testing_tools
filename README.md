@@ -13,7 +13,7 @@ A free, local-first desktop app for testing HTTP APIs, checking business rules, 
 - **Race-condition tests** — a request's **Race test** tab sends 2–50 copies at the same moment and checks what a correct server guarantees under concurrency: at most *n* successes (double spend, double redeem), unique IDs, no 5xx, and a before/after state check that catches lost updates. See [docs/race-test.md](docs/race-test.md).
 - **WebSocket and Socket.IO** — set a request's type to WebSocket or Socket.IO to explore a real-time API in a live console (connect, send events, watch messages) and turn it into a test of send / expect / wait steps that runs in collection runs, history, reports and the CLI. See [docs/sockets.md](docs/sockets.md).
 - **Permission matrix** — a collection's **⋯ → Permission matrix…** runs endpoints as every role (roles override variables such as `token`; one can send no credentials) and shows a grid of expected vs actual access, flagging broken access control and IDOR. Approve the observed grid once and later runs catch regressions. See [docs/permission-matrix.md](docs/permission-matrix.md).
-- **CLI for CI** — `test-tool-kit-cli run wallet.collection.json --env Staging --junit junit.xml` runs a collection headlessly (pure Go, no GUI libraries), compares with the baselines included in the export, writes JUnit/HTML/JSON reports and exits non-zero on failure; secrets come from `APIGUARD_VAR_*` environment variables. `--collection NAME` runs straight from the app's database for scheduled local checks. See [docs/cli.md](docs/cli.md).
+- **CLI for CI** — `api-test-kits-cli run wallet.collection.json --env Staging --junit junit.xml` runs a collection headlessly (pure Go, no GUI libraries), compares with the baselines included in the export, writes JUnit/HTML/JSON reports and exits non-zero on failure; secrets come from `APIGUARD_VAR_*` environment variables. `--collection NAME` runs straight from the app's database for scheduled local checks. See [docs/cli.md](docs/cli.md).
 - **History & reports** — SQLite history with filters by collection, request, status and date; self-contained HTML and JSON reports with secrets removed.
 - **Import/export** — documented, versioned JSON format; also imports **OpenAPI 3 / Swagger 2** (`swagger.json`, `openapi.yaml`) as a ready-to-run collection. Imports are treated as untrusted.
 - **cURL** — paste a cURL command (e.g. from the browser's *Copy as cURL*) into the URL bar or use **New request from cURL…** on a collection or folder; **Copy as cURL** turns any request back into a command, optionally filling in variables (secrets stay as `{{name}}` unless you opt in).
@@ -54,14 +54,14 @@ make help              # list all targets
 make deps              # install frontend dependencies, download Go modules
 make dev               # run with hot reload
 make run               # build for this machine and start the app
-make build             # build for this machine → build/bin/test-tool-kit
+make build             # build for this machine → build/bin/api-test-kits
 make test              # frontend + Go tests
 make check             # regression check: lint, typecheck, gofmt, go vet and all tests
 make hooks             # run that check on staged changes before every commit (skip: git commit --no-verify)
 make build-linux       # Linux binary for this architecture
 make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
 make build-windows     # Windows amd64 + arm64 .exe (cross-compiles from Linux, no C toolchain needed)
-make build-cli         # headless CLI for CI → build/bin/test-tool-kit-cli (pure Go)
+make build-cli         # headless CLI for CI → build/bin/api-test-kits-cli (pure Go)
 make release-cli       # CLI for Linux, Windows and macOS (amd64 + arm64) → release/
 make release           # tests, then packaged builds of every platform this host can build → release/
 ```
@@ -70,7 +70,7 @@ make release           # tests, then packaged builds of every platform this host
 
 ```sh
 scripts/build.sh --help
-scripts/build.sh -v 1.2.0 linux windows      # → release/test-tool-kit-1.2.0-<os>-<arch>.{tar.gz,zip}
+scripts/build.sh -v 1.2.0 linux windows      # → release/api-test-kits-1.2.0-<os>-<arch>.{tar.gz,zip}
 scripts/build.sh --nsis windows/amd64        # plus an NSIS installer (needs makensis)
 ```
 
@@ -83,16 +83,16 @@ On Windows, run the script from Git Bash, or use the `wails build` commands belo
 ```sh
 # Debian/Ubuntu 24.04+ (WebKitGTK 4.1)
 sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
-wails build -tags webkit2_41          # → build/bin/test-tool-kit
+wails build -tags webkit2_41          # → build/bin/api-test-kits
 ```
 
 A binary built with `wails build` or `make build-linux` only runs on distributions with the same or a newer glibc than
 the build machine. To build one package for Debian 12+, Ubuntu 22.04+ and their derivatives (Mint, Pop!_OS, ...), use:
 
 ```sh
-make build-debian                     # → release/test-tool-kit_<version>_<arch>.deb
-sudo apt install ./release/test-tool-kit_*.deb
-test-tool-kit                         # or open it from the app menu
+make build-debian                     # → release/api-test-kits_<version>_<arch>.deb
+sudo apt install ./release/api-test-kits_*.deb
+api-test-kits                         # or open it from the app menu
 ```
 
 This builds inside a Debian 12 container ([`build/linux/debian.Dockerfile`](build/linux/debian.Dockerfile)), so only
@@ -106,9 +106,39 @@ On distributions that still ship WebKitGTK 4.0 (`libwebkit2gtk-4.0-dev`), omit `
 Requires the WebView2 runtime (preinstalled on Windows 10/11).
 
 ```powershell
-wails build                           # → build\bin\test-tool-kit.exe
+wails build                           # → build\bin\api-test-kits.exe
 wails build -nsis                     # optional installer (requires NSIS)
 ```
+
+### Releasing updates (no reinstall for users)
+
+Installed apps update themselves in place. On start (and from **Settings → Updates**) they read the update manifest
+`latest.json`, and when a newer version exists they show **Update and restart**. The app downloads the file that
+matches how it was installed and checks its SHA-256:
+
+| Installed from           | How it updates                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `.deb`                   | installs the new `.deb` with `pkexec apt-get install` (asks for the password)     |
+| Windows installer (NSIS) | runs the new installer silently (UAC prompt), then reopens the app                |
+| Portable binary / `.zip` | replaces its own executable, then restarts                                        |
+| macOS / anything else    | opens the release page to download the new version                                |
+
+Your collections, environments and history live in the data folder, not the install folder, so they are kept and
+migrated automatically.
+
+To ship a fix or a new feature:
+
+```sh
+make release-patch NOTES="Fix header parsing"   # 0.1.0 → 0.1.1: bump, commit, tag, build all, write latest.json
+make release-minor NOTES="Socket.IO support"    # 0.1.1 → 0.2.0 for new features (release-major for breaking ones)
+git push --follow-tags                          # the Release workflow publishes release/* to GitHub
+```
+
+Pushing the tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds every package and
+publishes it with `latest.json` as the newest GitHub release. Apps read the manifest from `UPDATE_URL` (default
+`https://github.com/Fazann/api_testing_tools/releases/latest/download/latest.json`), so **the repository, or wherever you
+host the files, must be publicly readable**. Override it with `make release-all UPDATE_URL=https://…/latest.json`. Builds
+with `UPDATE_URL=` (or `wails dev`) never check for updates.
 
 ### App icon
 
@@ -145,10 +175,10 @@ Everything is stored in one SQLite file:
 
 | OS      | Location                                            |
 | ------- | --------------------------------------------------- |
-| Linux   | `~/.config/api-regression-guard/data.db`            |
-| Windows | `%AppData%\api-regression-guard\data.db`            |
+| Linux   | `~/.config/api-test-kits/data.db`                   |
+| Windows | `%AppData%\api-test-kits\data.db`                   |
 
-Set `APIGUARD_DATA_DIR` to use another directory (e.g. a portable install). To back up, close the app and copy `data.db`, or export collections. **Settings → Local data** shows the path and size, compacts the database, and can delete all local data. Uninstalling the app does not remove this folder; delete it manually to remove your data.
+Set `APIGUARD_DATA_DIR` to use another directory (e.g. a portable install). To back up, close the app and copy `data.db`, or export collections. **Settings → Local data** shows the path and size, compacts the database, and can delete all local data. Data from older versions (`test-tool-kit/` or `api-regression-guard/`) is moved here automatically on first start. Uninstalling the app does not remove this folder; delete it manually to remove your data.
 
 Secrets are stored unencrypted in this file with owner-only permissions — read [docs/security.md](docs/security.md).
 

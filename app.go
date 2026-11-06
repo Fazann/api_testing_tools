@@ -22,9 +22,10 @@ import (
 type App struct {
 	ctx context.Context
 	svc *service.Service
+	upd *updates
 }
 
-func NewApp(svc *service.Service) *App { return &App{svc: svc} }
+func NewApp(svc *service.Service) *App { return &App{svc: svc, upd: newUpdates()} }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
 

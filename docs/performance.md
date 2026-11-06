@@ -135,7 +135,7 @@ kept even when the stored body limit is 0.
 
 ## Limits
 
-- **The CLI has no history.** `test-tool-kit-cli` runs in an in-memory database, so responses there show *Not enough
+- **The CLI has no history.** `api-test-kits-cli` runs in an in-memory database, so responses there show *Not enough
   history* and never fail for response time. To gate CI on speed, use **Response time** tests. Reports from the
   desktop app include the check.
 - **Not exported.** Performance settings are not part of collection exports, and **Duplicate** doesn't copy them

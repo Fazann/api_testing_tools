@@ -1,5 +1,5 @@
 {
-  "format": "api-regression-guard.collection",
+  "format": "api-test-kits.collection",
   "version": 1,
   "exportedAt": "2026-10-28T00:00:00Z",
   "collection": {

@@ -50,7 +50,7 @@ it when you change other settings at the same time.
 | Files exported earlier | Unchanged. They keep the old name until you export again |
 | CLI `--collection NAME` | Matches the **current** name (case-insensitive). Update scripts and cron jobs that use the old name |
 
-If two collections have the same name, `test-tool-kit-cli run --collection` refuses to guess:
+If two collections have the same name, `api-test-kits-cli run --collection` refuses to guess:
 
 ```text
 2 collections are named "Wallet demo"; rename one in the app

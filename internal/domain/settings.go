@@ -23,6 +23,8 @@ type Settings struct {
 	ProxyURL  string `json:"proxyUrl"`
 	// AllowSensitiveDestinations permits link-local and cloud metadata addresses.
 	AllowSensitiveDestinations bool `json:"allowSensitiveDestinations"`
+	// CheckForUpdates looks for a newer version when the desktop app starts.
+	CheckForUpdates bool `json:"checkForUpdates"`
 }
 
 // DefaultSettings are safe defaults: TLS verified, metadata endpoints blocked,
@@ -34,6 +36,7 @@ func DefaultSettings() Settings {
 		HistoryRetentionRuns:  500,
 		Concurrency:           1,
 		ProxyMode:             "system",
+		CheckForUpdates:       true,
 	}
 }
 

@@ -1,4 +1,4 @@
-// Command test-tool-kit-cli runs collections headlessly, for CI pipelines and
+// Command api-test-kits-cli runs collections headlessly, for CI pipelines and
 // scheduled jobs. It is pure Go and needs no GUI libraries. See docs/cli.md.
 package main
 

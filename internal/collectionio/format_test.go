@@ -97,12 +97,12 @@ func TestReadRejectsUntrustedInput(t *testing.T) {
 	cases := map[string]string{
 		"not json":      `{{{`,
 		"wrong format":  `{"format":"other","version":1}`,
-		"future":        `{"format":"api-regression-guard.collection","version":99}`,
-		"empty name":    `{"format":"api-regression-guard.collection","version":1,"collection":{"name":""}}`,
-		"bad method":    `{"format":"api-regression-guard.collection","version":1,"collection":{"name":"x"},"requests":[{"name":"r","method":"TRACE","url":"http://x"}]}`,
-		"bad assertion": `{"format":"api-regression-guard.collection","version":1,"collection":{"name":"x"},"requests":[{"name":"r","method":"GET","url":"http://x","assertions":[{"kind":"json_path","path":"a","operator":"matches","expected":"\"(\"","enabled":true}]}]}`,
-		"bad header":    `{"format":"api-regression-guard.collection","version":1,"collection":{"name":"x"},"requests":[{"name":"r","method":"GET","url":"http://x","headers":[{"key":"Bad Header","value":"v","enabled":true}]}]}`,
-		"wrong types":   `{"format":"api-regression-guard.collection","version":1,"collection":{"name":5}}`,
+		"future":        `{"format":"api-test-kits.collection","version":99}`,
+		"empty name":    `{"format":"api-test-kits.collection","version":1,"collection":{"name":""}}`,
+		"bad method":    `{"format":"api-test-kits.collection","version":1,"collection":{"name":"x"},"requests":[{"name":"r","method":"TRACE","url":"http://x"}]}`,
+		"bad assertion": `{"format":"api-test-kits.collection","version":1,"collection":{"name":"x"},"requests":[{"name":"r","method":"GET","url":"http://x","assertions":[{"kind":"json_path","path":"a","operator":"matches","expected":"\"(\"","enabled":true}]}]}`,
+		"bad header":    `{"format":"api-test-kits.collection","version":1,"collection":{"name":"x"},"requests":[{"name":"r","method":"GET","url":"http://x","headers":[{"key":"Bad Header","value":"v","enabled":true}]}]}`,
+		"wrong types":   `{"format":"api-test-kits.collection","version":1,"collection":{"name":5}}`,
 	}
 	for name, input := range cases {
 		if _, err := Read(strings.NewReader(input)); err == nil {
@@ -116,7 +116,7 @@ func TestReadRejectsUntrustedInput(t *testing.T) {
 }
 
 func TestReadDropsUnknownFolderParents(t *testing.T) {
-	in := `{"format":"api-regression-guard.collection","version":1,"collection":{"name":"x"},
+	in := `{"format":"api-test-kits.collection","version":1,"collection":{"name":"x"},
 	  "requests":[{"name":"r","method":"GET","url":"http://x","parentId":"ghost"}]}`
 	imp, err := Read(strings.NewReader(in))
 	if err != nil {
@@ -178,5 +178,18 @@ func TestBaselinesAreValidated(t *testing.T) {
 	Write(&buf, doc)
 	if _, err := Read(&buf); err == nil || !strings.Contains(err.Error(), "two baselines") {
 		t.Errorf("duplicate baseline: got %v", err)
+	}
+}
+
+func TestImportAcceptsLegacyFormatNames(t *testing.T) {
+	for _, format := range LegacyFormatNames {
+		in := `{"format":"` + format + `","version":1,"collection":{"name":"old export"}}`
+		got, err := Read(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("%s export must still import: %v", format, err)
+		}
+		if got.Tree.Collection.Name != "old export" {
+			t.Fatalf("name = %q", got.Tree.Collection.Name)
+		}
 	}
 }

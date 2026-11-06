@@ -101,7 +101,7 @@ A baseline is not automatically the truth. The user must review and approve a ne
 
 ### Workflow D: Verify reports and scheduled jobs
 
-For the MVP, test report APIs or endpoints that expose job status and generated data. The CLI (`test-tool-kit-cli`, see [cli.md](cli.md)) runs collections from cron, systemd timers, or CI pipelines; sending results to a notification endpoint is still open.
+For the MVP, test report APIs or endpoints that expose job status and generated data. The CLI (`api-test-kits-cli`, see [cli.md](cli.md)) runs collections from cron, systemd timers, or CI pipelines; sending results to a notification endpoint is still open.
 
 Do not promise that a desktop GUI process can run jobs while the computer is powered off.
 
@@ -211,7 +211,7 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 
 ### P1 — After MVP feedback
 
-- ~~CLI mode for running exported collections~~ — done: `test-tool-kit-cli` ([cli.md](cli.md)). Pure Go, runs an export
+- ~~CLI mode for running exported collections~~ — done: `api-test-kits-cli` ([cli.md](cli.md)). Pure Go, runs an export
   (optionally with baselines) or a collection from the app database, writes JUnit/HTML/JSON reports, exit codes
   0/1/2/3/130, secrets from `APIGUARD_VAR_*`
 - ~~CI integration examples for GitHub Actions and other CI systems~~ — done: GitHub Actions and GitLab CI in
@@ -499,7 +499,7 @@ Run `npm run format` to apply the style and `npm run lint` to check it.
 ## 7. Suggested Repository Structure
 
 ```text
-api-regression-guard/
+api-test-kits/
 ├── app.go
 ├── main.go
 ├── go.mod
@@ -536,7 +536,7 @@ api-regression-guard/
 │   │   └── app_service.go
 │   └── …                 # also appdata, cli, collectionio, fsutil, perf, redact, scripting, security
 ├── cmd/
-│   └── test-tool-kit-cli/
+│   └── api-test-kits-cli/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/

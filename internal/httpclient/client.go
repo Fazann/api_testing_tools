@@ -212,7 +212,7 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 		}
 	}
 	if httpReq.Header.Get("User-Agent") == "" {
-		httpReq.Header.Set("User-Agent", "api-regression-guard")
+		httpReq.Header.Set("User-Agent", "api-test-kits")
 	}
 
 	var redirects []string

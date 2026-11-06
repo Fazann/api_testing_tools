@@ -6,7 +6,7 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 
 | Field             | Type      | Notes                                                          |
 | ----------------- | --------- | -------------------------------------------------------------- |
-| `format`          | string    | Always `"api-regression-guard.collection"`                     |
+| `format`          | string    | `"api-test-kits.collection"` (older `"test-tool-kit.collection"` and `"api-regression-guard.collection"` files still import) |
 | `version`         | integer   | Format version. This app reads version `1`                       |
 | `exportedAt`      | RFC 3339  | Informational                                                  |
 | `appVersion`      | string    | Informational                                                  |
@@ -207,7 +207,7 @@ Unless the user explicitly opts in (after a warning that lists them), exports bl
 ## Baselines
 
 Added when **Include baselines** is ticked in the export dialog, so a regression check can run on another machine or
-in CI with [`test-tool-kit-cli`](cli.md). Files without this field are still version 1; builds that do not know it
+in CI with [`api-test-kits-cli`](cli.md). Files without this field are still version 1; builds that do not know it
 ignore it.
 
 ```json

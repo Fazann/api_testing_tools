@@ -29,6 +29,8 @@ import type {
   SocketFrame,
   SocketMessage,
   SocketSession,
+  UpdateInfo,
+  UpdateProgress,
   Warning,
 } from '@/types';
 
@@ -61,6 +63,9 @@ async function call<T>(method: string, ...args: unknown[]): Promise<T> {
 
 export const api = {
   appInfo: () => call<AppInfo>('AppInfo'),
+  checkForUpdate: () => call<UpdateInfo>('CheckForUpdate'),
+  installUpdate: () => call<void>('InstallUpdate'),
+  openReleasePage: (url: string) => call<void>('OpenReleasePage', url),
 
   listCollections: () => call<Collection[]>('ListCollections'),
   getCollectionTree: (id: string) => call<CollectionTree>('GetCollectionTree', id),
@@ -165,4 +170,10 @@ export function onMatrixProgress(cb: (p: RunProgress) => void): () => void {
 
 export function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Subscribes to update download progress. Returns an unsubscribe function. */
+export function onUpdateProgress(cb: (p: UpdateProgress) => void): () => void {
+  if (!window.runtime?.EventsOn) return () => {};
+  return window.runtime.EventsOn('update:progress', (p) => cb(p as UpdateProgress));
 }

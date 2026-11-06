@@ -11,6 +11,8 @@
 #   --nsis            also build a Windows installer (needs makensis)
 #   --no-package      leave binaries in build/bin only, skip archives and checksums
 #   --skip-tests      skip go test / frontend tests before building
+#   --feed URL        update manifest URL baked into the app (default: $UPDATE_URL;
+#                     empty disables in-app updates)
 #   -h, --help        show this help
 #
 # Linux builds use CGO with GTK/WebKitGTK, so they only build for the host
@@ -22,11 +24,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-APP="test-tool-kit"
+APP="api-test-kits"
 MODULE="api-test-kits"
 RELEASE_DIR="$ROOT/release"
 
 VERSION=""
+FEED="${UPDATE_URL:-}"
 NSIS=0
 PACKAGE=1
 TESTS=1
@@ -34,7 +37,7 @@ PLATFORMS=()
 
 die() { echo "error: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     --nsis) NSIS=1; shift ;;
     --no-package) PACKAGE=0; shift ;;
     --skip-tests) TESTS=0; shift ;;
+    --feed) FEED="$2"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
     -*) die "unknown option $1 (see --help)" ;;
     *) PLATFORMS+=("$1"); shift ;;
@@ -138,7 +142,8 @@ fi
 
 # ---- desktop builds ----
 
-LDFLAGS="-s -w -X $MODULE/internal/service.Version=$VERSION"
+LDFLAGS="-s -w -X $MODULE/internal/service.Version=$VERSION -X $MODULE/internal/updater.FeedURL=$FEED"
+[[ -n "$FEED" ]] && info "In-app updates from $FEED" || info "No update feed: in-app updates disabled"
 mkdir -p "$RELEASE_DIR"
 ARTIFACTS=()
 
@@ -151,6 +156,14 @@ package() {
   cp -R "$src" "$stage/$name/"
   cp README.md "$stage/$name/"
   [[ -f LICENSE ]] && cp LICENSE "$stage/$name/"
+  # The bare executable is what portable installs download to update themselves.
+  if [[ "$os" == linux ]]; then
+    install -m755 "$src" "$RELEASE_DIR/$name"
+    ARTIFACTS+=("$name")
+  elif [[ "$os" == windows ]]; then
+    install -m755 "$src" "$RELEASE_DIR/$name.exe"
+    ARTIFACTS+=("$name.exe")
+  fi
   if [[ "$os" == linux ]]; then
     cp build/appicon.png "$stage/$name/$APP.png"
     tar -C "$stage" -czf "$RELEASE_DIR/$name.tar.gz" "$name"

@@ -1,6 +1,6 @@
 # Running tests from the command line and CI
 
-`test-tool-kit-cli` runs a collection without the desktop app: every request, its tests, and the comparison with
+`api-test-kits-cli` runs a collection without the desktop app: every request, its tests, and the comparison with
 approved baselines. It exits non-zero when something fails, so a pipeline can block a deploy. It writes JUnit XML for
 CI dashboards and the same HTML and JSON reports as the app.
 
@@ -9,7 +9,7 @@ Windows and macOS runners).
 
 ```sh
 APIGUARD_VAR_token="$API_TOKEN" \
-  test-tool-kit-cli run wallet.collection.json --env Staging --junit junit.xml --report report.html
+  api-test-kits-cli run wallet.collection.json --env Staging --junit junit.xml --report report.html
 ```
 
 ```
@@ -31,10 +31,10 @@ Reports: junit.xml, report.html
 
 ## Install
 
-- **From a release:** download `test-tool-kit-cli-<version>-<os>-<arch>` (`.tar.gz`, or `.zip` for Windows) and
+- **From a release:** download `api-test-kits-cli-<version>-<os>-<arch>` (`.tar.gz`, or `.zip` for Windows) and
   check it against `SHA256SUMS-cli-<version>.txt`.
-- **From source** (Go 1.26+): `go build -o test-tool-kit-cli ./cmd/test-tool-kit-cli`, or `make build-cli` →
-  `build/bin/test-tool-kit-cli`. It does not need Node.js or Wails.
+- **From source** (Go 1.26+): `go build -o api-test-kits-cli ./cmd/api-test-kits-cli`, or `make build-cli` →
+  `build/bin/api-test-kits-cli`. It does not need Node.js or Wails.
 
 `make release-cli` (or `scripts/build-cli.sh`) cross-compiles and packages it for Linux, Windows and macOS on amd64
 and arm64 from any host.
@@ -76,7 +76,7 @@ variable**, the run does not start (exit code 3).
 | `--folder PATH` | Run only one folder and its subfolders: `Wallet`, or `Wallet/Admin` when the name is not unique. |
 | `--collection NAME` | Instead of a file, use a collection in the desktop app's local database (see below). |
 
-Run `test-tool-kit-cli list FILE` to see the environments (with empty secrets marked), folders, requests and the
+Run `api-test-kits-cli list FILE` to see the environments (with empty secrets marked), folders, requests and the
 baselines in a file.
 
 ## Reports
@@ -137,11 +137,11 @@ jobs:
         with:
           go-version: "1.26"
       - name: Build the CLI
-        run: go build -o test-tool-kit-cli ./cmd/test-tool-kit-cli
+        run: go build -o api-test-kits-cli ./cmd/api-test-kits-cli
       - name: Run API tests against staging
         env:
           APIGUARD_VAR_token: ${{ secrets.STAGING_API_TOKEN }}
-        run: ./test-tool-kit-cli run tests/api/wallet.collection.json --env Staging --junit results/junit.xml --report results/report.html
+        run: ./api-test-kits-cli run tests/api/wallet.collection.json --env Staging --junit results/junit.xml --report results/report.html
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -159,8 +159,8 @@ failures as annotations on the pull request, feed `results/junit.xml` to a JUnit
 api-tests:
   image: golang:1.26
   script:
-    - go build -o test-tool-kit-cli ./cmd/test-tool-kit-cli
-    - APIGUARD_VAR_token="$STAGING_API_TOKEN" ./test-tool-kit-cli run tests/api/wallet.collection.json --env Staging --junit junit.xml --report report.html
+    - go build -o api-test-kits-cli ./cmd/api-test-kits-cli
+    - APIGUARD_VAR_token="$STAGING_API_TOKEN" ./api-test-kits-cli run tests/api/wallet.collection.json --env Staging --junit junit.xml --report report.html
   artifacts:
     when: always
     reports:
@@ -171,7 +171,7 @@ api-tests:
 ### Smoke test after a deploy
 
 ```sh
-test-tool-kit-cli run api.collection.json --env Production --folder Smoke --no-baselines --timeout 2m -q
+api-test-kits-cli run api.collection.json --env Production --folder Smoke --no-baselines --timeout 2m -q
 ```
 
 Keep production runs read-only. A protected environment refuses data-modifying requests unless you pass
@@ -184,7 +184,7 @@ baselines, so there is nothing to export:
 
 ```sh
 # crontab: every morning at 07:00, keep a dated HTML report
-0 7 * * * test-tool-kit-cli run --collection "Wallet demo" --env Staging -q --report "$HOME/api-reports/$(date +\%F).html"
+0 7 * * * api-test-kits-cli run --collection "Wallet demo" --env Staging -q --report "$HOME/api-reports/$(date +\%F).html"
 ```
 
 The database is found the same way as the app does it, or at `$APIGUARD_DATA_DIR` / `--data-dir DIR`. The app can
@@ -220,5 +220,5 @@ go test ./internal/collectionio -run Baselines   # baselines in the export forma
 go test ./internal/reports -run JUnit            # JUnit XML
 ```
 
-The code is in `cmd/test-tool-kit-cli` (entry point), `internal/cli` (flags, output, exit codes) and
+The code is in `cmd/api-test-kits-cli` (entry point), `internal/cli` (flags, output, exit codes) and
 `internal/reports/junit.go`.

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,8 +17,11 @@ import (
 	"api-test-kits/internal/storage"
 )
 
+// LegacyFormatNames are what exports made under earlier app names carry; they still import.
+var LegacyFormatNames = []string{"test-tool-kit.collection", "api-regression-guard.collection"}
+
 const (
-	FormatName     = "api-regression-guard.collection"
+	FormatName     = "api-test-kits.collection"
 	CurrentVersion = 1
 
 	MaxFileBytes    = 20 << 20
@@ -240,7 +244,7 @@ func Read(r io.Reader) (*Imported, error) {
 		return nil, fmt.Errorf("import file is not valid JSON: %w", err)
 	}
 	switch {
-	case probe.Format == FormatName:
+	case probe.Format == FormatName || slices.Contains(LegacyFormatNames, probe.Format):
 		var doc Document
 		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&doc); err != nil {
 			return nil, fmt.Errorf("import file is not a valid collection: %w", err)

@@ -68,7 +68,7 @@ func (c *Client) DialWebSocket(ctx context.Context, req SocketRequest) (*SocketC
 		}
 	}
 	if header.Get("User-Agent") == "" {
-		header.Set("User-Agent", "api-regression-guard")
+		header.Set("User-Agent", "api-test-kits")
 	}
 	dialer := websocket.Dialer{
 		NetDialContext:   c.dial,

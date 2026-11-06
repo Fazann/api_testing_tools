@@ -72,7 +72,7 @@ func Build(run domain.Run, meta Meta, now time.Time) Report {
 		}
 	}
 	return Report{
-		Format:      "api-regression-guard.report",
+		Format:      "api-test-kits.report",
 		Version:     FormatVersion,
 		AppName:     meta.AppName,
 		AppVersion:  meta.AppVersion,

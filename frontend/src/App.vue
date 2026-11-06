@@ -6,10 +6,12 @@ import CollectionSidebar from '@/components/collection/CollectionSidebar.vue';
 import AppDialog from '@/components/layout/AppDialog.vue';
 import AppToasts from '@/components/layout/AppToasts.vue';
 import TopBar from '@/components/layout/TopBar.vue';
+import UpdateBanner from '@/components/layout/UpdateBanner.vue';
 import { api, BackendUnavailableError } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';
+import { useUpdates } from '@/stores/updates';
 import { useWorkspace } from '@/stores/workspace';
 import EnvironmentsView from '@/views/EnvironmentsView.vue';
 import HistoryView from '@/views/HistoryView.vue';
@@ -21,12 +23,18 @@ const ui = useUi();
 const ws = useWorkspace();
 const envs = useEnvironments();
 const runner = useRunner();
+const updates = useUpdates();
 const backendMissing = ref(false);
 
 onMounted(async () => {
   try {
     await api.appInfo();
     await Promise.all([ws.load(), envs.load()]);
+    // Background update check; never blocks startup or shows errors.
+    api
+      .getSettings()
+      .then((s) => (s.checkForUpdates ? updates.check(true) : undefined))
+      .catch(() => {});
   } catch (e) {
     if (e instanceof BackendUnavailableError) backendMissing.value = true;
     else ui.error(e);
@@ -55,6 +63,7 @@ function onKey(e: KeyboardEvent) {
 <template>
   <div class="shell">
     <TopBar />
+    <UpdateBanner v-if="!backendMissing" />
     <EmptyState v-if="backendMissing" title="Backend not connected">
       <p>
         This interface runs inside the desktop app. Start it with <code>wails dev</code> or launch the packaged binary.

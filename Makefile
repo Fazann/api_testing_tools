@@ -1,11 +1,19 @@
 # API Regression Guard — common development and release tasks.
 # Run `make help` for the list of targets.
 
-APP      := test-tool-kit
+APP      := api-test-kits
 MODULE   := api-test-kits
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.1.0-dev)
 GO       ?= go
 WAILS    ?= $(shell command -v wails 2>/dev/null || echo $(shell $(GO) env GOPATH)/bin/wails)
+# Installed apps poll this manifest and update themselves in place. Upload
+# release/latest.json next to the release files (the GitHub "latest" release
+# serves it at this URL; the repository must be public, or point this at any
+# public HTTPS host). Set UPDATE_URL= to build without in-app updates.
+REPO        ?= Fazann/api_testing_tools
+UPDATE_URL  ?= https://github.com/$(REPO)/releases/latest/download/latest.json
+RELEASE_PAGE_URL ?= https://github.com/$(REPO)/releases/tag/v{version}
+export UPDATE_URL RELEASE_PAGE_URL
 HOST_OS  := $(shell $(GO) env GOHOSTOS)
 HOST_ARCH := $(shell $(GO) env GOHOSTARCH)
 
@@ -15,6 +23,7 @@ ifeq ($(HOST_OS),linux)
 endif
 TAGS_FLAG := $(if $(TAGS),-tags $(TAGS),)
 LDFLAGS   := -s -w -X $(MODULE)/internal/service.Version=$(VERSION)
+DESKTOP_LDFLAGS := $(LDFLAGS) -X $(MODULE)/internal/updater.FeedURL=$(UPDATE_URL)
 
 ifeq ($(HOST_OS),windows)
   BIN := build/bin/$(APP).exe
@@ -25,7 +34,8 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help deps tools doctor dev run build test test-go test-frontend lint fmt frontend check hooks \
         build-linux build-debian build-windows build-windows-amd64 build-windows-arm64 build-darwin \
-        release release-windows-installer icons clean build-cli release-cli
+        release release-windows-installer icons clean build-cli release-cli \
+        version bump-patch bump-minor bump-major manifest release-all release-patch release-minor release-major
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -48,7 +58,7 @@ dev: ## Run the app with hot reload (frontend + Go)
 	$(WAILS) dev $(TAGS_FLAG)
 
 build: frontend ## Build the desktop app for this machine (build/bin/)
-	$(WAILS) build -s -m -trimpath $(TAGS_FLAG) -ldflags "$(LDFLAGS)"
+	$(WAILS) build -s -m -trimpath $(TAGS_FLAG) -ldflags "$(DESKTOP_LDFLAGS)"
 
 run: build ## Build, then start the desktop app
 	./$(BIN)
@@ -107,8 +117,8 @@ build-darwin: ## macOS universal .app (macOS host only)
 
 # ---- release ----
 
-build-cli: ## Build the headless CLI for this machine (build/bin/test-tool-kit-cli, pure Go)
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o build/bin/test-tool-kit-cli$(if $(filter windows,$(HOST_OS)),.exe,) ./cmd/test-tool-kit-cli
+build-cli: ## Build the headless CLI for this machine (build/bin/api-test-kits-cli, pure Go)
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o build/bin/api-test-kits-cli$(if $(filter windows,$(HOST_OS)),.exe,) ./cmd/api-test-kits-cli
 
 release-cli: ## Cross-compile and package the CLI for Linux, Windows and macOS (release/)
 	scripts/build-cli.sh -v $(VERSION)
@@ -118,6 +128,44 @@ release: ## Test, then build and package every platform this host can build (rel
 
 release-windows-installer: ## Windows builds plus NSIS installers (needs makensis)
 	scripts/build.sh -v $(VERSION) --nsis windows
+
+# ---- versioned releases with in-app updates ----
+# Patch release:  make release-patch NOTES="Fix ..."   then   git push --follow-tags
+# Pushing the tag publishes release/* to GitHub (.github/workflows/release.yml);
+# installed apps then offer "Update and restart" — no uninstall needed.
+
+version: ## Print the version the next build will carry
+	@echo $(VERSION)
+
+bump-patch: ## Bump X.Y.Z -> X.Y.Z+1, commit and tag (fixes, small changes). NOTES="..." sets release notes
+	scripts/bump-version.sh patch $(if $(NOTES),-m "$(NOTES)",)
+
+bump-minor: ## Bump X.Y.Z -> X.Y+1.0, commit and tag (new features)
+	scripts/bump-version.sh minor $(if $(NOTES),-m "$(NOTES)",)
+
+bump-major: ## Bump X.Y.Z -> X+1.0.0, commit and tag (breaking changes)
+	scripts/bump-version.sh major $(if $(NOTES),-m "$(NOTES)",)
+
+manifest: ## Write release/latest.json (the update manifest) for the current version
+	scripts/make-manifest.sh -v $(VERSION)
+
+release-all: ## Build every update asset this host can (.deb needs Docker, installer needs makensis) + latest.json
+	scripts/build.sh -v $(VERSION) $(if $(shell command -v makensis),--nsis,) all
+	@if command -v $${DOCKER:-docker} >/dev/null; then scripts/build-debian.sh -v $(VERSION); \
+	  else echo "==> Docker not found: skipping the .deb (.deb installs will point to the download page)"; fi
+	scripts/make-manifest.sh -v $(VERSION)
+
+release-patch: ## Bump the patch version, tag it, build everything and write latest.json
+	scripts/bump-version.sh patch $(if $(NOTES),-m "$(NOTES)",)
+	$(MAKE) release-all
+
+release-minor: ## Bump the minor version, tag it, build everything and write latest.json
+	scripts/bump-version.sh minor $(if $(NOTES),-m "$(NOTES)",)
+	$(MAKE) release-all
+
+release-major: ## Bump the major version, tag it, build everything and write latest.json
+	scripts/bump-version.sh major $(if $(NOTES),-m "$(NOTES)",)
+	$(MAKE) release-all
 
 icons: ## Regenerate PNG/ICO icons from build/appicon.svg
 	python3 scripts/render-icon.py

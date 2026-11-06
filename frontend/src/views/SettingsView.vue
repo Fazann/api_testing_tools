@@ -11,6 +11,7 @@ import { useAsyncAction } from '@/composables/useAsyncAction';
 import { api } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
+import { useUpdates } from '@/stores/updates';
 import { useWorkspace } from '@/stores/workspace';
 import type { AppInfo, DataInfo, Settings } from '@/types';
 import { formatBytes } from '@/utils/format';
@@ -20,6 +21,7 @@ const ui = useUi();
 const { run } = useAsyncAction();
 const ws = useWorkspace();
 const envs = useEnvironments();
+const updates = useUpdates();
 
 const form = ref<Settings | null>(null);
 const snapshot = ref('');
@@ -162,6 +164,28 @@ const PROXY_MODES: { value: Settings['proxyMode']; label: string }[] = [
         max="10240"
       />
 
+      <h3 class="section-title">Updates</h3>
+      <CheckboxField v-model="form.checkForUpdates" class="check">
+        Check for a new version when the app starts. Updates install in place — no uninstall needed, and your data is
+        kept.
+      </CheckboxField>
+      <div class="row small">
+        <BaseButton :disabled="updates.checking || updates.installing" @click="updates.check()">
+          {{ updates.checking ? 'Checking…' : 'Check for updates now' }}
+        </BaseButton>
+        <span v-if="updates.error" class="fail">{{ updates.error }}</span>
+        <span v-else-if="updates.info && !updates.info.enabled" class="muted">
+          This build has no update feed (development build).
+        </span>
+        <span v-else-if="updates.info?.available">
+          Version {{ updates.info.latest }} is available.
+          <BaseButton small variant="primary" :disabled="updates.installing" @click="updates.install()">
+            {{ updates.info.method === 'manual' ? 'Download…' : 'Update and restart' }}
+          </BaseButton>
+        </span>
+        <span v-else-if="updates.info" class="muted">You have the latest version ({{ updates.info.current }}).</span>
+      </div>
+
       <h3 class="section-title">Local data</h3>
       <div v-if="info" class="stack small">
         <div>
@@ -180,7 +204,8 @@ const PROXY_MODES: { value: Settings['proxyMode']; label: string }[] = [
         </div>
       </div>
       <p v-if="app" class="muted small about">
-        {{ app.name }} {{ app.version }} · Works offline. No account, no telemetry.
+        {{ app.name }} {{ app.version }} · Works offline. No account, no telemetry — the only automatic network call is
+        the optional update check.
       </p>
     </template>
   </div>

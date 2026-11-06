@@ -63,7 +63,7 @@ async function doExport() {
     </div>
     <CheckboxField v-model="includeBaselines">
       <strong>Include baselines</strong> — approved baselines of every environment, so the regression check also runs on
-      another machine or in CI with <code>test-tool-kit-cli</code>. Baselines hold response bodies (already redacted
+      another machine or in CI with <code>api-test-kits-cli</code>. Baselines hold response bodies (already redacted
       when approved).
     </CheckboxField>
     <CalloutBox v-if="hasSecrets">

@@ -97,9 +97,9 @@ func Main(ctx context.Context, args []string, env Env) int {
 	return code
 }
 
-const progName = "test-tool-kit-cli"
+const progName = "api-test-kits-cli"
 
-const mainUsage = `Usage: test-tool-kit-cli <command> [arguments]
+const mainUsage = `Usage: api-test-kits-cli <command> [arguments]
 
 Commands:
   run    Run a collection and exit non-zero when a test fails
@@ -108,12 +108,12 @@ Commands:
   help [run]
 
 Examples:
-  test-tool-kit-cli run wallet.collection.json --env Staging --junit junit.xml
-  APIGUARD_VAR_token=$API_TOKEN test-tool-kit-cli run wallet.collection.json --env Staging
-  test-tool-kit-cli run --collection "Wallet demo" --env Local --report report.html
+  api-test-kits-cli run wallet.collection.json --env Staging --junit junit.xml
+  APIGUARD_VAR_token=$API_TOKEN api-test-kits-cli run wallet.collection.json --env Staging
+  api-test-kits-cli run --collection "Wallet demo" --env Local --report report.html
 `
 
-const runUsage = `Usage: test-tool-kit-cli run [FILE] [flags]
+const runUsage = `Usage: api-test-kits-cli run [FILE] [flags]
 
 Runs every request of a collection (or one folder), evaluates its tests and
 compares responses with the approved baselines.
