@@ -33,7 +33,8 @@ A lightweight, local-first alternative to heavyweight API workflows, focused on:
 3. Regression comparisons
 4. Environment and configuration checks
 5. Business-security checks that request-by-request clients miss: race conditions and access control
-6. Clear failure reports
+6. Regression checks without setup: comparing two environments and detecting changing fields
+7. Clear failure reports
 
 ---
 
@@ -135,6 +136,22 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
    within a time limit) and waits.
 4. **Run test**. The steps run in order on one connection; the result lists each step and every message.
 5. Collection runs and the CLI run the test with the HTTP requests, so CI catches real-time regressions too.
+
+### Workflow H: Check a new deploy against the old one
+
+1. Have one environment per deployment, such as Production and Staging, or the old and the new build.
+2. Open a collection's **Compare environments**, choose A (reference) and B (to check).
+3. Compare: both environments run the collection's read-only requests at the same time, after leaving out fields that
+   change on every call.
+4. Review only what differs: status codes, body fields, headers, errors and much slower responses.
+5. Fix the regression or accept the difference; no baseline is needed.
+
+### Workflow I: Set up a baseline without hunting for dynamic fields
+
+1. Send a request and choose **Approve as baseline…**.
+2. Press **Detect changing fields**: the request is sent a few more times and every field whose value changed is
+   suggested as an ignored path.
+3. Review the suggestions, add them, and approve the baseline. The next run does not fail on timestamps or IDs.
 
 ---
 
@@ -306,6 +323,43 @@ Real-time APIs regress like HTTP ones: a renamed event, a changed payload or a b
   message. They appear in history, collection runs, JSON/HTML/JUnit reports and the CLI; secrets are redacted.
 - Tests that send messages count as possibly modifying data in preflight warnings and protected environments.
 - Race tests, permission matrices, baselines and response-time checks stay HTTP-only.
+
+### Regression checks without setup — implemented after the MVP
+
+Baselines need a known-good response and a list of dynamic fields before they are useful. These two features remove
+that setup. Guides: [environment-comparison.md](environment-comparison.md) and [changing-fields.md](changing-fields.md).
+
+#### Changing-field detection
+
+- Send a request (saved or draft) 3 times in a row with the selected environment, its scripts, auth and variables.
+- Compare the JSON responses with each other: leaf values per path, array indices generalized to `[*]`; report paths
+  whose value or type changed or that are missing from some responses; report arrays whose length changed separately
+  (not selected by default). Report a status code that changed between calls as a warning.
+- Fail with a clear message for a non-JSON or truncated response or a failed call.
+- Leave out paths already covered by the current ignored patterns. List at most 200 suggestions, each with up to three
+  redacted example values.
+- Available in the approve-baseline dialog and the Baseline tab; the user adds the selected suggestions to the ignored
+  paths, nothing is saved automatically.
+- Requests that may modify data need explicit confirmation; protected environments follow the Send rules. Script
+  variable changes are not saved; the calls are not recorded in history. Cancellable.
+
+#### Environment comparison (per collection)
+
+- Choose two different environments A and B. Run the collection's HTTP requests (read-only ones unless the user
+  includes requests that may modify data) against both at the same time; within each environment in collection order
+  with the configured concurrency and one script scope.
+- Optionally detect changing fields: send each read-only request a second time to each environment; paths whose value
+  differs between the two calls in either environment are not compared, and are listed per request.
+- Per request compare: status code; JSON bodies with the baseline diff engine (ignored paths: the comparison's own, the
+  request's baselines' in A and B, and changing fields), or bodies as text when either is not JSON; headers
+  case-insensitively, except a fixed list of volatile headers and those ignored with `header:Name`.
+- Verdict per request: same, different, error (no response from A or B) or skipped (socket requests, requests that
+  may modify data when not included). Flag *slower* when one side takes ≥ 1.5× and ≥ 100 ms longer; it does not make a
+  request different.
+- Preflight both environments; confirmation for protected environments with requests that may modify data. Script
+  variable changes are not saved. Cancellable; progress events. Save each environment's first pass as a normal run in
+  history; do not save the detection calls. Store the settings per collection; do not store the comparison result.
+- Socket requests are skipped. At most 500 differences per request.
 
 ### P2 — Only after validating demand
 
@@ -523,7 +577,9 @@ api-test-kits/
 │   │   └── jsonpath.go
 │   ├── regression/
 │   │   ├── baseline.go
+│   │   ├── changing.go       # fields that change between calls
 │   │   └── diff.go
+│   ├── compare/              # environment comparison of two run results
 │   ├── storage/
 │   │   ├── sqlite.go
 │   │   └── migrations/
@@ -671,6 +727,13 @@ Use SQLite migrations from the beginning.
 - `config_json`: text — roles with their variable overrides, ticked request IDs, expected access per cell
 - `updated_at`: timestamp
 
+### `environment_comparisons`
+
+- `collection_id`: primary key, foreign key to `collections` (deleted with the collection)
+- `config_json`: text — environments A and B, ignored paths, include requests that may modify data, detect changing
+  fields
+- `updated_at`: timestamp
+
 Use indexes for foreign keys and common history queries. Define retention and response-body limits so test history cannot silently consume unlimited disk space.
 
 ---
@@ -749,6 +812,8 @@ API clients can access sensitive systems, so security must be part of the MVP.
 12. Race test tab on the request editor (settings, verdict, status-code counts, every response)
 13. Permissions tab in the collection dialog (roles, request × role grid, mismatch list)
 14. Socket request editor (type selector, Messages, test steps, socket options) with a live console and test result
+15. Compare tab in the collection dialog (environment pickers, options, summary, per-request differences)
+16. Changing-field suggestions in the approve-baseline dialog and the Baseline tab
 
 Keep the first version focused. Do not build a complex dashboard before the request and test workflows are reliable.
 

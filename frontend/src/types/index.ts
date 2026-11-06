@@ -601,3 +601,78 @@ export interface ResponseTimeRow {
   lastSlower: boolean;
   mode: PerformanceMode;
 }
+
+// ---- environment comparison and changing fields ----
+
+/** A collection's environment-comparison settings (internal/domain.EnvComparison). */
+export interface EnvComparison {
+  collectionId: string;
+  envA: string;
+  envB: string;
+  /** Body path patterns, or "header:Name" lines. */
+  ignoredPaths: string[];
+  includeModifying: boolean;
+  detectChanging: boolean;
+  updatedAt?: string;
+}
+
+export type CompareVerdict = 'same' | 'different' | 'error' | 'skipped';
+
+export interface CompareSide {
+  resultId: string;
+  status: ResultStatus;
+  statusCode: number;
+  durationMs: number;
+  error?: string;
+}
+
+export interface CompareResult {
+  requestId: string;
+  name: string;
+  method: string;
+  verdict: CompareVerdict;
+  /** 'a' or 'b' when that side was much slower. */
+  slower: '' | 'a' | 'b';
+  a: CompareSide;
+  b: CompareSide;
+  statusChanged: boolean;
+  /** Before is environment A, after is B. */
+  body: DiffEntry[];
+  bodyMessage?: string;
+  /** Path is the header name. */
+  headers: DiffEntry[];
+  /** Body paths left out because they change between calls. */
+  changing: string[];
+  skipReason?: string;
+}
+
+export interface CompareReport {
+  a: { id: string; name: string };
+  b: { id: string; name: string };
+  runIdA: string;
+  runIdB: string;
+  requests: CompareResult[];
+  same: number;
+  different: number;
+  errors: number;
+  skipped: number;
+  slower: number;
+  cancelled: boolean;
+}
+
+export type ChangingReason = 'value' | 'type' | 'missing' | 'length';
+
+export interface ChangingField {
+  path: string;
+  reason: ChangingReason;
+  examples: string[];
+  /** False for array length changes, which are listed but not ticked. */
+  suggested: boolean;
+}
+
+export interface ChangingReport {
+  fields: ChangingField[];
+  samples: number;
+  statusCodes: number[];
+  statusChanged: boolean;
+}

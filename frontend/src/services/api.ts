@@ -4,9 +4,12 @@ import type {
   AppInfo,
   Baseline,
   BaselineMode,
+  ChangingReport,
   Collection,
   CollectionTree,
+  CompareReport,
   DataInfo,
+  EnvComparison,
   Environment,
   Folder,
   ImportResult,
@@ -108,6 +111,15 @@ export const api = {
   runPermissionMatrix: (opId: string, collectionId: string, envId: string, confirmed: boolean) =>
     call<MatrixReport>('RunPermissionMatrix', opId, collectionId, envId, confirmed),
 
+  getEnvComparison: (collectionId: string) => call<EnvComparison>('GetEnvComparison', collectionId),
+  saveEnvComparison: (c: EnvComparison) => call<EnvComparison>('SaveEnvComparison', c),
+  compareEnvironments: (opId: string, c: EnvComparison, confirmed: boolean) =>
+    call<CompareReport>('CompareEnvironments', opId, c, confirmed),
+  detectChangingFields: (
+    opId: string,
+    input: { request: Request; environmentId: string; ignoredPaths: string[]; confirmed: boolean },
+  ) => call<ChangingReport>('DetectChangingFields', opId, input),
+
   getBaseline: (requestId: string, envId: string) => call<Baseline | null>('GetBaseline', requestId, envId),
   approveBaseline: (input: {
     requestId: string;
@@ -176,4 +188,10 @@ export function errorMessage(e: unknown): string {
 export function onUpdateProgress(cb: (p: UpdateProgress) => void): () => void {
   if (!window.runtime?.EventsOn) return () => {};
   return window.runtime.EventsOn('update:progress', (p) => cb(p as UpdateProgress));
+}
+
+/** Subscribes to environment-comparison progress events. Returns an unsubscribe function. */
+export function onCompareProgress(cb: (p: RunProgress) => void): () => void {
+  if (!window.runtime?.EventsOn) return () => {};
+  return window.runtime.EventsOn('compare:progress', (p) => cb(p as RunProgress));
 }

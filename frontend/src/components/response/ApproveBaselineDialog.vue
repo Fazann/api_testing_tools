@@ -14,12 +14,19 @@ import { api } from '@/services/api';
 import { jsonPaths } from '@/services/model';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
 import type { RunResult } from '@/types';
+import { lines, mergeLines } from '@/utils/object';
+
+import ChangingFieldsDetector from './ChangingFieldsDetector.vue';
 
 const props = defineProps<{ result: RunResult; requestId: string; existingIgnored?: string[] }>();
 const emit = defineEmits<{ close: []; approved: [] }>();
 const envs = useEnvironments();
 const ui = useUi();
+const ws = useWorkspace();
+/** The request the response belongs to, as open in the editor (detection sends it again). */
+const request = computed(() => (ws.draft?.id === props.requestId ? ws.draft : null));
 
 type Mode = 'all' | 'selected' | 'schema';
 const mode = ref<Mode>('all');
@@ -51,14 +58,10 @@ const suggestions = computed(() =>
 );
 
 function addSuggestions() {
-  const cur = new Set(
-    ignored.value
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean),
+  ignored.value = mergeLines(
+    ignored.value,
+    suggestions.value.map((s) => s.replace(/\[\d+\]/g, '[*]')),
   );
-  for (const s of suggestions.value) cur.add(s.replace(/\[\d+\]/g, '[*]'));
-  ignored.value = [...cur].join('\n');
 }
 
 async function approve() {
@@ -127,6 +130,11 @@ async function approve() {
         </template>
         <BaseInput v-model="ignored" multiline rows="4" :placeholder="IGNORED_PLACEHOLDER" />
       </FormField>
+      <ChangingFieldsDetector
+        :request="request"
+        :ignored="lines(ignored)"
+        @add="ignored = mergeLines(ignored, $event)"
+      />
       <TextField
         v-if="mode !== 'schema'"
         v-model="tolerance"

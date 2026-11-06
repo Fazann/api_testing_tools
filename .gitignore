@@ -10,3 +10,5 @@ release/
 
 # Wails build cache, rewritten on every build
 frontend/package.json.md5
+
+plans/

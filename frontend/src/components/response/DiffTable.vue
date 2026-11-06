@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import DataTable from '@/components/base/DataTable.vue';
 import type { DiffEntry } from '@/types';
 
-defineProps<{ diffs: DiffEntry[] }>();
-const COLUMNS = [
+// beforeLabel / afterLabel name the two sides, e.g. "A" and "B" in an environment comparison.
+const props = withDefaults(defineProps<{ diffs: DiffEntry[]; beforeLabel?: string; afterLabel?: string }>(), {
+  beforeLabel: 'Baseline',
+  afterLabel: 'Actual',
+});
+const COLUMNS = computed(() => [
   { key: 'kind', label: 'Change', class: 'kind' },
   { key: 'path', label: 'Path', class: 'mono' },
-  { key: 'before', label: 'Baseline', class: 'mono' },
-  { key: 'after', label: 'Actual', class: 'mono' },
-];
+  { key: 'before', label: props.beforeLabel, class: 'mono' },
+  { key: 'after', label: props.afterLabel, class: 'mono' },
+]);
 const labels: Record<string, string> = {
   added: 'Added',
   removed: 'Removed',

@@ -26,6 +26,8 @@ export const useUi = defineStore('ui', () => {
   const view = ref<View>('requests');
   const toasts = ref<Toast[]>([]);
   const dialog = ref<DialogState | null>(null);
+  /** A run for the History view to open when it is shown next (set by showRun). */
+  const historyRunId = ref('');
   let nextId = 1;
 
   function toast(text: string, kind: Toast['kind'] = 'info') {
@@ -88,5 +90,11 @@ export const useUi = defineStore('ui', () => {
     d?.resolve(result);
   }
 
-  return { view, toasts, dialog, toast, dismiss, error, confirm, prompt, closeDialog };
+  /** Switches to History and opens the run with this id. */
+  function showRun(runId: string) {
+    historyRunId.value = runId;
+    view.value = 'history';
+  }
+
+  return { view, toasts, dialog, historyRunId, toast, dismiss, error, confirm, prompt, closeDialog, showRun };
 });

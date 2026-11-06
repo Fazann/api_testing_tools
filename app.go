@@ -10,6 +10,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"api-test-kits/internal/collectionio"
+	"api-test-kits/internal/compare"
 	"api-test-kits/internal/domain"
 	"api-test-kits/internal/fsutil"
 	"api-test-kits/internal/security"
@@ -175,6 +176,27 @@ func (a *App) RunPermissionMatrix(opID, collectionID, envID string, confirmed bo
 	return a.svc.RunPermissionMatrix(a.ctx, opID, collectionID, envID, confirmed, func(done, total int, res domain.RunResult) {
 		runtime.EventsEmit(a.ctx, "matrix:progress", RunProgress{OpID: opID, Done: done, Total: total, Result: res})
 	})
+}
+
+// ---- environment comparison and changing fields ----
+
+func (a *App) GetEnvComparison(collectionID string) (domain.EnvComparison, error) {
+	return a.svc.GetEnvComparison(a.ctx, collectionID)
+}
+
+func (a *App) SaveEnvComparison(c domain.EnvComparison) (domain.EnvComparison, error) {
+	return a.svc.SaveEnvComparison(a.ctx, c)
+}
+
+// CompareEnvironments emits "compare:progress" events while it runs.
+func (a *App) CompareEnvironments(opID string, c domain.EnvComparison, confirmed bool) (compare.Report, error) {
+	return a.svc.CompareEnvironments(a.ctx, opID, c, confirmed, func(done, total int, res domain.RunResult) {
+		runtime.EventsEmit(a.ctx, "compare:progress", RunProgress{OpID: opID, Done: done, Total: total, Result: res})
+	})
+}
+
+func (a *App) DetectChangingFields(opID string, in service.DetectChangingInput) (service.ChangingReport, error) {
+	return a.svc.DetectChangingFields(a.ctx, opID, in)
 }
 
 // ---- baselines ----

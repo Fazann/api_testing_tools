@@ -61,13 +61,22 @@ watch(collectionId, async (id) => {
   if (id && !ws.trees[id]) await ws.loadTree(id).catch(ui.error);
 });
 watch([collectionId, requestId, status, from, to], load);
-onMounted(load);
+onMounted(async () => {
+  await load();
+  // Another screen asked to show a specific run (ui.showRun).
+  const id = ui.historyRunId;
+  if (id) {
+    ui.historyRunId = '';
+    await openById(id);
+  }
+});
 
-async function open(r: Run) {
+async function openById(id: string) {
   await run(async () => {
-    selected.value = await api.getRun(r.id);
+    selected.value = await api.getRun(id);
   });
 }
+const open = (r: Run) => openById(r.id);
 
 async function exportReport(format: 'json' | 'html') {
   const id = selected.value?.id;

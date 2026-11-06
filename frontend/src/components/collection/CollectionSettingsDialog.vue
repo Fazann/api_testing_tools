@@ -20,8 +20,9 @@ import type { Collection, Request } from '@/types';
 import { clone } from '@/utils/object';
 
 import CollectionEndpoints from './CollectionEndpoints.vue';
+import EnvironmentCompare from './EnvironmentCompare.vue';
 
-type Tab = 'endpoints' | 'times' | 'permissions' | 'settings';
+type Tab = 'endpoints' | 'times' | 'compare' | 'permissions' | 'settings';
 const props = defineProps<{ collection: Collection; initialTab?: Tab }>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
@@ -110,13 +111,14 @@ async function save() {
 const tabs = computed(() => [
   { id: 'endpoints' as const, label: 'Endpoints', count: tree.value?.requests.length },
   { id: 'times' as const, label: 'Response times' },
+  { id: 'compare' as const, label: 'Compare environments' },
   { id: 'permissions' as const, label: 'Permissions' },
   { id: 'settings' as const, label: 'Settings & auth' },
 ]);
 </script>
 
 <template>
-  <ModalFrame :title="collection.name" wide :xwide="tab === 'permissions'" @close="requestClose">
+  <ModalFrame :title="collection.name" wide :xwide="tab === 'permissions' || tab === 'compare'" @close="requestClose">
     <TabBar v-model="tab" :tabs="tabs" />
 
     <template v-if="tab === 'endpoints'">
@@ -126,6 +128,11 @@ const tabs = computed(() => [
 
     <template v-else-if="tab === 'times'">
       <CollectionResponseTimes v-if="tree" :tree="tree" @open="openEndpoint" />
+      <p v-else class="muted small">Loading…</p>
+    </template>
+
+    <template v-else-if="tab === 'compare'">
+      <EnvironmentCompare v-if="tree" :tree="tree" @open="openEndpoint" />
       <p v-else class="muted small">Loading…</p>
     </template>
 

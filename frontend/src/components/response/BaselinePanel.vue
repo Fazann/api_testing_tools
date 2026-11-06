@@ -11,6 +11,9 @@ import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
 import type { Baseline } from '@/types';
 import { formatTime } from '@/utils/format';
+import { lines, mergeLines } from '@/utils/object';
+
+import ChangingFieldsDetector from './ChangingFieldsDetector.vue';
 
 const ws = useWorkspace();
 const envs = useEnvironments();
@@ -98,6 +101,11 @@ async function remove() {
         multiline
         rows="4"
         :placeholder="IGNORED_PLACEHOLDER"
+      />
+      <ChangingFieldsDetector
+        :request="ws.draft"
+        :ignored="lines(ignored)"
+        @add="ignored = mergeLines(ignored, $event)"
       />
       <TextField
         v-if="baseline.mode !== 'schema'"
