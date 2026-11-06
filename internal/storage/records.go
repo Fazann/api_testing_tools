@@ -261,7 +261,7 @@ func (s *Store) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.Run,
 		where = append(where, "status = ?")
 		args = append(args, f.Status)
 	}
-	q := `SELECT id, IFNULL(collection_id, ''), collection_name, environment_name, status, started_at, IFNULL(finished_at, ''),
+	q := `SELECT id, IFNULL(collection_id, ''), collection_name, environment_name, kind, status, started_at, IFNULL(finished_at, ''),
 		passed_count, failed_count, error_count, duration_ms FROM runs`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
@@ -281,7 +281,7 @@ func (s *Store) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.Run,
 	for rows.Next() {
 		var r domain.Run
 		var started, finished string
-		if err := rows.Scan(&r.ID, &r.CollectionID, &r.CollectionName, &r.EnvironmentName, &r.Status, &started, &finished,
+		if err := rows.Scan(&r.ID, &r.CollectionID, &r.CollectionName, &r.EnvironmentName, &r.Kind, &r.Status, &started, &finished,
 			&r.PassedCount, &r.FailedCount, &r.ErrorCount, &r.DurationMs); err != nil {
 			return nil, err
 		}

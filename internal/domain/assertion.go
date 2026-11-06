@@ -33,6 +33,9 @@ const (
 	// AssertSocketStep is the outcome of one socket test step. It only
 	// appears in results.
 	AssertSocketStep AssertionKind = "socket_step"
+	// AssertRule is the outcome of one collection rule (see rules.go). It only
+	// appears in the "Collection rules" result of a collection run.
+	AssertRule AssertionKind = "rule"
 )
 
 type Operator string

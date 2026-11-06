@@ -562,3 +562,7 @@ func orDefault(msg, subject string, passed bool) string {
 	}
 	return subject + " check failed"
 }
+
+// FormatFloat formats a calculated number the way assertion messages show it
+// (whole numbers without a decimal point).
+func FormatFloat(f float64) string { return formatFloat(f) }

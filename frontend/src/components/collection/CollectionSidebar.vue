@@ -26,7 +26,7 @@ const exporting = ref<Collection | null>(null);
 const curlTarget = ref<Collection | null>(null);
 const editing = ref<{
   collection: Collection;
-  tab: 'endpoints' | 'times' | 'compare' | 'permissions' | 'settings';
+  tab: 'endpoints' | 'times' | 'compare' | 'rules' | 'permissions' | 'settings';
 } | null>(null);
 
 async function newCollection() {
@@ -62,6 +62,7 @@ function menu(c: Collection) {
     { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
     { label: 'Response times…', action: () => (editing.value = { collection: c, tab: 'times' }) },
     { label: 'Compare environments…', action: () => (editing.value = { collection: c, tab: 'compare' }) },
+    { label: 'Rules…', action: () => (editing.value = { collection: c, tab: 'rules' }) },
     { label: 'Permission matrix…', action: () => (editing.value = { collection: c, tab: 'permissions' }) },
     { label: 'Settings & auth…', action: () => (editing.value = { collection: c, tab: 'settings' }) },
     { label: 'Rename', action: () => rename(c) },

@@ -196,6 +196,8 @@ export interface Collection {
   preRequestScript?: string;
   /** Run before every request's own post-response script. */
   postResponseScript?: string;
+  /** Checks across requests after a collection run; saved with saveCollectionRules only. */
+  rules?: Rule[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -253,8 +255,11 @@ export interface ResponseSummary {
 
 export interface AssertionResult {
   assertionId: string;
-  /** 'script' is a pm.test() result from a post-response script; its name is in description. */
-  kind: AssertionKind | 'script' | 'socket_step';
+  /**
+   * 'script' is a pm.test() result from a post-response script; its name is in description.
+   * 'rule' is a collection rule (in the "Collection rules" result); its name is in description.
+   */
+  kind: AssertionKind | 'script' | 'socket_step' | 'rule';
   path?: string;
   operator?: Operator;
   description?: string;
@@ -675,4 +680,52 @@ export interface ChangingReport {
   samples: number;
   statusCodes: number[];
   statusChanged: boolean;
+}
+
+// ---- collection rules (docs/collection-rules.md) ----
+
+export type RuleKind = 'compare' | 'contains';
+export type RuleSource = 'response' | 'request' | 'status' | 'header' | 'constant';
+export type RuleOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in';
+export type RuleAggregate = '' | 'count' | 'sum' | 'min' | 'max';
+
+/** A value a rule reads from one request of the run, or a constant. */
+export interface RuleValue {
+  source: RuleSource;
+  requestId?: string;
+  /** JSON path for bodies, or the header name. */
+  path?: string;
+  aggregate?: RuleAggregate;
+  /** A constant: JSON (1, true, "text") or plain text. */
+  literal?: string;
+}
+
+export interface RuleTerm {
+  sign: '+' | '-';
+  value: RuleValue;
+}
+
+export interface Rule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: RuleKind;
+  left: RuleValue;
+  operator: RuleOperator;
+  right: RuleTerm[];
+  tolerance: number;
+}
+
+export interface RuleOutcome {
+  ruleId: string;
+  skipped: boolean;
+  reason?: string;
+  result: AssertionResult;
+}
+
+export interface RulesCheck {
+  runId: string;
+  startedAt: string;
+  environmentName: string;
+  outcomes: RuleOutcome[];
 }

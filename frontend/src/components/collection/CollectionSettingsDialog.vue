@@ -20,9 +20,10 @@ import type { Collection, Request } from '@/types';
 import { clone } from '@/utils/object';
 
 import CollectionEndpoints from './CollectionEndpoints.vue';
+import CollectionRules from './CollectionRules.vue';
 import EnvironmentCompare from './EnvironmentCompare.vue';
 
-type Tab = 'endpoints' | 'times' | 'compare' | 'permissions' | 'settings';
+type Tab = 'endpoints' | 'times' | 'compare' | 'rules' | 'permissions' | 'settings';
 const props = defineProps<{ collection: Collection; initialTab?: Tab }>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
@@ -30,19 +31,26 @@ const ui = useUi();
 const openRequest = useOpenRequest();
 const tab = ref<Tab>(props.initialTab ?? 'settings');
 const matrixDirty = ref(false);
+const rulesDirty = ref(false);
 
-/** Closes the dialog, asking first when the permission matrix has unsaved changes. */
+/** Asks before discarding unsaved changes in the permission matrix or the rules; true to go ahead. */
+async function discardUnsaved(): Promise<boolean> {
+  const pending = [
+    matrixDirty.value && 'the permission matrix (roles, ticked requests or expectations)',
+    rulesDirty.value && 'the rules',
+  ].filter(Boolean);
+  if (pending.length === 0) return true;
+  return ui.confirm({
+    title: 'Discard unsaved changes?',
+    message: `You changed ${pending.join(' and ')} without saving.`,
+    confirmLabel: 'Discard',
+    danger: true,
+  });
+}
+
+/** Closes the dialog, asking first when there are unsaved changes. */
 async function requestClose() {
-  if (matrixDirty.value) {
-    const discard = await ui.confirm({
-      title: 'Discard permission matrix changes?',
-      message: 'You changed roles, ticked requests or expectations without saving.',
-      confirmLabel: 'Discard',
-      danger: true,
-    });
-    if (!discard) return;
-  }
-  emit('close');
+  if (await discardUnsaved()) emit('close');
 }
 
 const form = ref(clone(props.collection));
@@ -60,15 +68,7 @@ const tree = computed(() => ws.trees[props.collection.id]);
 
 /** Opens an endpoint from the Endpoints tab, then closes the dialog. */
 async function openEndpoint(r: Request) {
-  if (matrixDirty.value) {
-    const discard = await ui.confirm({
-      title: 'Discard permission matrix changes?',
-      message: 'You changed the permission matrix without saving.',
-      confirmLabel: 'Discard',
-      danger: true,
-    });
-    if (!discard) return;
-  }
+  if (!(await discardUnsaved())) return;
   if (settingsChanged.value) {
     const discard = await ui.confirm({
       title: 'Discard collection settings changes?',
@@ -112,13 +112,19 @@ const tabs = computed(() => [
   { id: 'endpoints' as const, label: 'Endpoints', count: tree.value?.requests.length },
   { id: 'times' as const, label: 'Response times' },
   { id: 'compare' as const, label: 'Compare environments' },
+  { id: 'rules' as const, label: 'Rules', count: tree.value?.collection.rules?.length || undefined },
   { id: 'permissions' as const, label: 'Permissions' },
   { id: 'settings' as const, label: 'Settings & auth' },
 ]);
 </script>
 
 <template>
-  <ModalFrame :title="collection.name" wide :xwide="tab === 'permissions' || tab === 'compare'" @close="requestClose">
+  <ModalFrame
+    :title="collection.name"
+    wide
+    :xwide="tab === 'permissions' || tab === 'compare' || tab === 'rules'"
+    @close="requestClose"
+  >
     <TabBar v-model="tab" :tabs="tabs" />
 
     <template v-if="tab === 'endpoints'">
@@ -133,6 +139,11 @@ const tabs = computed(() => [
 
     <template v-else-if="tab === 'compare'">
       <EnvironmentCompare v-if="tree" :tree="tree" @open="openEndpoint" />
+      <p v-else class="muted small">Loading…</p>
+    </template>
+
+    <template v-else-if="tab === 'rules'">
+      <CollectionRules v-if="tree" :tree="tree" @dirty="rulesDirty = $event" />
       <p v-else class="muted small">Loading…</p>
     </template>
 

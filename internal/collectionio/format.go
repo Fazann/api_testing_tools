@@ -293,9 +293,13 @@ func validate(doc Document) (*Imported, error) {
 		Auth:               doc.Collection.Auth,
 		PreRequestScript:   doc.Collection.PreRequestScript,
 		PostResponseScript: doc.Collection.PostResponseScript,
+		Rules:              domain.NormalizeRules(doc.Collection.Rules),
 	}
 	if err := c.Validate(); err != nil {
 		add("collection: %v", err)
+	}
+	if err := domain.ValidateRules(c.Rules); err != nil {
+		add("collection rules: %v", err)
 	}
 	folderIDs := map[string]bool{}
 	for i, f := range doc.Folders {

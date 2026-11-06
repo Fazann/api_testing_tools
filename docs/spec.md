@@ -153,6 +153,14 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
    suggested as an ignored path.
 3. Review the suggestions, add them, and approve the baseline. The next run does not fail on timestamps or IDs.
 
+### Workflow J: Check business logic across requests
+
+1. Put the requests of a flow in a collection in order, for example *balance before*, *transfer*, *balance after*.
+2. Open the collection's **Rules** and add a rule that combines values from several requests, such as
+   *balance after = balance before − transfer amount*, or *the created order's id appears in the order list*.
+3. Check the rule against the last run while writing it, then save.
+4. Every collection run (and the CLI) evaluates the rules after the requests and fails when one does not hold.
+
 ---
 
 ## 4. MVP Feature Requirements
@@ -360,6 +368,25 @@ that setup. Guides: [environment-comparison.md](environment-comparison.md) and [
   variable changes are not saved. Cancellable; progress events. Save each environment's first pass as a normal run in
   history; do not save the detection calls. Store the settings per collection; do not store the comparison result.
 - Socket requests are skipped. At most 500 differences per request.
+
+### Collection rules — implemented after the MVP
+
+Checks that span several requests of one run, without scripts. Guide: [collection-rules.md](collection-rules.md).
+
+- Stored with the collection (`rules`), so they are exported, imported, duplicated and run by the CLI; request
+  references are remapped when IDs are regenerated. At most 50 rules, 10 right-side terms each.
+- A value is read from one request's result in the run: response body or request body (JSON path, optionally
+  count/sum/min/max), status code, or response header; or it is a constant.
+- **Compare** (`=`, `≠`, `>`, `≥`, `<`, `≤`, numeric tolerance): left value against one value, or a sum of values with
+  `+`/`−` signs (numbers only). One value with `=`/`≠` compares any JSON values.
+- **Contains** (*appears in*, *does not appear in*): a value against the list selected by a path; numbers and strings
+  compare by value.
+- Evaluated after a collection run, in any request order or concurrency. A rule runs only when all its requests were
+  in the run and it is enabled. A value that cannot be read fails the rule with a clear message.
+- The results form one more run result, *Collection rules*, with one check per rule showing the values used; it counts
+  in the run's tally, history, reports, JUnit and the CLI exit code. Values come from redacted results.
+- **Check against last run** evaluates unsaved rules against the newest history run of the collection without sending
+  requests.
 
 ### P2 — Only after validating demand
 
@@ -639,6 +666,7 @@ Use SQLite migrations from the beginning.
 - `name`: text, required
 - `description`: text, optional
 - `created_at`: timestamp
+- `rules_json`: text — collection rules across requests (see [collection-rules.md](collection-rules.md))
 - `updated_at`: timestamp
 
 ### `requests`
@@ -814,6 +842,7 @@ API clients can access sensitive systems, so security must be part of the MVP.
 14. Socket request editor (type selector, Messages, test steps, socket options) with a live console and test result
 15. Compare tab in the collection dialog (environment pickers, options, summary, per-request differences)
 16. Changing-field suggestions in the approve-baseline dialog and the Baseline tab
+17. Rules tab in the collection dialog (rule builder, check against the last run)
 
 Keep the first version focused. Do not build a complex dashboard before the request and test workflows are reliable.
 

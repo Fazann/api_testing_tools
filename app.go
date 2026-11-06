@@ -178,6 +178,16 @@ func (a *App) RunPermissionMatrix(opID, collectionID, envID string, confirmed bo
 	})
 }
 
+// ---- collection rules ----
+
+func (a *App) SaveCollectionRules(collectionID string, list []domain.Rule) ([]domain.Rule, error) {
+	return a.svc.SaveCollectionRules(a.ctx, collectionID, list)
+}
+
+func (a *App) CheckCollectionRules(collectionID string, list []domain.Rule) (service.RulesCheck, error) {
+	return a.svc.CheckCollectionRules(a.ctx, collectionID, list)
+}
+
 // ---- environment comparison and changing fields ----
 
 func (a *App) GetEnvComparison(collectionID string) (domain.EnvComparison, error) {

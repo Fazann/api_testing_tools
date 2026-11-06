@@ -402,3 +402,27 @@ func TestMigration0007MarksOldBurstRuns(t *testing.T) {
 		}
 	}
 }
+
+func TestListRunsIncludesKind(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	for _, r := range []domain.Run{
+		{ID: "normal", Kind: domain.RunKindNormal, StartedAt: time.Now().Add(-time.Minute)},
+		{ID: "burst", Kind: domain.RunKindBurst, StartedAt: time.Now()},
+	} {
+		if err := s.SaveRun(ctx, r, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runs, err := s.ListRuns(ctx, domain.RunFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, r := range runs {
+		got[r.ID] = r.Kind
+	}
+	if got["normal"] != domain.RunKindNormal || got["burst"] != domain.RunKindBurst {
+		t.Fatalf("run kinds in the list: %v", got)
+	}
+}

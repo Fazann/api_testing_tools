@@ -10,7 +10,7 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 | `version`         | integer   | Format version. This app reads version `1`                       |
 | `exportedAt`      | RFC 3339  | Informational                                                  |
 | `appVersion`      | string    | Informational                                                  |
-| `collection`      | object    | `name`, `description`, `requiredVariables` (string array), `variables`, `auth`, `preRequestScript`, `postResponseScript` |
+| `collection`      | object    | `name`, `description`, `requiredVariables` (string array), `variables`, `auth`, `preRequestScript`, `postResponseScript`, `rules` (see [Collection rules](#collection-rules)) |
 | `folders`         | array     | `id`, `parentId` (`""` = top level), `name`, `sortOrder`       |
 | `requests`        | array     | See below                                                      |
 | `environments`    | array     | Optional. `name`, `protected`, `variables`                     |
@@ -119,6 +119,39 @@ Local, Staging and Production. Secret collection variables are redacted like env
 are blanked on export unless secrets are explicitly included. Required variables are satisfied by either.
 
 - `{{name}}` references a collection or environment variable in the URL, headers, query, body, auth and assertion expected values. Built-ins: `{{$uuid}}`, `{{$timestamp}}` (Unix seconds), `{{$isoTimestamp}}`.
+
+### Collection rules
+
+`collection.rules` is an optional array of checks across requests, evaluated after a collection run (guide:
+[collection-rules.md](collection-rules.md)). Request references use the request `id`s of the same file and are
+remapped on import.
+
+```json
+{
+  "id": "rule-1",
+  "name": "Withdrawal is deducted",
+  "enabled": true,
+  "kind": "compare",
+  "left": { "source": "response", "requestId": "r3", "path": "data.balance" },
+  "operator": "eq",
+  "right": [
+    { "sign": "+", "value": { "source": "response", "requestId": "r1", "path": "data.balance" } },
+    { "sign": "-", "value": { "source": "request", "requestId": "r2", "path": "amount" } }
+  ],
+  "tolerance": 0
+}
+```
+
+| Field       | Notes                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `kind`      | `compare` or `contains`                                                                                 |
+| `operator`  | `compare`: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`; `contains`: `in`, `not_in`                              |
+| `left`, `right[].value` | `source`: `response`, `request`, `status`, `header` or `constant`; `requestId` (not for constants); `path` (JSON path, or the header name); optional `aggregate` `count`/`sum`/`min`/`max` for bodies; `literal` for constants |
+| `right`     | 1–10 terms with `sign` `+` or `-` (`compare`); exactly one term (`contains`)                              |
+| `tolerance` | absolute difference allowed between numbers                                                            |
+
+An invalid rule makes the import fail with a message naming the rule. A rule whose request is not in the file is kept
+and skipped when the collection runs.
 
 ## Assertion
 

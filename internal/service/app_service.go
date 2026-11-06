@@ -525,6 +525,11 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 	for i := range run.Results {
 		applyPerformance(&run.Results[i], perfIn[i])
 	}
+	// Rules read the stored (redacted) results, so they are evaluated once every request has finished.
+	// Their result is reported like a request's, so the Run view and the CLI show it.
+	if res := applyRules(&run, c); res != nil && progress != nil {
+		progress(len(run.Results), len(run.Results), *res)
+	}
 	end := time.Now().UTC()
 	run.FinishedAt = &end
 	run.DurationMs = end.Sub(run.StartedAt).Milliseconds()

@@ -129,7 +129,8 @@ func FailureDetails(res domain.RunResult) []string {
 			}
 		}
 		line := label
-		if a.Expected != "" || a.Actual != "" {
+		// A rule's message already shows the values it compared.
+		if (a.Expected != "" || a.Actual != "") && a.Kind != domain.AssertRule {
 			line += fmt.Sprintf(": expected %s, got %s", a.Expected, a.Actual)
 		}
 		if a.Message != "" {

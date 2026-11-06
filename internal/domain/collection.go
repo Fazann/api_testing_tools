@@ -30,10 +30,13 @@ type Collection struct {
 	// Scripts that run around every request in the collection: the
 	// collection's pre-request script before the request's own, and its
 	// post-response script before the request's own.
-	PreRequestScript   string    `json:"preRequestScript"`
-	PostResponseScript string    `json:"postResponseScript"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
+	PreRequestScript   string `json:"preRequestScript"`
+	PostResponseScript string `json:"postResponseScript"`
+	// Rules check values across requests after a collection run. They are
+	// saved separately (SaveCollectionRules), never by SaveCollection.
+	Rules     []Rule    `json:"rules"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Folder organizes requests inside a collection. Folders may nest.

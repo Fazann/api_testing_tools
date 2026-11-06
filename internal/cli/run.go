@@ -16,6 +16,7 @@ import (
 	"api-test-kits/internal/domain"
 	"api-test-kits/internal/fsutil"
 	"api-test-kits/internal/reports"
+	"api-test-kits/internal/rules"
 	"api-test-kits/internal/service"
 	"api-test-kits/internal/storage"
 )
@@ -169,6 +170,9 @@ func runCommand(ctx context.Context, args []string, env Env) (int, error) {
 	width := 0
 	for _, r := range reqs {
 		width = max(width, utf8.RuneCountInString(r.Name))
+	}
+	if len(tree.Collection.Rules) > 0 {
+		width = max(width, utf8.RuneCountInString(rules.ResultName))
 	}
 	width = min(width, 48)
 	run, err := svc.RunCollection(ctx, "cli", tree.Collection.ID, folderID, envID, o.confirmProtected,

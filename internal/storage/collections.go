@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 // ---- collections ----
 
 func (s *Store) ListCollections(ctx context.Context) ([]domain.Collection, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, pre_request_script, post_response_script, created_at, updated_at FROM collections ORDER BY name COLLATE NOCASE, created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, pre_request_script, post_response_script, rules_json, created_at, updated_at FROM collections ORDER BY name COLLATE NOCASE, created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +33,7 @@ func (s *Store) ListCollections(ctx context.Context) ([]domain.Collection, error
 }
 
 func (s *Store) GetCollection(ctx context.Context, id string) (domain.Collection, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, pre_request_script, post_response_script, created_at, updated_at FROM collections WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, description, required_vars_json, variables_json, auth_json, pre_request_script, post_response_script, rules_json, created_at, updated_at FROM collections WHERE id = ?`, id)
 	c, err := scanCollection(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
@@ -44,8 +45,8 @@ type scanner interface{ Scan(...any) error }
 
 func scanCollection(r scanner) (domain.Collection, error) {
 	var c domain.Collection
-	var reqVars, vars, auth, created, updated string
-	if err := r.Scan(&c.ID, &c.Name, &c.Description, &reqVars, &vars, &auth, &c.PreRequestScript, &c.PostResponseScript, &created, &updated); err != nil {
+	var reqVars, vars, auth, rules, created, updated string
+	if err := r.Scan(&c.ID, &c.Name, &c.Description, &reqVars, &vars, &auth, &c.PreRequestScript, &c.PostResponseScript, &rules, &created, &updated); err != nil {
 		return c, err
 	}
 	unmarshalLenient(auth, &c.Auth)
@@ -60,11 +61,18 @@ func scanCollection(r scanner) (domain.Collection, error) {
 	if c.Variables == nil {
 		c.Variables = []domain.Variable{}
 	}
+	unmarshalLenient(rules, &c.Rules)
+	if c.Rules == nil {
+		c.Rules = []domain.Rule{}
+	}
 	c.CreatedAt, c.UpdatedAt = parseTS(created), parseTS(updated)
 	return c, nil
 }
 
-// SaveCollection inserts or updates c and returns the stored record.
+// SaveCollection inserts or updates c and returns the stored record. Rules
+// are not written (a new collection starts without rules); they change only
+// through SaveCollectionRules, so a stale copy of the collection cannot
+// overwrite them.
 func (s *Store) SaveCollection(ctx context.Context, c domain.Collection) (domain.Collection, error) {
 	if err := c.Validate(); err != nil {
 		return c, err
@@ -95,6 +103,19 @@ func (s *Store) SaveCollection(ctx context.Context, c domain.Collection) (domain
 		c.ID, c.Name, c.Description, mustJSON(c.RequiredVariables), mustJSON(c.Variables), mustJSON(c.Auth),
 		c.PreRequestScript, c.PostResponseScript, ts(c.CreatedAt), ts(c.UpdatedAt))
 	return c, err
+}
+
+// SaveCollectionRules replaces a collection's rules.
+func (s *Store) SaveCollectionRules(ctx context.Context, id string, rules []domain.Rule) ([]domain.Rule, error) {
+	rules = domain.NormalizeRules(rules)
+	if err := domain.ValidateRules(rules); err != nil {
+		return nil, err
+	}
+	if err := s.execOne(ctx, `UPDATE collections SET rules_json = ?, updated_at = ? WHERE id = ?`,
+		mustJSON(rules), ts(time.Now().UTC()), id); err != nil {
+		return nil, err
+	}
+	return rules, nil
 }
 
 // RenameCollection changes only the collection's name, leaving variables,
@@ -170,10 +191,14 @@ func (s *Store) ImportTree(ctx context.Context, t domain.CollectionTree) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC()
 		c := t.Collection
+		rules := domain.NormalizeRules(c.Rules)
+		if err := domain.ValidateRules(rules); err != nil {
+			return fmt.Errorf("collection rules: %w", err)
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO collections (id, name, description, required_vars_json, variables_json, auth_json,
-			pre_request_script, post_response_script, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			pre_request_script, post_response_script, rules_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			c.ID, c.Name, c.Description, mustJSON(nonNil(c.RequiredVariables)), mustJSON(nonNilVars(c.Variables)), mustJSON(c.Auth),
-			c.PreRequestScript, c.PostResponseScript, ts(now), ts(now)); err != nil {
+			c.PreRequestScript, c.PostResponseScript, mustJSON(rules), ts(now), ts(now)); err != nil {
 			return err
 		}
 		for _, f := range orderFolders(t.Folders) {
@@ -222,8 +247,11 @@ func ReassignIDs(t domain.CollectionTree) domain.CollectionTree {
 		folders[i] = f
 	}
 	reqs := make([]domain.Request, len(t.Requests))
+	requestIDs := map[string]string{}
 	for i, r := range t.Requests {
-		r.ID = uuid.NewString()
+		newID := uuid.NewString()
+		requestIDs[r.ID] = newID
+		r.ID = newID
 		r.ParentID = folderIDs[r.ParentID]
 		r.CollectionID = t.Collection.ID
 		as := make([]domain.Assertion, len(r.Assertions))
@@ -236,6 +264,8 @@ func ReassignIDs(t domain.CollectionTree) domain.CollectionTree {
 		reqs[i] = r
 	}
 	t.Folders, t.Requests = folders, reqs
+	// Rules keep pointing at the same requests under their new IDs.
+	t.Collection.Rules = domain.RemapRuleRequests(t.Collection.Rules, requestIDs)
 	return t
 }
 

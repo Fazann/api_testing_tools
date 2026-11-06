@@ -4,6 +4,8 @@ import { KIND_LABELS, OPERATOR_LABELS } from '@/services/model';
 import type { AssertionResult } from '@/types';
 
 defineProps<{ results: AssertionResult[] }>();
+// Kinds that only appear in results, not in a request's saved assertions.
+const SPECIAL_KINDS: Record<string, string> = { script: 'Script test', socket_step: 'Socket step', rule: 'Rule' };
 const COLUMNS = [
   { key: 'passed', label: 'Result' },
   { key: 'kind', label: 'Check' },
@@ -19,7 +21,7 @@ const COLUMNS = [
       <span :class="row.passed ? 'pass' : 'fail'">{{ row.passed ? '✔ Pass' : '✘ Fail' }}</span>
     </template>
     <template #cell-kind="{ row }">
-      {{ row.kind === 'script' ? 'Script test' : row.kind === 'socket_step' ? 'Socket step' : KIND_LABELS[row.kind] }}
+      {{ SPECIAL_KINDS[row.kind] ?? KIND_LABELS[row.kind as keyof typeof KIND_LABELS] }}
       <code v-if="row.path">{{ row.path }}</code>
       <span v-if="row.operator" class="muted"> {{ OPERATOR_LABELS[row.operator] ?? row.operator }}</span>
       <div v-if="row.description" class="muted small">{{ row.description }}</div>

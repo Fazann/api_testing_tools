@@ -22,6 +22,8 @@ import type {
   Request,
   ResponseTimeRow,
   ResponseTimeTrend,
+  Rule,
+  RulesCheck,
   Run,
   RunFilter,
   RunProgress,
@@ -110,6 +112,11 @@ export const api = {
   savePermissionMatrix: (m: PermissionMatrix) => call<PermissionMatrix>('SavePermissionMatrix', m),
   runPermissionMatrix: (opId: string, collectionId: string, envId: string, confirmed: boolean) =>
     call<MatrixReport>('RunPermissionMatrix', opId, collectionId, envId, confirmed),
+
+  saveCollectionRules: (collectionId: string, rules: Rule[]) =>
+    call<Rule[]>('SaveCollectionRules', collectionId, rules),
+  checkCollectionRules: (collectionId: string, rules: Rule[]) =>
+    call<RulesCheck>('CheckCollectionRules', collectionId, rules),
 
   getEnvComparison: (collectionId: string) => call<EnvComparison>('GetEnvComparison', collectionId),
   saveEnvComparison: (c: EnvComparison) => call<EnvComparison>('SaveEnvComparison', c),
