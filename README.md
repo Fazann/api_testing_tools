@@ -60,7 +60,7 @@ make check             # regression check: lint, typecheck, gofmt, go vet and al
 make hooks             # run that check on staged changes before every commit (skip: git commit --no-verify)
 make build-linux       # Linux binary for this architecture
 make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
-make build-windows     # Windows amd64 + arm64 .exe (cross-compiles from Linux, no C toolchain needed)
+make build-windows     # Windows amd64 + arm64 → release/api-test-kits-<version>-windows-<arch>.exe (+ .zip)
 make build-cli         # headless CLI for CI → build/bin/api-test-kits-cli (pure Go)
 make release-cli       # CLI for Linux, Windows and macOS (amd64 + arm64) → release/
 make release           # bump the patch version (0.1.0 → 0.1.1 → …), tag, test, build every package → release/
