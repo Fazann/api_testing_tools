@@ -96,7 +96,7 @@ fmt: frontend/node_modules ## Format Go and frontend code
 	gofmt -w $(shell git ls-files '*.go' 2>/dev/null || find . -name '*.go' -not -path './frontend/*')
 	cd frontend && npm run format
 
-# ---- per-platform builds (binaries in build/bin/, no packaging) ----
+# ---- per-platform builds ----
 
 build-linux: ## Linux binary for this machine's architecture
 	scripts/build.sh --skip-tests --no-package -v $(VERSION) linux
@@ -104,14 +104,14 @@ build-linux: ## Linux binary for this machine's architecture
 build-debian: ## .deb for Debian 12+/Ubuntu 22.04+, built in a Debian 12 container (needs Docker)
 	scripts/build-debian.sh -v $(VERSION)
 
-build-windows: ## Windows amd64 + arm64 .exe (cross-compiles from Linux)
-	scripts/build.sh --skip-tests --no-package -v $(VERSION) windows
+build-windows: ## Windows amd64 + arm64 → release/api-test-kits-<version>-windows-<arch>.{exe,zip} (cross-compiles)
+	scripts/build.sh --skip-tests -v $(VERSION) windows
 
-build-windows-amd64: ## Windows amd64 .exe
-	scripts/build.sh --skip-tests --no-package -v $(VERSION) windows/amd64
+build-windows-amd64: ## Windows amd64 → release/api-test-kits-<version>-windows-amd64.{exe,zip}
+	scripts/build.sh --skip-tests -v $(VERSION) windows/amd64
 
-build-windows-arm64: ## Windows arm64 .exe
-	scripts/build.sh --skip-tests --no-package -v $(VERSION) windows/arm64
+build-windows-arm64: ## Windows arm64 → release/api-test-kits-<version>-windows-arm64.{exe,zip}
+	scripts/build.sh --skip-tests -v $(VERSION) windows/arm64
 
 build-darwin: ## macOS universal .app (macOS host only)
 	scripts/build.sh --skip-tests --no-package -v $(VERSION) darwin

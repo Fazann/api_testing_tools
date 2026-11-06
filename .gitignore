@@ -7,3 +7,6 @@ frontend/wailsjs/
 *.db-shm
 release/
 .cache/
+
+# Wails build cache, rewritten on every build
+frontend/package.json.md5
