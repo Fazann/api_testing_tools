@@ -13,7 +13,8 @@ WAILS    ?= $(shell command -v wails 2>/dev/null || echo $(shell $(GO) env GOPAT
 REPO        ?= Fazann/api_testing_tools
 UPDATE_URL  ?= https://github.com/$(REPO)/releases/latest/download/latest.json
 RELEASE_PAGE_URL ?= https://github.com/$(REPO)/releases/tag/v{version}
-export UPDATE_URL RELEASE_PAGE_URL
+# NOTES (release notes, may span lines) reaches scripts/bump-version.sh through the environment.
+export UPDATE_URL RELEASE_PAGE_URL NOTES
 HOST_OS  := $(shell $(GO) env GOHOSTOS)
 HOST_ARCH := $(shell $(GO) env GOHOSTARCH)
 
@@ -124,7 +125,7 @@ release-cli: ## Cross-compile and package the CLI for Linux, Windows and macOS (
 	scripts/build-cli.sh -v $(VERSION)
 
 release: ## New release: bump the patch version (every run), commit, tag, test, build all packages + latest.json
-	scripts/bump-version.sh patch $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh patch
 	$(MAKE) release-all
 
 release-windows-installer: ## Windows builds plus NSIS installers (needs makensis)
@@ -139,13 +140,13 @@ version: ## Print the version the next build will carry
 	@echo $(VERSION)
 
 bump-patch: ## Bump X.Y.Z -> X.Y.Z+1, commit and tag (fixes, small changes). NOTES="..." sets release notes
-	scripts/bump-version.sh patch $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh patch
 
 bump-minor: ## Bump X.Y.Z -> X.Y+1.0, commit and tag (new features)
-	scripts/bump-version.sh minor $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh minor
 
 bump-major: ## Bump X.Y.Z -> X+1.0.0, commit and tag (breaking changes)
-	scripts/bump-version.sh major $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh major
 
 manifest: ## Write release/latest.json (the update manifest) for the current version
 	scripts/make-manifest.sh -v $(VERSION)
@@ -157,15 +158,15 @@ release-all: ## Build every update asset this host can (.deb needs Docker, insta
 	scripts/make-manifest.sh -v $(VERSION)
 
 release-patch: ## Bump the patch version, tag it, build everything and write latest.json
-	scripts/bump-version.sh patch $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh patch
 	$(MAKE) release-all
 
 release-minor: ## Bump the minor version, tag it, build everything and write latest.json
-	scripts/bump-version.sh minor $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh minor
 	$(MAKE) release-all
 
 release-major: ## Bump the major version, tag it, build everything and write latest.json
-	scripts/bump-version.sh major $(if $(NOTES),-m "$(NOTES)",)
+	scripts/bump-version.sh major
 	$(MAKE) release-all
 
 icons: ## Regenerate PNG/ICO icons from build/appicon.svg

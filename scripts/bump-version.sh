@@ -20,7 +20,7 @@ cd "$ROOT"
 die() { echo "error: $*" >&2; exit 1; }
 
 LEVEL=""
-NOTES=""
+NOTES="${NOTES:-}" # also read from the environment (make release NOTES=...)
 TAG=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
