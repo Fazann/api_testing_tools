@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import { api } from '../services/api';
-import { clone, newRequest } from '../services/model';
-import type { Collection, CollectionTree, Request, RunResult } from '../types';
+import { api } from '@/services/api';
+import { newRequest } from '@/services/model';
+import type { Collection, CollectionTree, Request, RunResult } from '@/types';
+import { clone } from '@/utils/object';
 
 export const useWorkspace = defineStore('workspace', () => {
   const collections = ref<Collection[]>([]);

@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import VariableInput from '@/components/variables/VariableInput.vue';
 import {
   formatExpected,
   KIND_LABELS,
@@ -8,12 +14,25 @@ import {
   OPERATOR_LABELS,
   OPERATORS,
   parseExpected,
-} from '../services/model';
-import type { Assertion, AssertionKind } from '../types';
-import VariableInput from './VariableInput.vue';
+} from '@/services/model';
+import type { Assertion, AssertionKind } from '@/types';
 
 const props = defineProps<{ assertions: Assertion[] }>();
 const kinds = Object.keys(KIND_LABELS) as AssertionKind[];
+const KIND_OPTIONS = kinds.map((k) => ({ value: k, label: KIND_LABELS[k] }));
+const FUNCTIONS = (['count', 'sum', 'min', 'max'] as const).map((f) => ({ value: f, label: f }));
+const QUICK_ADD: AssertionKind[] = [
+  'status',
+  'json_path',
+  'header',
+  'response_time',
+  'aggregate',
+  'required_fields',
+  'valid_json',
+  'body',
+];
+const operatorOptions = (kind: AssertionKind) =>
+  OPERATORS[kind].map((op) => ({ value: op, label: OPERATOR_LABELS[op] }));
 
 function add(kind: AssertionKind) {
   props.assertions.push(newAssertion(kind));
@@ -74,35 +93,33 @@ function move(i: number, d: number) {
 
 <template>
   <div class="stack">
-    <div v-if="assertions.length === 0" class="callout info">
+    <CalloutBox v-if="assertions.length === 0" tone="info">
       No tests yet. Add checks for the status code and the business values that matter, for example
       <code>data.balance</code> is a number or the item amounts sum to <code>total</code>.
-    </div>
+    </CalloutBox>
     <div v-for="(a, i) in assertions" :key="a.id" class="assertion" :class="{ off: !a.enabled }">
-      <input v-model="a.enabled" type="checkbox" :aria-label="`Enable test ${i + 1}`" />
-      <select
-        :value="a.kind"
+      <CheckboxField v-model="a.enabled" :aria-label="`Enable test ${i + 1}`" />
+      <SelectField
+        :model-value="a.kind"
+        :options="KIND_OPTIONS"
         aria-label="Check"
-        @change="changeKind(a, ($event.target as HTMLSelectElement).value as AssertionKind)"
-      >
-        <option v-for="k in kinds" :key="k" :value="k">{{ KIND_LABELS[k] }}</option>
-      </select>
-      <select v-if="a.kind === 'aggregate'" v-model="a.function" aria-label="Function">
-        <option value="count">count</option>
-        <option value="sum">sum</option>
-        <option value="min">min</option>
-        <option value="max">max</option>
-      </select>
-      <input
+        @update:model-value="(k) => k && changeKind(a, k)"
+      />
+      <SelectField v-if="a.kind === 'aggregate'" v-model="a.function" :options="FUNCTIONS" aria-label="Function" />
+      <BaseInput
         v-if="needsPath(a.kind)"
         v-model="a.path"
         class="mono path"
         :placeholder="a.kind === 'header' ? 'Header-Name' : 'data.items[*].amount'"
         aria-label="Path"
       />
-      <select v-if="OPERATORS[a.kind][0] !== ''" v-model="a.operator" aria-label="Operator" @change="changeOperator(a)">
-        <option v-for="op in OPERATORS[a.kind]" :key="op" :value="op">{{ OPERATOR_LABELS[op] }}</option>
-      </select>
+      <SelectField
+        v-if="OPERATORS[a.kind][0] !== ''"
+        v-model="a.operator"
+        :options="operatorOptions(a.kind)"
+        aria-label="Operator"
+        @change="changeOperator(a)"
+      />
       <VariableInput
         v-if="needsExpected(a)"
         :model-value="expectedText(a)"
@@ -117,14 +134,14 @@ function move(i: number, d: number) {
         class="row small muted tol"
         title="Absolute tolerance for numeric equality"
       >
-        ±<input v-model.number="a.tolerance" type="number" min="0" step="any" aria-label="Tolerance" />
+        ±<BaseInput v-model="a.tolerance" type="number" min="0" step="any" aria-label="Tolerance" />
       </label>
       <span class="row actions">
-        <button class="ghost" :aria-label="`Move test ${i + 1} up`" @click="move(i, -1)">↑</button>
-        <button class="ghost" :aria-label="`Move test ${i + 1} down`" @click="move(i, 1)">↓</button>
-        <button class="ghost" :aria-label="`Remove test ${i + 1}`" @click="remove(i)">✕</button>
+        <BaseButton variant="ghost" :aria-label="`Move test ${i + 1} up`" @click="move(i, -1)">↑</BaseButton>
+        <BaseButton variant="ghost" :aria-label="`Move test ${i + 1} down`" @click="move(i, 1)">↓</BaseButton>
+        <BaseButton variant="ghost" :aria-label="`Remove test ${i + 1}`" @click="remove(i)">✕</BaseButton>
       </span>
-      <input
+      <BaseInput
         v-model="a.description"
         class="desc small"
         placeholder="Description (optional), e.g. rejected transaction keeps balance"
@@ -133,22 +150,7 @@ function move(i: number, d: number) {
     </div>
     <div class="row add">
       <span class="muted small">Add:</span>
-      <button
-        v-for="k in [
-          'status',
-          'json_path',
-          'header',
-          'response_time',
-          'aggregate',
-          'required_fields',
-          'valid_json',
-          'body',
-        ]"
-        :key="k"
-        @click="add(k as AssertionKind)"
-      >
-        {{ KIND_LABELS[k as AssertionKind] }}
-      </button>
+      <BaseButton v-for="k in QUICK_ADD" :key="k" @click="add(k)">{{ KIND_LABELS[k] }}</BaseButton>
     </div>
     <p class="muted small">
       Paths: <code>data.items[0].id</code>, <code>items[*].amount</code> (all items), <code>meta["request-id"]</code>.

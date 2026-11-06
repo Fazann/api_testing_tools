@@ -1,43 +1,44 @@
 <script setup lang="ts">
-import RunSummary from '../components/RunSummary.vue';
-import { api } from '../services/api';
-import { useRunner } from '../stores/runner';
-import { useUi } from '../stores/ui';
+import BaseButton from '@/components/base/BaseButton.vue';
+import EmptyState from '@/components/base/EmptyState.vue';
+import RunSummary from '@/components/run/RunSummary.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { useRunner } from '@/stores/runner';
+import { useUi } from '@/stores/ui';
 
 const runner = useRunner();
 const ui = useUi();
+const { run } = useAsyncAction();
 
 async function exportReport(format: 'json' | 'html') {
-  const run = runner.collectionRun?.run;
-  if (!run) return;
-  try {
-    const path = await api.exportReport(run.id, format);
+  const id = runner.collectionRun?.run?.id;
+  if (!id) return;
+  await run(async () => {
+    const path = await api.exportReport(id, format);
     if (path) ui.toast(`Report saved to ${path}`, 'success');
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 </script>
 
 <template>
   <div class="panel view">
-    <div v-if="!runner.collectionRun" class="empty">
-      <h2>No collection run yet</h2>
+    <EmptyState v-if="!runner.collectionRun" title="No collection run yet">
       <p>
         Use ▶ next to a collection, or “Run folder” in a folder's menu, to run every request and its tests in order.
       </p>
-    </div>
+    </EmptyState>
     <template v-else>
       <div class="row head">
         <h2 class="grow">{{ runner.collectionRun.title || 'Collection run' }}</h2>
-        <button v-if="runner.collectionRun.running" class="danger" @click="runner.cancelCollectionRun()">
+        <BaseButton v-if="runner.collectionRun.running" variant="danger" @click="runner.cancelCollectionRun()">
           Cancel run
-        </button>
+        </BaseButton>
         <template v-else-if="runner.collectionRun.run">
-          <button @click="exportReport('html')">Export HTML</button>
-          <button @click="exportReport('json')">Export JSON</button>
-          <button
-            class="primary"
+          <BaseButton @click="exportReport('html')">Export HTML</BaseButton>
+          <BaseButton @click="exportReport('json')">Export JSON</BaseButton>
+          <BaseButton
+            variant="primary"
             @click="
               runner.runCollection(
                 runner.collectionRun.collectionId,
@@ -47,7 +48,7 @@ async function exportReport(format: 'json' | 'html') {
             "
           >
             Run again
-          </button>
+          </BaseButton>
         </template>
       </div>
       <RunSummary

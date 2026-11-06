@@ -73,14 +73,6 @@ export function sparkPath(values: number[], width: number, height: number): stri
     .join('');
 }
 
-/** "+42%", "−8%", "±0%"; '—' without a value. */
-export function formatChange(pct: number | null | undefined): string {
-  if (pct === null || pct === undefined) return '—';
-  const r = Math.round(pct);
-  if (r === 0) return '±0%';
-  return r > 0 ? `+${r}%` : `−${-r}%`;
-}
-
 /** Short axis label: "850", "1.2k"… milliseconds. */
 export function axisLabel(ms: number): string {
   if (ms >= 1000) return `${+(ms / 1000).toFixed(1)} s`;

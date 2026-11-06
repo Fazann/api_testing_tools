@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import { formatDuration, formatTime } from '../services/model';
-import type { Run, RunResult } from '../types';
-import ResponseViewer from './ResponseViewer.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import MethodBadge from '@/components/base/MethodBadge.vue';
+import StatTile from '@/components/base/StatTile.vue';
+import StatusBadge from '@/components/base/StatusBadge.vue';
+import ResponseViewer from '@/components/response/ResponseViewer.vue';
+import type { Run, RunResult } from '@/types';
+import { formatDuration, formatTime } from '@/utils/format';
 
 const props = defineProps<{
   run?: Run | null;
@@ -40,32 +45,24 @@ function firstProblem(r: RunResult): string {
 <template>
   <div class="stack summary">
     <div class="tiles">
-      <div class="tile">
-        <span class="muted small">Status</span
-        ><b
-          ><span class="badge" :class="running ? 'running' : run?.status">{{
-            running ? 'running' : (run?.status ?? '—')
-          }}</span></b
-        >
-      </div>
-      <div class="tile">
-        <span class="muted small">Passed</span><b class="pass">{{ counts.passed }}</b>
-      </div>
-      <div class="tile">
-        <span class="muted small">Failed</span><b class="fail">{{ counts.failed }}</b>
-      </div>
-      <div class="tile">
-        <span class="muted small">Errors</span><b class="warn">{{ counts.error }}</b>
-      </div>
-      <div v-if="slower" class="tile" title="Responses that took much longer than their recent median">
-        <span class="muted small">Slower than usual</span><b class="warn">▲ {{ slower }}</b>
-      </div>
-      <div class="tile">
-        <span class="muted small">Duration</span><b>{{ run ? formatDuration(run.durationMs) : '…' }}</b>
-      </div>
-      <div v-if="run" class="tile">
-        <span class="muted small">Environment</span><b class="env">{{ run.environmentName || 'None' }}</b>
-      </div>
+      <StatTile label="Status">
+        <StatusBadge
+          :status="running ? 'running' : (run?.status ?? '')"
+          :label="running ? 'running' : (run?.status ?? '—')"
+        />
+      </StatTile>
+      <StatTile label="Passed" :value="counts.passed" tone="pass" />
+      <StatTile label="Failed" :value="counts.failed" tone="fail" />
+      <StatTile label="Errors" :value="counts.error" tone="warn" />
+      <StatTile
+        v-if="slower"
+        label="Slower than usual"
+        :value="`▲ ${slower}`"
+        tone="warn"
+        title="Responses that took much longer than their recent median"
+      />
+      <StatTile label="Duration" :value="run ? formatDuration(run.durationMs) : '…'" />
+      <StatTile v-if="run" label="Environment" class="env" :value="run.environmentName || 'None'" />
     </div>
     <div v-if="running && total" class="progress" role="progressbar" :aria-valuenow="done" :aria-valuemax="total">
       <div class="bar" :style="{ width: `${((done ?? 0) / total) * 100}%` }" />
@@ -73,12 +70,17 @@ function firstProblem(r: RunResult): string {
     <div class="row">
       <span v-if="run" class="muted small">Started {{ formatTime(run.startedAt) }}</span>
       <span class="spacer" />
-      <label class="row small"><input v-model="onlyProblems" type="checkbox" /> Only failures and errors</label>
+      <CheckboxField v-model="onlyProblems" class="small" label="Only failures and errors" />
     </div>
     <div v-for="r in shown" :key="r.id" class="result" :class="{ open: openId === r.id }">
-      <button class="ghost head" :aria-expanded="openId === r.id" @click="openId = openId === r.id ? '' : r.id">
-        <span class="badge" :class="r.status">{{ r.status }}</span>
-        <span class="method" :class="r.request.method">{{ r.request.method }}</span>
+      <BaseButton
+        variant="ghost"
+        class="head"
+        :aria-expanded="openId === r.id"
+        @click="openId = openId === r.id ? '' : r.id"
+      >
+        <StatusBadge :status="r.status" />
+        <MethodBadge :method="r.request.method" />
         <strong class="name">{{ r.request.name }}</strong>
         <span v-if="r.response" class="muted">{{ r.response.statusCode }}</span>
         <span class="muted">{{ formatDuration(r.durationMs) }}</span>
@@ -86,7 +88,7 @@ function firstProblem(r: RunResult): string {
           >▲ {{ r.performance.ratio }}× slower</span
         >
         <span class="problem fail small">{{ firstProblem(r) }}</span>
-      </button>
+      </BaseButton>
       <div v-if="openId === r.id" class="detail">
         <ResponseViewer :result="r" :request-id="r.requestId" />
       </div>
@@ -101,28 +103,8 @@ function firstProblem(r: RunResult): string {
   font-weight: 600;
   white-space: nowrap;
 }
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
-}
-.tile {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 8px 10px;
-  background: var(--bg-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.tile b {
-  font-size: 18px;
-}
-.tile .env {
+.tile.env :deep(b) {
   font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .progress {
   height: 4px;

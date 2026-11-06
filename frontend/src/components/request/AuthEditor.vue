@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import type { Auth, Collection } from '../types';
-import SecretInput from './SecretInput.vue';
-import VariableInput from './VariableInput.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import FormField from '@/components/base/FormField.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import SecretInput from '@/components/variables/SecretInput.vue';
+import VariableInput from '@/components/variables/VariableInput.vue';
+import type { Auth, Collection } from '@/types';
 
 // inheritFrom is set for requests: it enables "Inherit auth from collection"
 // and shows what the collection provides. Collections themselves omit it.
@@ -17,6 +21,14 @@ const TYPE_LABELS: Record<string, string> = {
   apikey: 'API key',
 };
 
+const typeOptions = computed(() => [
+  ...(props.inheritFrom !== undefined ? [{ value: 'inherit' as const, label: 'Inherit auth from collection' }] : []),
+  ...(['none', 'bearer', 'basic', 'apikey'] as const).map((value) => ({ value, label: TYPE_LABELS[value] })),
+]);
+const KEY_IN = [
+  { value: 'header' as const, label: 'Header' },
+  { value: 'query' as const, label: 'Query parameter' },
+];
 const inherited = computed(() => props.inheritFrom?.auth ?? { type: 'none' as const });
 const inheritedSummary = computed(() => {
   const a = inherited.value;
@@ -34,19 +46,10 @@ const inheritedSummary = computed(() => {
 
 <template>
   <div class="stack auth">
-    <label class="field">
-      <span>Type</span>
-      <select v-model="auth.type">
-        <option v-if="inheritFrom !== undefined" value="inherit">Inherit auth from collection</option>
-        <option value="none">No auth</option>
-        <option value="bearer">Bearer token</option>
-        <option value="basic">Basic auth</option>
-        <option value="apikey">API key</option>
-      </select>
-    </label>
+    <SelectField v-model="auth.type" label="Type" :options="typeOptions" />
 
     <template v-if="auth.type === 'inherit'">
-      <div v-if="inheritFrom" class="callout info">
+      <CalloutBox v-if="inheritFrom" tone="info">
         <div>
           Uses the auth of collection <strong>{{ inheritFrom.name }}</strong
           >:
@@ -55,44 +58,34 @@ const inheritedSummary = computed(() => {
         <p v-if="inherited.type === 'none'" class="muted small">
           The collection has no auth, so this request is sent without credentials.
         </p>
-        <button class="small edit" type="button" @click="emit('editCollection')">Edit collection auth…</button>
-      </div>
-      <p v-else class="callout small">
+        <BaseButton small class="edit" @click="emit('editCollection')">Edit collection auth…</BaseButton>
+      </CalloutBox>
+      <CalloutBox v-else small>
         This request is not in a collection, so there is nothing to inherit; it is sent without credentials.
-      </p>
+      </CalloutBox>
     </template>
     <template v-else-if="auth.type === 'bearer'">
-      <label class="field"
-        ><span>Token</span><SecretInput v-model="auth.token" placeholder="{{token}}" label="Token"
-      /></label>
+      <FormField label="Token"><SecretInput v-model="auth.token" placeholder="{{token}}" label="Token" /></FormField>
     </template>
     <template v-else-if="auth.type === 'basic'">
-      <label class="field"
-        ><span>Username</span><VariableInput v-model="auth.username" placeholder="{{username}}"
-      /></label>
-      <label class="field"
-        ><span>Password</span><SecretInput v-model="auth.password" placeholder="{{password}}" label="Password"
-      /></label>
+      <FormField label="Username"><VariableInput v-model="auth.username" placeholder="{{username}}" /></FormField>
+      <FormField label="Password">
+        <SecretInput v-model="auth.password" placeholder="{{password}}" label="Password" />
+      </FormField>
     </template>
     <template v-else-if="auth.type === 'apikey'">
-      <label class="field"><span>Key name</span><VariableInput v-model="auth.keyName" placeholder="X-API-Key" /></label>
-      <label class="field"
-        ><span>Key value</span><SecretInput v-model="auth.keyValue" placeholder="{{api_key}}" label="Key value"
-      /></label>
-      <label class="field">
-        <span>Send in</span>
-        <select v-model="auth.keyIn">
-          <option value="header">Header</option>
-          <option value="query">Query parameter</option>
-        </select>
-      </label>
+      <FormField label="Key name"><VariableInput v-model="auth.keyName" placeholder="X-API-Key" /></FormField>
+      <FormField label="Key value">
+        <SecretInput v-model="auth.keyValue" placeholder="{{api_key}}" label="Key value" />
+      </FormField>
+      <SelectField v-model="auth.keyIn" label="Send in" :options="KEY_IN" />
     </template>
 
-    <p v-if="auth.type !== 'none' && auth.type !== 'inherit'" class="callout info small">
+    <CalloutBox v-if="auth.type !== 'none' && auth.type !== 'inherit'" tone="info" small>
       Tip: reference a <strong>secret</strong> environment variable such as <code v-pre>{{ token }}</code> instead of
       pasting credentials here. Secret variables are masked in the UI, redacted from history and reports, and left out
       of exports.
-    </p>
+    </CalloutBox>
     <p v-if="inheritFrom === undefined && auth.type !== 'none'" class="muted small">
       Requests set to “Inherit auth from collection” use this ({{ TYPE_LABELS[auth.type] }}).
     </p>

@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
-import RunSummary from '../components/RunSummary.vue';
-import { api } from '../services/api';
-import { formatDuration, formatTime } from '../services/model';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { Run } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import EmptyState from '@/components/base/EmptyState.vue';
+import SelectableList from '@/components/base/SelectableList.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import StatusBadge from '@/components/base/StatusBadge.vue';
+import TextField from '@/components/base/TextField.vue';
+import RunSummary from '@/components/run/RunSummary.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { Run } from '@/types';
+import { formatDuration, formatTime } from '@/utils/format';
 
 const ui = useUi();
 const ws = useWorkspace();
@@ -18,26 +25,35 @@ const from = ref('');
 const to = ref('');
 const runs = ref<Run[]>([]);
 const selected = ref<Run | null>(null);
-const loading = ref(false);
+const { busy: loading, run } = useAsyncAction();
 
 const requests = computed(() => (collectionId.value ? (ws.trees[collectionId.value]?.requests ?? []) : []));
+const all = (label: string) => [{ value: '', label }];
+const collectionOptions = computed(() => [
+  ...all('All'),
+  ...ws.collections.map((c) => ({ value: c.id, label: c.name })),
+]);
+const requestOptions = computed(() => [...all('All'), ...requests.value.map((r) => ({ value: r.id, label: r.name }))]);
+const STATUS_OPTIONS = [
+  ...all('Any'),
+  { value: 'passed', label: 'Passed' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'error', label: 'Error' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 async function load() {
-  loading.value = true;
-  try {
-    runs.value = await api.listRuns({
+  const list = await run(() =>
+    api.listRuns({
       collectionId: collectionId.value,
       requestId: requestId.value,
       status: status.value,
       from: from.value ? new Date(`${from.value}T00:00:00`).toISOString() : null,
       to: to.value ? new Date(`${to.value}T23:59:59.999`).toISOString() : null,
       limit: 500,
-    });
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    loading.value = false;
-  }
+    }),
+  );
+  if (list) runs.value = list;
 }
 
 watch(collectionId, async (id) => {
@@ -48,33 +64,28 @@ watch([collectionId, requestId, status, from, to], load);
 onMounted(load);
 
 async function open(r: Run) {
-  try {
+  await run(async () => {
     selected.value = await api.getRun(r.id);
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 
 async function exportReport(format: 'json' | 'html') {
-  if (!selected.value) return;
-  try {
-    const path = await api.exportReport(selected.value.id, format);
+  const id = selected.value?.id;
+  if (!id) return;
+  await run(async () => {
+    const path = await api.exportReport(id, format);
     if (path) ui.toast(`Report saved to ${path}`, 'success');
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 
 async function remove(r: Run) {
   const ok = await ui.confirm({ title: 'Delete this run from history?', confirmLabel: 'Delete', danger: true });
   if (!ok) return;
-  try {
+  await run(async () => {
     await api.deleteRun(r.id);
     if (selected.value?.id === r.id) selected.value = null;
     await load();
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 
 async function clearAll() {
@@ -85,14 +96,12 @@ async function clearAll() {
     danger: true,
   });
   if (!ok) return;
-  try {
+  await run(async () => {
     const n = await api.clearHistory();
     selected.value = null;
     ui.toast(`Deleted ${n} runs`, 'success');
     await load();
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 </script>
 
@@ -100,52 +109,37 @@ async function clearAll() {
   <div class="history">
     <div class="list">
       <div class="filters">
-        <label class="field"
-          ><span>Collection</span>
-          <select v-model="collectionId">
-            <option value="">All</option>
-            <option v-for="c in ws.collections" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-        </label>
-        <label class="field"
-          ><span>Request</span>
-          <select v-model="requestId" :disabled="!collectionId">
-            <option value="">All</option>
-            <option v-for="r in requests" :key="r.id" :value="r.id">{{ r.name }}</option>
-          </select>
-        </label>
-        <label class="field"
-          ><span>Status</span>
-          <select v-model="status">
-            <option value="">Any</option>
-            <option value="passed">Passed</option>
-            <option value="failed">Failed</option>
-            <option value="error">Error</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </label>
-        <label class="field"><span>From</span><input v-model="from" type="date" /></label>
-        <label class="field"><span>To</span><input v-model="to" type="date" /></label>
+        <SelectField v-model="collectionId" class="wide" label="Collection" :options="collectionOptions" />
+        <SelectField
+          v-model="requestId"
+          class="wide"
+          label="Request"
+          :options="requestOptions"
+          :disabled="!collectionId"
+        />
+        <SelectField v-model="status" label="Status" :options="STATUS_OPTIONS" />
+        <TextField v-model="from" label="From" type="date" />
+        <TextField v-model="to" label="To" type="date" />
       </div>
       <div class="row bar">
         <span class="muted small">{{ runs.length }} run(s){{ loading ? ' · loading…' : '' }}</span>
         <span class="spacer" />
-        <button class="danger small" :disabled="runs.length === 0" @click="clearAll">Clear history</button>
+        <BaseButton variant="danger" small :disabled="runs.length === 0" @click="clearAll">Clear history</BaseButton>
       </div>
-      <div class="rows">
-        <div v-if="!loading && runs.length === 0" class="empty small">
-          <p>No runs match these filters. Runs are recorded every time you send a request or run a collection.</p>
-        </div>
-        <button
-          v-for="r in runs"
-          :key="r.id"
-          class="ghost run"
-          :class="{ active: selected?.id === r.id }"
-          @click="open(r)"
-        >
+      <SelectableList
+        class="rows"
+        :items="runs"
+        :item-key="(r) => r.id"
+        :active-key="selected?.id"
+        stacked
+        label="Runs"
+        @select="open"
+      >
+        <template #default="{ item: r }">
           <span class="row"
-            ><span class="badge" :class="r.status">{{ r.status }}</span
-            ><strong class="grow name">{{ r.collectionName || 'Single request' }}</strong></span
+            ><StatusBadge :status="r.status" /><strong class="grow name">{{
+              r.collectionName || 'Single request'
+            }}</strong></span
           >
           <span class="row small muted">
             <span>{{ formatTime(r.startedAt) }}</span
@@ -154,20 +148,27 @@ async function clearAll() {
             >/<span class="warn">{{ r.errorCount }}</span> · {{ formatDuration(r.durationMs) }}
           </span>
           <span class="small muted">{{ r.environmentName || 'No environment' }}</span>
-        </button>
-      </div>
+        </template>
+        <template v-if="!loading" #empty>
+          <EmptyState
+            small
+            message="No runs match these filters. Runs are recorded every time you send a request or run a collection."
+          />
+        </template>
+      </SelectableList>
     </div>
     <div class="detail panel">
-      <div v-if="!selected" class="empty">
-        <h2>Run history</h2>
-        <p>Select a run to see its results, compare with earlier runs and export a report.</p>
-      </div>
+      <EmptyState
+        v-if="!selected"
+        title="Run history"
+        message="Select a run to see its results, compare with earlier runs and export a report."
+      />
       <template v-else>
         <div class="row head">
           <h2 class="grow">{{ selected.collectionName || selected.results?.[0]?.request.name || 'Run' }}</h2>
-          <button @click="exportReport('html')">Export HTML</button>
-          <button @click="exportReport('json')">Export JSON</button>
-          <button class="danger" @click="remove(selected)">Delete</button>
+          <BaseButton @click="exportReport('html')">Export HTML</BaseButton>
+          <BaseButton @click="exportReport('json')">Export JSON</BaseButton>
+          <BaseButton variant="danger" @click="remove(selected)">Delete</BaseButton>
         </div>
         <RunSummary :run="selected" :results="selected.results ?? []" />
       </template>
@@ -196,8 +197,7 @@ async function clearAll() {
   padding: 10px;
   border-bottom: 1px solid var(--line);
 }
-.filters .field:first-child,
-.filters .field:nth-child(2) {
+.filters .wide {
   grid-column: span 2;
 }
 .bar {
@@ -208,20 +208,6 @@ async function clearAll() {
   flex: 1;
   overflow: auto;
   padding: 6px;
-}
-.run {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: stretch;
-  text-align: left;
-  padding: 8px;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-}
-.run.active {
-  background: var(--bg-muted);
 }
 .name {
   overflow: hidden;

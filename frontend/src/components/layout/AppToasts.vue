@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { useUi } from '../stores/ui';
+import BaseButton from '@/components/base/BaseButton.vue';
+import { useUi } from '@/stores/ui';
 
 const ui = useUi();
 </script>
@@ -8,7 +9,7 @@ const ui = useUi();
   <div class="toasts" role="status" aria-live="polite">
     <div v-for="t in ui.toasts" :key="t.id" class="toast" :class="t.kind">
       <span class="grow">{{ t.text }}</span>
-      <button class="ghost" aria-label="Dismiss" @click="ui.dismiss(t.id)">✕</button>
+      <BaseButton variant="ghost" aria-label="Dismiss" @click="ui.dismiss(t.id)">✕</BaseButton>
     </div>
   </div>
 </template>
@@ -33,7 +34,7 @@ const ui = useUi();
   background: var(--bg-subtle);
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
-  box-shadow: 0 4px 16px #0002;
+  box-shadow: var(--shadow-sm);
   word-break: break-word;
 }
 .toast.success {

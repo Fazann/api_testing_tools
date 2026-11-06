@@ -6,7 +6,7 @@ API clients reach sensitive systems, so these protections are part of the MVP. E
 
 | Protection | Where |
 | --- | --- |
-| Environment and collection variables can be marked **secret**; they are masked in the UI with a show/hide toggle. Collection secrets are merged under the environment's before a run, so they get every protection below. | `frontend/src/components/SecretInput.vue` |
+| Environment and collection variables can be marked **secret**; they are masked in the UI with a show/hide toggle. Collection secrets are merged under the environment's before a run, so they get every protection below. | `frontend/src/components/variables/SecretInput.vue` |
 | Secret values and resolved auth credentials are redacted from request/response summaries, assertion messages, diffs and errors **before** anything is stored in history. | `internal/runner/runner.go`, `internal/redact` |
 | `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`, the configured API-key header and any header whose value references a secret variable are always masked. | `internal/redact/redact.go` |
 | Reports are redacted a second time with every environment's and collection's current secrets, and credential headers are removed entirely. | `internal/reports/json.go` |

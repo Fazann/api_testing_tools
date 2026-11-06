@@ -1,23 +1,33 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import { looksLikeCurl, parseCurl } from '../services/curl';
-import { isDestructive } from '../services/model';
-import { useEnvironments } from '../stores/environments';
-import { useRunner } from '../stores/runner';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import { METHODS, type Collection } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import RadioGroup from '@/components/base/RadioGroup.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import TabBar, { type Tab as TabItem } from '@/components/base/TabBar.vue';
+import TextField from '@/components/base/TextField.vue';
+import CollectionSettingsDialog from '@/components/collection/CollectionSettingsDialog.vue';
+import CurlExportDialog from '@/components/collection/CurlExportDialog.vue';
+import PerformancePanel from '@/components/performance/PerformancePanel.vue';
+import BaselinePanel from '@/components/response/BaselinePanel.vue';
+import RaceTestPanel from '@/components/security/RaceTestPanel.vue';
+import VariableInput from '@/components/variables/VariableInput.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { looksLikeCurl, parseCurl } from '@/services/curl';
+import { useEnvironments } from '@/stores/environments';
+import { useRunner } from '@/stores/runner';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import { METHODS, type Collection, type Request } from '@/types';
+import { isDestructive } from '@/utils/http';
+
 import AssertionEditor from './AssertionEditor.vue';
 import AuthEditor from './AuthEditor.vue';
-import BaselinePanel from './BaselinePanel.vue';
-import CollectionSettingsDialog from './CollectionSettingsDialog.vue';
-import CurlExportDialog from './CurlExportDialog.vue';
 import KeyValueTable from './KeyValueTable.vue';
-import PerformancePanel from './PerformancePanel.vue';
-import RaceTestPanel from './RaceTestPanel.vue';
 import ScriptEditor from './ScriptEditor.vue';
-import VariableInput from './VariableInput.vue';
 
 const ws = useWorkspace();
 const runner = useRunner();
@@ -40,7 +50,7 @@ const editingCollection = ref<Collection | null>(null);
 const copyingCurl = ref(false);
 
 const req = computed(() => ws.draft!);
-const count = (rows: { key: string; enabled: boolean }[]) => rows.filter((r) => r.enabled && r.key).length;
+const count = (rows: { key: string; enabled: boolean }[]) => rows.filter((r) => r.enabled && r.key).length || '';
 const bodyAllowed = computed(() => req.value.method !== 'GET' && req.value.method !== 'HEAD');
 const jsonError = computed(() => {
   if (req.value.bodyType !== 'json' || !req.value.body.trim()) return '';
@@ -54,14 +64,12 @@ const jsonError = computed(() => {
   }
 });
 
-async function save() {
-  try {
+const { run } = useAsyncAction();
+const save = () =>
+  run(async () => {
     await ws.saveDraft();
     ui.toast('Saved', 'success');
-  } catch (e) {
-    ui.error(e);
-  }
-}
+  });
 
 // Pasting a cURL command into the URL bar fills in the whole request, like "New request from cURL".
 function onUrlPaste(e: ClipboardEvent) {
@@ -100,7 +108,15 @@ function formatBody() {
   }
 }
 
-const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
+const METHOD_OPTIONS = METHODS.map((m) => ({ value: m, label: m }));
+const BODY_TYPES: { value: Request['bodyType']; label: string }[] = [
+  { value: 'none', label: 'No body' },
+  { value: 'json', label: 'JSON' },
+  { value: 'text', label: 'TEXT' },
+];
+
+// Tabs show a count only when there is something to count.
+const tabs = computed<TabItem<Tab>[]>(() => [
   { id: 'params', label: 'Params', count: count(req.value.query) },
   { id: 'headers', label: 'Headers', count: count(req.value.headers) },
   { id: 'body', label: 'Body' },
@@ -108,9 +124,9 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
   {
     id: 'scripts',
     label: 'Scripts',
-    count: [req.value.preRequestScript, req.value.postResponseScript].filter((s) => s?.trim()).length,
+    count: [req.value.preRequestScript, req.value.postResponseScript].filter((s) => s?.trim()).length || '',
   },
-  { id: 'tests', label: 'Tests', count: req.value.assertions.filter((a) => a.enabled).length },
+  { id: 'tests', label: 'Tests', count: req.value.assertions.filter((a) => a.enabled).length || '' },
   { id: 'baseline', label: 'Baseline' },
   { id: 'performance', label: 'Performance' },
   { id: 'race', label: 'Race test' },
@@ -121,11 +137,11 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
 <template>
   <section class="editor">
     <div class="row title">
-      <input v-model="req.name" class="name grow" aria-label="Request name" maxlength="200" />
+      <BaseInput v-model="req.name" class="name grow" aria-label="Request name" maxlength="200" />
       <span v-if="ws.dirty" class="muted small">Unsaved</span>
-      <button class="ghost small" title="Copy this request as a cURL command" @click="copyingCurl = true">
+      <BaseButton variant="ghost" small title="Copy this request as a cURL command" @click="copyingCurl = true">
         Copy as cURL
-      </button>
+      </BaseButton>
       <span
         v-if="isDestructive(req.method)"
         class="small"
@@ -136,9 +152,13 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
       </span>
     </div>
     <form class="row urlbar" @submit.prevent="runner.send()">
-      <select v-model="req.method" class="method" :class="req.method" aria-label="HTTP method">
-        <option v-for="m in METHODS" :key="m" :value="m">{{ m }}</option>
-      </select>
+      <SelectField
+        v-model="req.method"
+        class="method"
+        :class="req.method"
+        :options="METHOD_OPTIONS"
+        aria-label="HTTP method"
+      />
       <VariableInput
         v-model="req.url"
         class="grow"
@@ -146,22 +166,11 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
         aria-label="URL"
         @paste="onUrlPaste"
       />
-      <button v-if="runner.sendingOp" type="button" class="danger" @click="runner.cancelSend()">Cancel</button>
-      <button v-else type="submit" class="primary" title="Send (Ctrl+Enter)">Send</button>
-      <button type="button" :disabled="!ws.dirty" title="Save (Ctrl+S)" @click="save">Save</button>
+      <BaseButton v-if="runner.sendingOp" variant="danger" @click="runner.cancelSend()">Cancel</BaseButton>
+      <BaseButton v-else type="submit" variant="primary" title="Send (Ctrl+Enter)">Send</BaseButton>
+      <BaseButton :disabled="!ws.dirty" title="Save (Ctrl+S)" @click="save">Save</BaseButton>
     </form>
-    <nav class="tabs" role="tablist">
-      <button
-        v-for="t in tabs"
-        :key="t.id"
-        role="tab"
-        :aria-selected="tab === t.id"
-        :class="{ active: tab === t.id }"
-        @click="tab = t.id"
-      >
-        {{ t.label }}<span v-if="t.count" class="count">{{ t.count }}</span>
-      </button>
-    </nav>
+    <TabBar v-model="tab" :tabs="tabs" />
     <div class="tab-body">
       <template v-if="tab === 'params'">
         <KeyValueTable :rows="req.query" key-placeholder="parameter" />
@@ -173,18 +182,16 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
       <KeyValueTable v-else-if="tab === 'headers'" :rows="req.headers" key-placeholder="Header-Name" />
       <div v-else-if="tab === 'body'" class="stack">
         <div class="row">
-          <label v-for="t in ['none', 'json', 'text']" :key="t" class="row small"
-            ><input v-model="req.bodyType" type="radio" :value="t" />
-            {{ t === 'none' ? 'No body' : t.toUpperCase() }}</label
-          >
+          <RadioGroup v-model="req.bodyType" class="small" name="body-type" label="Body type" :options="BODY_TYPES" />
           <span class="spacer" />
-          <button v-if="req.bodyType === 'json'" class="ghost small" @click="formatBody">Format JSON</button>
+          <BaseButton v-if="req.bodyType === 'json'" variant="ghost" small @click="formatBody">Format JSON</BaseButton>
         </div>
-        <p v-if="!bodyAllowed && req.bodyType !== 'none'" class="callout small">
+        <CalloutBox v-if="!bodyAllowed && req.bodyType !== 'none'" small>
           {{ req.method }} requests are sent without a body.
-        </p>
-        <textarea
+        </CalloutBox>
+        <BaseInput
           v-if="req.bodyType !== 'none'"
+          multiline
           v-model="req.body"
           rows="12"
           spellcheck="false"
@@ -210,13 +217,11 @@ const tabs = computed<{ id: Tab; label: string; count?: number }[]>(() => [
       <PerformancePanel v-else-if="tab === 'performance'" />
       <RaceTestPanel v-else-if="tab === 'race'" />
       <div v-else-if="tab === 'options'" class="stack options">
-        <label class="field"
-          ><span>Timeout (ms)</span><input v-model.number="req.timeoutMs" type="number" min="1" max="600000"
-        /></label>
-        <label class="row"
-          ><input v-model="req.followRedirects" type="checkbox" /> Follow redirects (credentials are never forwarded to
-          a different origin)</label
-        >
+        <TextField v-model="req.timeoutMs" label="Timeout (ms)" type="number" min="1" max="600000" />
+        <CheckboxField
+          v-model="req.followRedirects"
+          label="Follow redirects (credentials are never forwarded to a different origin)"
+        />
       </div>
     </div>
     <CurlExportDialog v-if="copyingCurl" :request="req" @close="copyingCurl = false" />

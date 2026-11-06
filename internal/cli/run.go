@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	"api-test-kits/internal/collectionio"
 	"api-test-kits/internal/domain"
+	"api-test-kits/internal/fsutil"
 	"api-test-kits/internal/reports"
 	"api-test-kits/internal/service"
 	"api-test-kits/internal/storage"
@@ -206,7 +206,7 @@ func runCommand(ctx context.Context, args []string, env Env) (int, error) {
 	for _, t := range targets {
 		data, err := svc.ExportReport(context.WithoutCancel(ctx), run.ID, t.format)
 		if err == nil {
-			err = writeFile(t.path, data)
+			err = fsutil.WriteFileAtomic(t.path, data)
 		}
 		if err != nil {
 			fmt.Fprintf(env.Stderr, "error: report %s: %v\n", t.path, err)
@@ -357,27 +357,6 @@ func printSummary(w io.Writer, p painter, run domain.Run, timedOut bool) {
 	}
 	fmt.Fprintf(w, "\n%s — %s in %s\n", verdict, strings.Join(parts, ", "),
 		(time.Duration(run.DurationMs) * time.Millisecond).Round(10*time.Millisecond))
-}
-
-// writeFile writes data atomically, creating parent directories.
-func writeFile(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".tmp-"+filepath.Base(path)+"-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }
 
 // ---- list ----

@@ -154,7 +154,7 @@ kept even when the stored body limit is 0.
 | Applying the check during a run | `Service.execute` loads each request's history **before** the run, then `applyPerformance` sets `RunResult.performance` and, in Fail mode, the status |
 | Trend and collection overview | `Service.GetResponseTimeTrend`, `Service.GetCollectionResponseTimes` (`internal/service/performance.go`) |
 | UI | `PerformancePanel.vue`, `ResponseTimeChart.vue`, `CollectionResponseTimes.vue`, `services/responseTimes.ts` |
-| Tests | `tests/integration/performance_test.go` (warn → fail → off against a slow mock API, per-environment history, race tests excluded), `internal/storage/sqlite_test.go` (filters, legacy runs, migration backfill), `internal/reports/reports_test.go`, `frontend/src/components/ResponseTimes.test.ts` |
+| Tests | `tests/integration/performance_test.go` (warn → fail → off against a slow mock API, per-environment history, race tests excluded), `internal/storage/sqlite_test.go` (filters, legacy runs, migration backfill), `internal/reports/reports_test.go`, `frontend/src/components/performance/ResponseTimes.test.ts` |
 
 Race tests and permission matrices are saved with `kind = 'burst'`. For history saved before migration 0007, runs
 that sent one request more than once are marked as `burst` by the migration.

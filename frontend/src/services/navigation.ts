@@ -1,6 +1,6 @@
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { Request } from '../types';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { Request } from '@/types';
 
 /**
  * Returns a function that opens a request in the editor: it asks before

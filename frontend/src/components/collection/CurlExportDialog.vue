@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import { toCurl } from '../services/curl';
-import { hasVariables } from '../services/variables';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { Request } from '../types';
-import ModalFrame from './ModalFrame.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import ModalFrame from '@/components/base/ModalFrame.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { toCurl } from '@/services/curl';
+import { hasVariables } from '@/services/variables';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { Request } from '@/types';
 
 const props = defineProps<{ request: Request }>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
 const envs = useEnvironments();
 const ui = useUi();
+const { run } = useAsyncAction();
 
 const collection = computed(() => ws.collections.find((c) => c.id === props.request.collectionId) ?? null);
 const fill = ref(true);
@@ -56,38 +61,34 @@ const hasScripts = computed(
 );
 
 async function copy() {
-  try {
+  await run(async () => {
     await navigator.clipboard.writeText(command.value);
     ui.toast('Copied cURL command', 'success');
     emit('close');
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 </script>
 
 <template>
   <ModalFrame :title="`Copy “${request.name}” as cURL`" wide @close="emit('close')">
     <div v-if="usesVariables" class="stack options">
-      <label class="row small">
-        <input v-model="fill" type="checkbox" />
+      <CheckboxField v-model="fill" class="small">
         Fill in variables from
         {{ envs.selected ? `“${envs.selected.name}”` : 'the collection (no environment selected)' }}
-      </label>
-      <label class="row small" :class="{ muted: !fill }">
-        <input v-model="includeSecrets" type="checkbox" :disabled="!fill" />
+      </CheckboxField>
+      <CheckboxField v-model="includeSecrets" class="small" :class="{ muted: !fill }" :disabled="!fill">
         Include secret values (otherwise they stay as <code v-pre>{{ name }}</code
         >)
-      </label>
+      </CheckboxField>
     </div>
     <pre class="mono command">{{ command }}</pre>
-    <p v-if="fill && includeSecrets" class="callout small">
+    <CalloutBox v-if="fill && includeSecrets" small>
       The command contains secret values. Avoid pasting it into chats, tickets or shell history you share.
-    </p>
+    </CalloutBox>
     <p v-if="hasScripts" class="muted small">Scripts are not included; curl sends the request as written.</p>
     <template #footer>
-      <button @click="emit('close')">Close</button>
-      <button class="primary" @click="copy">Copy to clipboard</button>
+      <BaseButton @click="emit('close')">Close</BaseButton>
+      <BaseButton variant="primary" @click="copy">Copy to clipboard</BaseButton>
     </template>
   </ModalFrame>
 </template>

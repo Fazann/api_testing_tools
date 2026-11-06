@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { emptyRow } from '../services/model';
-import type { KeyValue } from '../types';
-import VariableInput from './VariableInput.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import DataTable from '@/components/base/DataTable.vue';
+import VariableInput from '@/components/variables/VariableInput.vue';
+import { emptyRow } from '@/services/model';
+import type { KeyValue } from '@/types';
 
 const props = defineProps<{ rows: KeyValue[]; keyPlaceholder?: string; valuePlaceholder?: string }>();
+const COLUMNS = [
+  { key: 'enabled', class: 'on' },
+  { key: 'key', label: 'Name' },
+  { key: 'value', label: 'Value' },
+  { key: 'remove', class: 'act' },
+];
 
 function add() {
   props.rows.push(emptyRow());
@@ -15,51 +24,40 @@ function remove(i: number) {
 
 <template>
   <div class="stack">
-    <table class="grid kv">
-      <thead>
-        <tr>
-          <th class="on" />
-          <th>Name</th>
-          <th>Value</th>
-          <th class="act" />
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(row, i) in rows" :key="i">
-          <td><input v-model="row.enabled" type="checkbox" :aria-label="`Enable row ${i + 1}`" /></td>
-          <td>
-            <VariableInput v-model="row.key" :placeholder="keyPlaceholder ?? 'name'" :aria-label="`Name ${i + 1}`" />
-          </td>
-          <td>
-            <VariableInput
-              v-model="row.value"
-              :placeholder="valuePlaceholder ?? 'value or {{variable}}'"
-              :aria-label="`Value ${i + 1}`"
-            />
-          </td>
-          <td><button class="ghost" :aria-label="`Remove row ${i + 1}`" @click="remove(i)">✕</button></td>
-        </tr>
-        <tr v-if="rows.length === 0">
-          <td colspan="4" class="muted small">None</td>
-        </tr>
-      </tbody>
-    </table>
-    <div><button @click="add">＋ Add</button></div>
+    <DataTable class="kv" :columns="COLUMNS" :rows="rows" empty="None">
+      <template #cell-enabled="{ row, index }">
+        <CheckboxField v-model="row.enabled" :aria-label="`Enable row ${index + 1}`" />
+      </template>
+      <template #cell-key="{ row, index }">
+        <VariableInput v-model="row.key" :placeholder="keyPlaceholder ?? 'name'" :aria-label="`Name ${index + 1}`" />
+      </template>
+      <template #cell-value="{ row, index }">
+        <VariableInput
+          v-model="row.value"
+          :placeholder="valuePlaceholder ?? 'value or {{variable}}'"
+          :aria-label="`Value ${index + 1}`"
+        />
+      </template>
+      <template #cell-remove="{ index }">
+        <BaseButton variant="ghost" :aria-label="`Remove row ${index + 1}`" @click="remove(index)">✕</BaseButton>
+      </template>
+    </DataTable>
+    <div><BaseButton @click="add">＋ Add</BaseButton></div>
   </div>
 </template>
 
 <style scoped>
-.kv input:not([type='checkbox']) {
+.kv :deep(input:not([type='checkbox'])) {
   width: 100%;
 }
-.kv td {
+.kv :deep(td) {
   padding: 3px 4px;
   vertical-align: middle;
 }
-.on {
+.kv :deep(.on) {
   width: 28px;
 }
-.act {
+.kv :deep(.act) {
   width: 36px;
 }
 </style>

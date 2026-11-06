@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 
 	"api-test-kits/internal/collectionio"
 	"api-test-kits/internal/domain"
+	"api-test-kits/internal/fsutil"
 	"api-test-kits/internal/security"
 	"api-test-kits/internal/service"
 	"api-test-kits/internal/storage"
@@ -284,31 +284,7 @@ func (a *App) saveWithDialog(defaultName string, filter runtime.FileFilter, data
 	if err != nil || path == "" {
 		return "", err
 	}
-	return path, writeFileAtomic(path, data)
-}
-
-// writeFileAtomic writes to a temporary file and renames it into place so an
-// interrupted write never leaves a half-written file behind.
-func writeFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".tmp-"+filepath.Base(path)+"-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
+	return path, fsutil.WriteFileAtomic(path, data)
 }
 
 func safeFileName(name string) string {

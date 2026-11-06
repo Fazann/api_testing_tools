@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { formatDuration, formatTime } from '../services/model';
-import { axisLabel, geometry, nearestIndex } from '../services/responseTimes';
-import type { ResponseTimePoint } from '../types';
+import { axisLabel, geometry, nearestIndex } from '@/services/responseTimes';
+import type { ResponseTimePoint } from '@/types';
+import { formatDuration, formatTime } from '@/utils/format';
 
 const props = defineProps<{ points: ResponseTimePoint[]; referenceMs?: number; thresholdMs?: number }>();
 
@@ -180,7 +180,7 @@ svg:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg);
-  box-shadow: 0 2px 8px #0002;
+  box-shadow: var(--shadow-sm);
   font-size: 12px;
   pointer-events: none;
   white-space: nowrap;

@@ -1,4 +1,4 @@
-import type { Environment, Variable } from '../types';
+import type { Environment, Variable } from '@/types';
 
 // Must match referencePattern in internal/environments/resolver.go.
 const REFERENCE = /\{\{\s*(\$?[A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}/g;

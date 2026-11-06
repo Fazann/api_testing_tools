@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import { SCRIPT_PLACEHOLDERS, SCRIPT_SNIPPETS, type ScriptPhase } from '../services/scripts';
-import CodeEditor from './CodeEditor.vue';
+import CodeEditor from '@/components/base/CodeEditor.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import TabBar from '@/components/base/TabBar.vue';
+import { SCRIPT_PLACEHOLDERS, SCRIPT_SNIPPETS, type ScriptPhase } from '@/services/scripts';
 
 const pre = defineModel<string>('pre', { required: true });
 const post = defineModel<string>('post', { required: true });
@@ -19,6 +21,14 @@ const code = computed({
   },
 });
 const snippets = computed(() => SCRIPT_SNIPPETS.filter((s) => s.phase === phase.value));
+const phaseTabs = computed(() => [
+  { id: 'pre' as const, label: 'Pre-request', count: pre.value.trim() ? '✓' : '' },
+  { id: 'post' as const, label: 'Post-response', count: post.value.trim() ? '✓' : '' },
+]);
+const snippetOptions = computed(() => [
+  { value: '', label: 'Insert snippet…', disabled: true },
+  ...snippets.value.map((s) => ({ value: s.label, label: s.label })),
+]);
 
 function insertSnippet() {
   const s = snippets.value.find((x) => x.label === snippet.value);
@@ -32,24 +42,15 @@ function insertSnippet() {
 <template>
   <div class="stack scripts">
     <div class="row">
-      <nav class="tabs inner" role="tablist">
-        <button role="tab" :aria-selected="phase === 'pre'" :class="{ active: phase === 'pre' }" @click="phase = 'pre'">
-          Pre-request<span v-if="pre.trim()" class="count">✓</span>
-        </button>
-        <button
-          role="tab"
-          :aria-selected="phase === 'post'"
-          :class="{ active: phase === 'post' }"
-          @click="phase = 'post'"
-        >
-          Post-response<span v-if="post.trim()" class="count">✓</span>
-        </button>
-      </nav>
+      <TabBar v-model="phase" class="inner" :tabs="phaseTabs" />
       <span class="spacer" />
-      <select v-model="snippet" class="small" aria-label="Insert snippet" @change="insertSnippet">
-        <option value="" disabled>Insert snippet…</option>
-        <option v-for="s in snippets" :key="s.label" :value="s.label">{{ s.label }}</option>
-      </select>
+      <SelectField
+        v-model="snippet"
+        class="small"
+        :options="snippetOptions"
+        aria-label="Insert snippet"
+        @change="insertSnippet"
+      />
     </div>
     <p class="muted small">
       <template v-if="phase === 'pre'">

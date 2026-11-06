@@ -1,29 +1,34 @@
 <script setup lang="ts">
-import RequestEditor from '../components/RequestEditor.vue';
-import ResponseViewer from '../components/ResponseViewer.vue';
-import { useRunner } from '../stores/runner';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
+import BaseButton from '@/components/base/BaseButton.vue';
+import EmptyState from '@/components/base/EmptyState.vue';
+import RequestEditor from '@/components/request/RequestEditor.vue';
+import ResponseViewer from '@/components/response/ResponseViewer.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { useRunner } from '@/stores/runner';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
 
 const ws = useWorkspace();
 const ui = useUi();
+const { run } = useAsyncAction();
 const runner = useRunner();
 
 async function quickStart() {
   const name = await ui.prompt({ title: 'New collection', value: 'My API tests', confirmLabel: 'Create' });
   if (!name) return;
-  try {
+  await run(async () => {
     const c = await ws.createCollection(name);
     await ws.createRequest(c.id);
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 </script>
 
 <template>
-  <div v-if="!ws.draft" class="empty welcome">
-    <h2>{{ ws.collections.length ? 'Select a request' : 'Welcome to API Regression Guard' }}</h2>
+  <EmptyState
+    v-if="!ws.draft"
+    class="welcome"
+    :title="ws.collections.length ? 'Select a request' : 'Welcome to API Regression Guard'"
+  >
     <p v-if="!ws.collections.length">
       Test HTTP APIs locally, check business rules — not just status codes — and catch regressions by comparing
       responses with an approved baseline. Everything is stored on this computer. No account needed.
@@ -35,21 +40,21 @@ async function quickStart() {
       <li>Send against a known-good environment and <strong>approve a baseline</strong>.</li>
       <li>After code or config changes, <strong>run the collection</strong> and review differences.</li>
     </ol>
-    <div class="row">
-      <button class="primary" @click="quickStart">Create collection</button>
-      <button @click="ui.view = 'environments'">Set up environments</button>
-    </div>
-  </div>
+    <template #actions>
+      <BaseButton variant="primary" @click="quickStart">Create collection</BaseButton>
+      <BaseButton @click="ui.view = 'environments'">Set up environments</BaseButton>
+    </template>
+  </EmptyState>
   <div v-else class="split">
     <RequestEditor class="top" />
     <div class="bottom">
-      <div v-if="runner.sendingOp" class="empty">
-        <p>Sending… <button class="small" @click="runner.cancelSend()">Cancel (Esc)</button></p>
-      </div>
+      <EmptyState v-if="runner.sendingOp">
+        <p>Sending… <BaseButton small @click="runner.cancelSend()">Cancel (Esc)</BaseButton></p>
+      </EmptyState>
       <ResponseViewer v-else-if="ws.currentResult" :result="ws.currentResult" :request-id="ws.draft.id" allow-approve />
-      <div v-else class="empty small">
+      <EmptyState v-else small>
         <p>Press <strong>Send</strong> (Ctrl+Enter) to run this request and its tests.</p>
-      </div>
+      </EmptyState>
     </div>
   </div>
 </template>

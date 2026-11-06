@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 
-import { useCollectionVariables } from '../services/collectionVariables';
-import { clone } from '../services/model';
-import { BUILTINS, describeVariable } from '../services/variables';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { Variable } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { useCollectionVariables } from '@/services/collectionVariables';
+import { BUILTINS, describeVariable } from '@/services/variables';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { Variable } from '@/types';
+import { clone } from '@/utils/object';
 
 type Target = 'environment' | 'collection';
 
@@ -29,8 +33,8 @@ const reveal = ref(false);
 const editing = ref<Target | null>(null);
 const draft = ref('');
 const secret = ref(false);
-const saving = ref(false);
-const valueInput = ref<HTMLInputElement | null>(null);
+const { busy: saving, run: runSaving } = useAsyncAction();
+const valueInput = ref<InstanceType<typeof BaseInput> | null>(null);
 
 watch(
   () => props.name,
@@ -73,8 +77,7 @@ async function save() {
     editing.value = null;
     return;
   }
-  saving.value = true;
-  try {
+  await runSaving(async () => {
     if (editing.value === 'collection' && collection.value) {
       const updated = clone(collection.value);
       updated.variables = updated.variables ?? [];
@@ -88,11 +91,7 @@ async function save() {
       ui.toast(`Saved ${props.name} in ${updated.name}`, 'success');
     }
     editing.value = null;
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    saving.value = false;
-  }
+  });
 }
 
 // Keep the popover inside the window.
@@ -135,7 +134,7 @@ const style = computed(() => ({
         <p class="muted small">
           {{ editing === 'collection' ? 'Collection variable, used by every request' : `In ${envs.selected?.name}` }}
         </p>
-        <input
+        <BaseInput
           v-model="draft"
           class="mono"
           :type="secret && !reveal ? 'password' : 'text'"
@@ -146,22 +145,27 @@ const style = computed(() => ({
           @keydown.enter.prevent="save"
         />
         <div class="row small">
-          <label class="row"><input v-model="secret" type="checkbox" /> Secret</label>
-          <button v-if="secret" class="ghost small" type="button" @click="reveal = !reveal">
+          <CheckboxField v-model="secret" label="Secret" />
+          <BaseButton v-if="secret" variant="ghost" small @click="reveal = !reveal">
             {{ reveal ? 'Hide' : 'Show' }}
-          </button>
+          </BaseButton>
           <span class="spacer" />
-          <button class="small" type="button" @click="editing = null">Cancel</button>
-          <button class="primary small" type="button" :disabled="saving" @click="save">Save</button>
+          <BaseButton small @click="editing = null">Cancel</BaseButton>
+          <BaseButton variant="primary" small :disabled="saving" @click="save">Save</BaseButton>
         </div>
       </template>
 
       <template v-else-if="info.variable">
         <div class="row value-row">
           <code class="value grow" :class="{ muted: info.variable.value === '' }">{{ displayValue }}</code>
-          <button v-if="info.variable.secret && info.variable.value" class="ghost small" @click="reveal = !reveal">
+          <BaseButton
+            v-if="info.variable.secret && info.variable.value"
+            variant="ghost"
+            small
+            @click="reveal = !reveal"
+          >
             {{ reveal ? 'Hide' : 'Show' }}
-          </button>
+          </BaseButton>
         </div>
         <p v-if="info.source === 'collection'" class="muted small">
           Collection variable: every request in the collection uses it unless the environment overrides it.
@@ -173,13 +177,13 @@ const style = computed(() => ({
         <p v-if="info.variable.secret" class="muted small">Secret: redacted from history, reports and exports.</p>
         <div class="row">
           <span class="spacer" />
-          <button
+          <BaseButton
             v-if="info.source === 'environment' || canUseCollection"
-            class="small"
+            small
             @click="startEdit(info.source ?? 'environment')"
           >
             {{ info.state === 'disabled' ? 'Enable and edit' : 'Edit' }}
-          </button>
+          </BaseButton>
         </div>
       </template>
 
@@ -196,10 +200,10 @@ const style = computed(() => ({
         </p>
         <div class="row">
           <span class="spacer" />
-          <button v-if="canUseCollection" class="small" @click="startEdit('collection')">Add to collection</button>
-          <button v-if="envs.selected" class="primary small" @click="startEdit('environment')">
+          <BaseButton v-if="canUseCollection" small @click="startEdit('collection')">Add to collection</BaseButton>
+          <BaseButton v-if="envs.selected" variant="primary" small @click="startEdit('environment')">
             Add to {{ envs.selected.name }}
-          </button>
+          </BaseButton>
         </div>
       </template>
     </div>
@@ -218,7 +222,7 @@ const style = computed(() => ({
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 8px 28px #0003;
+  box-shadow: var(--shadow-md);
 }
 .var-popover p {
   margin: 0;

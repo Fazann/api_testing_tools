@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { api, onMatrixProgress } from '../services/api';
-import { clone, isDestructive, uid } from '../services/model';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import type { Access, CollectionTree, MatrixCell, MatrixReport, PermissionMatrix, Request, Role } from '../types';
-import VariableTable from './VariableTable.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import DataTable from '@/components/base/DataTable.vue';
+import MethodBadge from '@/components/base/MethodBadge.vue';
+import VariableTable from '@/components/variables/VariableTable.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api, onMatrixProgress } from '@/services/api';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import type { Access, CollectionTree, MatrixCell, MatrixReport, PermissionMatrix, Request, Role } from '@/types';
+import { isDestructive } from '@/utils/http';
+import { clone, uid } from '@/utils/object';
 
 const props = defineProps<{ tree: CollectionTree }>();
 const emit = defineEmits<{ dirty: [boolean]; open: [Request] }>();
@@ -19,23 +27,21 @@ const report = ref<MatrixReport | null>(null);
 const openRole = ref<string | null>(null);
 const opId = ref('');
 const progress = ref({ done: 0, total: 0 });
-const saving = ref(false);
+const { busy: saving, run: runSave } = useAsyncAction();
+const { run: runBackend } = useAsyncAction();
 let unsubscribe: (() => void) | null = null;
 
 const dirty = computed(() => !!matrix.value && JSON.stringify(matrix.value) !== snapshot.value);
 watch(dirty, (d) => emit('dirty', d));
 
 async function load() {
-  try {
-    const m = await api.getPermissionMatrix(props.tree.collection.id);
-    m.roles ??= [];
-    m.requestIds ??= [];
-    m.expected ??= {};
-    matrix.value = m;
-    snapshot.value = JSON.stringify(m);
-  } catch (e) {
-    ui.error(e);
-  }
+  const m = await runBackend(() => api.getPermissionMatrix(props.tree.collection.id));
+  if (!m) return;
+  m.roles ??= [];
+  m.requestIds ??= [];
+  m.expected ??= {};
+  matrix.value = m;
+  snapshot.value = JSON.stringify(m);
 }
 onMounted(load);
 onBeforeUnmount(() => unsubscribe?.());
@@ -139,19 +145,12 @@ async function save(): Promise<boolean> {
   const m = matrix.value;
   if (!m) return false;
   for (const role of m.roles) role.variables = role.variables.filter((v) => v.key.trim() || v.value);
-  saving.value = true;
-  try {
-    const savedMatrix = await api.savePermissionMatrix(clone(m));
-    savedMatrix.expected ??= {};
-    matrix.value = savedMatrix;
-    snapshot.value = JSON.stringify(savedMatrix);
-    return true;
-  } catch (e) {
-    ui.error(e);
-    return false;
-  } finally {
-    saving.value = false;
-  }
+  const savedMatrix = await runSave(() => api.savePermissionMatrix(clone(m)));
+  if (!savedMatrix) return false;
+  savedMatrix.expected ??= {};
+  matrix.value = savedMatrix;
+  snapshot.value = JSON.stringify(savedMatrix);
+  return true;
 }
 
 async function run() {
@@ -187,15 +186,12 @@ async function run() {
   unsubscribe = onMatrixProgress((p) => {
     if (p.opId === opId.value) progress.value = { done: p.done, total: p.total };
   });
-  try {
-    report.value = await api.runPermissionMatrix(opId.value, props.tree.collection.id, envs.selectedId, true);
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    opId.value = '';
-    unsubscribe?.();
-    unsubscribe = null;
-  }
+  const id = opId.value;
+  const result = await runBackend(() => api.runPermissionMatrix(id, props.tree.collection.id, envs.selectedId, true));
+  if (result) report.value = result;
+  opId.value = '';
+  unsubscribe?.();
+  unsubscribe = null;
 }
 
 function cancel() {
@@ -238,6 +234,17 @@ const counts = computed(() => {
   for (const c of report.value?.cells ?? []) n[liveVerdict(c, expected(c.requestId, c.roleId))]++;
   return n;
 });
+
+const columns = computed(() => [
+  { key: 'pick', class: 'pick' },
+  { key: 'req', label: 'Request', class: 'req' },
+  ...(matrix.value?.roles ?? []).map((role) => ({
+    key: `role-${role.id}`,
+    label: role.name,
+    class: 'cell-td',
+    headClass: 'role-col',
+  })),
+]);
 </script>
 
 <template>
@@ -257,20 +264,21 @@ const counts = computed(() => {
       <p v-if="matrix.roles.length === 0" class="muted small">No roles yet.</p>
       <div v-for="role in matrix.roles" :key="role.id" class="role">
         <div class="row">
-          <input v-model="role.name" class="name" maxlength="200" :aria-label="`Role name ${role.name}`" />
-          <label class="row small"><input v-model="role.anonymous" type="checkbox" /> No credentials</label>
-          <button
+          <BaseInput v-model="role.name" class="name" maxlength="200" :aria-label="`Role name ${role.name}`" />
+          <CheckboxField v-model="role.anonymous" class="small" label="No credentials" />
+          <BaseButton
             v-if="!role.anonymous"
-            class="ghost small"
+            variant="ghost"
+            small
             :aria-expanded="openRole === role.id"
             @click="openRole = openRole === role.id ? null : role.id"
           >
             {{ openRole === role.id ? '▾' : '▸' }} Variables
             <span class="muted">({{ role.variables.filter((v) => v.enabled && v.key).length }})</span>
-          </button>
+          </BaseButton>
           <span v-else class="muted small">Sent without auth, Authorization or Cookie headers</span>
           <span class="spacer" />
-          <button class="ghost" :aria-label="`Remove role ${role.name}`" @click="removeRole(role)">✕</button>
+          <BaseButton variant="ghost" :aria-label="`Remove role ${role.name}`" @click="removeRole(role)">✕</BaseButton>
         </div>
         <div v-if="openRole === role.id && !role.anonymous" class="vars">
           <p v-if="role.variables.length === 0" class="muted small">
@@ -286,77 +294,71 @@ const counts = computed(() => {
         </div>
       </div>
       <div class="row">
-        <button class="small" @click="addRole()">＋ Role</button>
-        <button v-if="!hasAnonymous" class="small" @click="addRole(true)">＋ Anonymous</button>
+        <BaseButton small @click="addRole()">＋ Role</BaseButton>
+        <BaseButton v-if="!hasAnonymous" small @click="addRole(true)">＋ Anonymous</BaseButton>
       </div>
     </div>
 
     <div class="row toolbar">
       <h3 class="section-title grow">Requests × roles</h3>
       <span class="muted small">Tick:</span>
-      <button class="ghost small" @click="selectWhere((r) => r.method === 'GET' || r.method === 'HEAD')">
+      <BaseButton variant="ghost" small @click="selectWhere((r) => r.method === 'GET' || r.method === 'HEAD')">
         Read-only
-      </button>
-      <button class="ghost small" @click="selectWhere(() => true)">All</button>
-      <button class="ghost small" @click="selectWhere(() => false)">None</button>
+      </BaseButton>
+      <BaseButton variant="ghost" small @click="selectWhere(() => true)">All</BaseButton>
+      <BaseButton variant="ghost" small @click="selectWhere(() => false)">None</BaseButton>
     </div>
-    <p v-if="destructive.length" class="callout small">
+    <CalloutBox v-if="destructive.length" small>
       {{ destructive.length }} ticked request{{ destructive.length === 1 ? '' : 's' }} may modify data and will run once
       per role. Use test data.
-    </p>
+    </CalloutBox>
 
     <div class="table-wrap">
-      <table class="grid cells">
-        <thead>
-          <tr>
-            <th class="pick" />
-            <th class="req">Request</th>
-            <th v-for="role in matrix.roles" :key="role.id" class="role-col">{{ role.name }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in tree.requests" :key="r.id" :class="{ off: !selected.has(r.id) }">
-            <td class="pick">
-              <input
-                type="checkbox"
-                :checked="selected.has(r.id)"
-                :aria-label="`Include ${r.name}`"
-                @change="toggleRequest(r.id)"
-              />
-            </td>
-            <td class="req">
-              <span class="method" :class="r.method">{{ r.method }}</span>
-              <button class="link" :title="r.url" @click="emit('open', r)">{{ r.name }}</button>
-            </td>
-            <td v-for="role in matrix.roles" :key="role.id" class="cell-td">
-              <button
-                class="cell"
-                :class="[
-                  `exp-${expected(r.id, role.id) || 'none'}`,
-                  cell(r.id, role.id) ? `v-${liveVerdict(cell(r.id, role.id)!, expected(r.id, role.id))}` : '',
-                ]"
-                :disabled="!selected.has(r.id)"
-                :title="cellTitle(r.id, role.id)"
-                :aria-label="`${r.name} as ${role.name}: ${cellTitle(r.id, role.id)}`"
-                @click="cycle(r.id, role.id)"
-              >
-                <span class="sym">{{ SYMBOL[expected(r.id, role.id)] }}</span>
-                <span v-if="cell(r.id, role.id)" class="code">{{ cell(r.id, role.id)!.statusCode || '—' }}</span>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <DataTable
+        class="cells"
+        :columns="columns"
+        :rows="tree.requests"
+        :row-key="(r) => r.id"
+        :row-class="(r) => ({ off: !selected.has(r.id) })"
+      >
+        <template #cell-pick="{ row: r }">
+          <CheckboxField
+            :model-value="selected.has(r.id)"
+            :aria-label="`Include ${r.name}`"
+            @update:model-value="toggleRequest(r.id)"
+          />
+        </template>
+        <template #cell-req="{ row: r }">
+          <MethodBadge :method="r.method" />
+          <BaseButton class="link" :title="r.url" @click="emit('open', r)">{{ r.name }}</BaseButton>
+        </template>
+        <template v-for="role in matrix.roles" :key="role.id" #[`cell-role-${role.id}`]="{ row: r }">
+          <BaseButton
+            class="cell"
+            :class="[
+              `exp-${expected(r.id, role.id) || 'none'}`,
+              cell(r.id, role.id) ? `v-${liveVerdict(cell(r.id, role.id)!, expected(r.id, role.id))}` : '',
+            ]"
+            :disabled="!selected.has(r.id)"
+            :title="cellTitle(r.id, role.id)"
+            :aria-label="`${r.name} as ${role.name}: ${cellTitle(r.id, role.id)}`"
+            @click="cycle(r.id, role.id)"
+          >
+            <span class="sym">{{ SYMBOL[expected(r.id, role.id)] }}</span>
+            <span v-if="cell(r.id, role.id)" class="code">{{ cell(r.id, role.id)!.statusCode || '—' }}</span>
+          </BaseButton>
+        </template>
+      </DataTable>
       <p v-if="tree.requests.length === 0" class="muted small">This collection has no requests.</p>
     </div>
 
     <div class="row actions">
-      <button v-if="opId" class="danger" @click="cancel">Cancel</button>
-      <button v-else class="primary" :disabled="saving" @click="run">Run matrix</button>
-      <button :disabled="!dirty || saving || !!opId" @click="save">Save</button>
-      <button v-if="report && approvable > 0 && !opId" @click="approveResults">
+      <BaseButton v-if="opId" variant="danger" @click="cancel">Cancel</BaseButton>
+      <BaseButton v-else variant="primary" :disabled="saving" @click="run">Run matrix</BaseButton>
+      <BaseButton :disabled="!dirty || saving || !!opId" @click="save">Save</BaseButton>
+      <BaseButton v-if="report && approvable > 0 && !opId" @click="approveResults">
         Approve results as expected ({{ approvable }})
-      </button>
+      </BaseButton>
       <span v-if="opId" class="muted small">{{ progress.done }} / {{ progress.total }}</span>
       <span v-else-if="dirty" class="muted small">Unsaved changes</span>
     </div>
@@ -416,32 +418,32 @@ const counts = computed(() => {
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
-.cells th {
+.cells :deep(th) {
   position: sticky;
   top: 0;
   background: var(--bg);
   z-index: 1;
 }
-.cells .pick {
+.cells :deep(.pick) {
   width: 28px;
 }
-.cells .req {
+.cells :deep(.req) {
   min-width: 220px;
 }
-.cells .req .method {
+.cells :deep(.req .method) {
   display: inline-block;
   width: 56px;
 }
-.role-col {
+:deep(.role-col) {
   text-align: center !important;
   min-width: 90px;
   white-space: nowrap;
 }
-.cell-td {
+:deep(.cell-td) {
   text-align: center !important;
   padding: 3px 6px !important;
 }
-tr.off td {
+:deep(tr.off td) {
   opacity: 0.45;
 }
 button.link {

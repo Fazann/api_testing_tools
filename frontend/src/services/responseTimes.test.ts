@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { axisLabel, formatChange, geometry, nearestIndex, niceCeil, sparkPath } from './responseTimes';
+import { axisLabel, geometry, nearestIndex, niceCeil, sparkPath } from './responseTimes';
 
 const box = { width: 110, height: 60, left: 10, right: 0, top: 0, bottom: 10 };
 
@@ -39,7 +39,6 @@ describe('response time charts', () => {
   });
 
   it('formats changes and axis labels', () => {
-    expect([42.4, -8.2, 0.3, null].map(formatChange)).toEqual(['+42%', '−8%', '±0%', '—']);
     expect([0, 250, 1000, 1250].map(axisLabel)).toEqual(['0 ms', '250 ms', '1 s', '1.3 s']);
   });
 });

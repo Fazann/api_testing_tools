@@ -26,7 +26,7 @@ import type {
   SecretFinding,
   Settings,
   Warning,
-} from '../types';
+} from '@/types';
 
 type Bound = Record<string, (...args: unknown[]) => Promise<unknown>>;
 

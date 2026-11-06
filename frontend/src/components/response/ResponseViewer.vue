@@ -1,19 +1,28 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { api } from '../services/api';
-import { HIGHLIGHT_LIMIT, highlightJson } from '../services/highlight';
-import { formatBytes, formatDuration, formatTime, prettyBody } from '../services/model';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import type { Baseline, PreviousComparison, RunResult } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import MethodBadge from '@/components/base/MethodBadge.vue';
+import StatusBadge from '@/components/base/StatusBadge.vue';
+import TabBar, { type Tab as TabItem } from '@/components/base/TabBar.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { HIGHLIGHT_LIMIT, highlightJson } from '@/services/highlight';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import type { Baseline, PreviousComparison, RunResult } from '@/types';
+import { formatBytes, formatDuration, formatTime, prettyBody } from '@/utils/format';
+
 import ApproveBaselineDialog from './ApproveBaselineDialog.vue';
 import AssertionResults from './AssertionResults.vue';
 import DiffTable from './DiffTable.vue';
+import HeaderTable from './HeaderTable.vue';
 
 const props = defineProps<{ result: RunResult; requestId?: string; allowApprove?: boolean }>();
 const ui = useUi();
 const envs = useEnvironments();
+const { run } = useAsyncAction();
 
 type Tab = 'body' | 'headers' | 'tests' | 'regression' | 'previous' | 'request' | 'console';
 const tab = ref<Tab>('tests');
@@ -40,6 +49,24 @@ const bodyTokens = computed(() => {
   }
   return highlightJson(text);
 });
+const tabs = computed<TabItem<Tab>[]>(() => [
+  {
+    id: 'tests',
+    label: 'Tests',
+    count: props.result.assertionResults.length
+      ? failedTests.value
+        ? `${failedTests.value} failed`
+        : props.result.assertionResults.length
+      : undefined,
+    alert: failedTests.value > 0,
+  },
+  { id: 'regression', label: 'Baseline diff', count: regressionDiffs.value.length, hidden: !props.result.regression },
+  { id: 'body', label: 'Body', disabled: !resp.value },
+  { id: 'headers', label: 'Headers', count: resp.value?.headers?.length ?? undefined, disabled: !resp.value },
+  { id: 'previous', label: 'vs previous run', hidden: !props.requestId },
+  { id: 'request', label: 'Sent request' },
+  { id: 'console', label: 'Console', count: logs.value.length, hidden: !logs.value.length },
+]);
 const statusClass = computed(() => {
   const c = resp.value?.statusCode ?? 0;
   return c >= 200 && c < 300 ? 'pass' : c >= 400 ? 'fail' : 'warn';
@@ -62,14 +89,11 @@ async function openApprove() {
 }
 
 async function loadPrevious() {
-  tab.value = 'previous';
   if (previous.value || !props.result.runId) return;
-  try {
-    previous.value = await api.compareWithPrevious(props.result.runId, props.result.id);
-  } catch (e) {
-    ui.error(e);
-  }
+  const { runId, id } = props.result;
+  previous.value = (await run(() => api.compareWithPrevious(runId, id))) ?? null;
 }
+watch(tab, (t) => t === 'previous' && loadPrevious());
 
 async function copyBody() {
   try {
@@ -84,7 +108,7 @@ async function copyBody() {
 <template>
   <section class="response">
     <div class="row summary">
-      <span class="badge" :class="result.status">{{ result.status }}</span>
+      <StatusBadge :status="result.status" />
       <template v-if="resp">
         <strong :class="statusClass">{{ resp.status || resp.statusCode }}</strong>
         <span class="muted">{{ formatDuration(result.durationMs) }}</span>
@@ -103,37 +127,17 @@ async function copyBody() {
       </span>
       <span class="spacer" />
       <span class="muted small">{{ formatTime(result.createdAt) }}</span>
-      <button
+      <BaseButton
         v-if="allowApprove && resp && requestId"
-        class="small"
+        small
         title="Review and approve this response as the baseline"
         @click="openApprove"
       >
         Approve as baseline…
-      </button>
+      </BaseButton>
     </div>
-    <div v-if="result.error" class="callout error mono small err">{{ result.error }}</div>
-    <nav class="tabs" role="tablist">
-      <button :class="{ active: tab === 'tests' }" role="tab" @click="tab = 'tests'">
-        Tests<span v-if="result.assertionResults.length" class="count" :class="{ fail: failedTests }">{{
-          failedTests ? `${failedTests} failed` : result.assertionResults.length
-        }}</span>
-      </button>
-      <button v-if="result.regression" :class="{ active: tab === 'regression' }" role="tab" @click="tab = 'regression'">
-        Baseline diff<span class="count">{{ regressionDiffs.length }}</span>
-      </button>
-      <button :class="{ active: tab === 'body' }" role="tab" :disabled="!resp" @click="tab = 'body'">Body</button>
-      <button :class="{ active: tab === 'headers' }" role="tab" :disabled="!resp" @click="tab = 'headers'">
-        Headers<span v-if="resp" class="count">{{ resp.headers?.length ?? 0 }}</span>
-      </button>
-      <button v-if="requestId" :class="{ active: tab === 'previous' }" role="tab" @click="loadPrevious">
-        vs previous run
-      </button>
-      <button :class="{ active: tab === 'request' }" role="tab" @click="tab = 'request'">Sent request</button>
-      <button v-if="logs.length" :class="{ active: tab === 'console' }" role="tab" @click="tab = 'console'">
-        Console<span class="count">{{ logs.length }}</span>
-      </button>
-    </nav>
+    <CalloutBox v-if="result.error" tone="error" small class="mono err">{{ result.error }}</CalloutBox>
+    <TabBar v-model="tab" :tabs="tabs" />
     <div class="tab-body">
       <AssertionResults v-if="tab === 'tests'" :results="result.assertionResults" />
       <div v-else-if="tab === 'regression' && result.regression" class="stack">
@@ -147,7 +151,7 @@ async function copyBody() {
       <div v-else-if="tab === 'body' && resp" class="stack">
         <div class="row">
           <span class="muted small">{{ resp.contentType }}</span
-          ><span class="spacer" /><button class="ghost small" @click="copyBody">Copy</button>
+          ><span class="spacer" /><BaseButton variant="ghost" small @click="copyBody">Copy</BaseButton>
         </div>
         <pre
           v-if="bodyTokens"
@@ -155,14 +159,7 @@ async function copyBody() {
         ><span v-for="(t, i) in bodyTokens" :key="i" :class="t.kind && `tk-${t.kind}`">{{ t.text }}</span></pre>
         <pre v-else class="code body">{{ body || '(empty body)' }}</pre>
       </div>
-      <table v-else-if="tab === 'headers' && resp" class="grid">
-        <tbody>
-          <tr v-for="(h, i) in resp.headers" :key="i">
-            <td class="mono">{{ h.key }}</td>
-            <td class="mono">{{ h.value }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <HeaderTable v-else-if="tab === 'headers' && resp" :headers="resp.headers ?? []" />
       <div v-else-if="tab === 'previous'" class="stack">
         <p v-if="!previous" class="muted">Loading…</p>
         <template v-else-if="!previous.found"
@@ -171,16 +168,15 @@ async function copyBody() {
         <template v-else>
           <p>
             Compared with the run from {{ formatTime(previous.previousStartedAt) }}: status
-            <span class="badge" :class="previous.statusBefore">{{ previous.statusBefore }}</span> →
-            <span class="badge" :class="previous.statusAfter">{{ previous.statusAfter }}</span
-            >, HTTP {{ previous.codeBefore || '—' }} → {{ previous.codeAfter || '—' }}.
+            <StatusBadge :status="previous.statusBefore" /> → <StatusBadge :status="previous.statusAfter" />, HTTP
+            {{ previous.codeBefore || '—' }} → {{ previous.codeAfter || '—' }}.
           </p>
-          <div v-if="previous.newlyFailing.length" class="callout error">
+          <CalloutBox v-if="previous.newlyFailing.length" tone="error">
             <strong>Newly failing tests</strong>
             <ul class="small">
               <li v-for="(m, i) in previous.newlyFailing" :key="i">{{ m }}</li>
             </ul>
-          </div>
+          </CalloutBox>
           <DiffTable v-if="previous.diffs?.length" :diffs="previous.diffs" />
           <p v-else class="muted">Response bodies are identical (or not comparable JSON).</p>
         </template>
@@ -194,17 +190,10 @@ async function copyBody() {
       </div>
       <div v-else-if="tab === 'request'" class="stack">
         <p class="mono small">
-          <span class="method" :class="result.request.method">{{ result.request.method }}</span>
+          <MethodBadge :method="result.request.method" />
           {{ result.request.url }}
         </p>
-        <table v-if="result.request.headers?.length" class="grid">
-          <tbody>
-            <tr v-for="(h, i) in result.request.headers" :key="i">
-              <td class="mono">{{ h.key }}</td>
-              <td class="mono">{{ h.value }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <HeaderTable v-if="result.request.headers?.length" :headers="result.request.headers" />
         <pre v-if="result.request.body" class="code">{{ result.request.body }}</pre>
         <p class="muted small">Secret values and credential headers are redacted.</p>
       </div>
@@ -252,9 +241,6 @@ async function copyBody() {
 }
 .body {
   max-height: none;
-}
-.count.fail {
-  color: var(--fail);
 }
 .log {
   display: flex;

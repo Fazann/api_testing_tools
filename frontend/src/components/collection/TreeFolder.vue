@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import { useOpenRequest } from '../services/navigation';
-import { useRunner } from '../stores/runner';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { CollectionTree, Folder, Request } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import MenuButton from '@/components/base/MenuButton.vue';
+import MethodBadge from '@/components/base/MethodBadge.vue';
+import { useOpenRequest } from '@/services/navigation';
+import { useRunner } from '@/stores/runner';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { CollectionTree, Folder, Request } from '@/types';
+
 import CurlExportDialog from './CurlExportDialog.vue';
 import CurlImportDialog from './CurlImportDialog.vue';
-import MenuButton from './MenuButton.vue';
 
 const props = defineProps<{ tree: CollectionTree; parentId: string; depth: number }>();
 const ws = useWorkspace();
@@ -83,17 +86,17 @@ async function deleteRequest(r: Request) {
   <ul class="tree" role="group">
     <li v-for="f in folders" :key="f.id">
       <div class="node" :style="{ paddingLeft: depth * 14 + 6 + 'px' }">
-        <button class="ghost label" :aria-expanded="!!ws.expanded[f.id]" @click="ws.toggle(f.id)">
+        <BaseButton variant="ghost" class="label" :aria-expanded="!!ws.expanded[f.id]" @click="ws.toggle(f.id)">
           <span class="caret">{{ ws.expanded[f.id] ? '▾' : '▸' }}</span> 📁 {{ f.name }}
-        </button>
+        </BaseButton>
         <MenuButton :items="folderMenu(f)" :label="`Actions for folder ${f.name}`" />
       </div>
       <TreeFolder v-if="ws.expanded[f.id]" :tree="tree" :parent-id="f.id" :depth="depth + 1" />
     </li>
     <li v-for="r in requests" :key="r.id">
       <div class="node" :class="{ active: ws.draft?.id === r.id }" :style="{ paddingLeft: depth * 14 + 6 + 'px' }">
-        <button class="ghost label" @click="openRequest(r)">
-          <span class="method" :class="r.method">{{ r.method }}</span>
+        <BaseButton variant="ghost" class="label" @click="openRequest(r)">
+          <MethodBadge :method="r.method" />
           <span class="name">{{ r.name }}</span>
           <span
             v-if="ws.results[r.id]"
@@ -101,7 +104,7 @@ async function deleteRequest(r: Request) {
             :class="ws.results[r.id].status"
             :title="`Last run: ${ws.results[r.id].status}`"
           />
-        </button>
+        </BaseButton>
         <MenuButton :items="requestMenu(r)" :label="`Actions for request ${r.name}`" />
       </div>
     </li>

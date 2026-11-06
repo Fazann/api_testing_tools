@@ -2,8 +2,9 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it } from 'vitest';
 
-import { newRequest } from '../services/model';
-import type { CollectionTree, Method, Request } from '../types';
+import { newRequest } from '@/services/model';
+import type { CollectionTree, Method, Request } from '@/types';
+
 import CollectionEndpoints from './CollectionEndpoints.vue';
 
 function req(id: string, name: string, method: Method, url: string, parentId = ''): Request {

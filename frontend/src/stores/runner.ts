@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
-import { api, onRunProgress } from '../services/api';
-import { clone, uid } from '../services/model';
-import type { Run, RunResult, Warning } from '../types';
+import { api, onRunProgress } from '@/services/api';
+import type { Run, RunResult, Warning } from '@/types';
+import { clone, uid } from '@/utils/object';
+
 import { useEnvironments } from './environments';
 import { useUi } from './ui';
 import { useWorkspace } from './workspace';

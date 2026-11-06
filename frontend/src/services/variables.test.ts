@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Environment } from '../types';
+import type { Environment } from '@/types';
+
 import { describeVariable, hasVariables, splitVariables } from './variables';
 
 const env: Environment = {

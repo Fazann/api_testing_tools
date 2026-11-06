@@ -1,8 +1,9 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+
 import { newRequest } from './model';
 import { useOpenRequest } from './navigation';
 

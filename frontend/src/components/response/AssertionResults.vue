@@ -1,37 +1,29 @@
 <script setup lang="ts">
-import { KIND_LABELS, OPERATOR_LABELS } from '../services/model';
-import type { AssertionResult } from '../types';
+import DataTable from '@/components/base/DataTable.vue';
+import { KIND_LABELS, OPERATOR_LABELS } from '@/services/model';
+import type { AssertionResult } from '@/types';
 
 defineProps<{ results: AssertionResult[] }>();
+const COLUMNS = [
+  { key: 'passed', label: 'Result' },
+  { key: 'kind', label: 'Check' },
+  { key: 'expected', label: 'Expected', class: 'mono' },
+  { key: 'actual', label: 'Actual', class: 'mono' },
+  { key: 'message', label: 'Message' },
+];
 </script>
 
 <template>
-  <table v-if="results.length" class="grid">
-    <thead>
-      <tr>
-        <th>Result</th>
-        <th>Check</th>
-        <th>Expected</th>
-        <th>Actual</th>
-        <th>Message</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="(r, i) in results" :key="i">
-        <td>
-          <span :class="r.passed ? 'pass' : 'fail'">{{ r.passed ? '✔ Pass' : '✘ Fail' }}</span>
-        </td>
-        <td>
-          {{ r.kind === 'script' ? 'Script test' : KIND_LABELS[r.kind] }}
-          <code v-if="r.path">{{ r.path }}</code>
-          <span v-if="r.operator" class="muted"> {{ OPERATOR_LABELS[r.operator] ?? r.operator }}</span>
-          <div v-if="r.description" class="muted small">{{ r.description }}</div>
-        </td>
-        <td class="mono">{{ r.expected }}</td>
-        <td class="mono">{{ r.actual }}</td>
-        <td>{{ r.message }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <DataTable v-if="results.length" :columns="COLUMNS" :rows="results">
+    <template #cell-passed="{ row }">
+      <span :class="row.passed ? 'pass' : 'fail'">{{ row.passed ? '✔ Pass' : '✘ Fail' }}</span>
+    </template>
+    <template #cell-kind="{ row }">
+      {{ row.kind === 'script' ? 'Script test' : KIND_LABELS[row.kind] }}
+      <code v-if="row.path">{{ row.path }}</code>
+      <span v-if="row.operator" class="muted"> {{ OPERATOR_LABELS[row.operator] ?? row.operator }}</span>
+      <div v-if="row.description" class="muted small">{{ row.description }}</div>
+    </template>
+  </DataTable>
   <p v-else class="muted">No tests ran. Add tests in the Tests tab, or pm.test() in a post-response script.</p>
 </template>

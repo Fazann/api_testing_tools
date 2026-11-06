@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 
-import { useCollectionVariables } from '../services/collectionVariables';
-import { describeVariable, splitVariables, type Segment } from '../services/variables';
-import { useEnvironments } from '../stores/environments';
+import { useCollectionVariables } from '@/services/collectionVariables';
+import { describeVariable, splitVariables, type Segment } from '@/services/variables';
+import { useEnvironments } from '@/stores/environments';
+
 import VariablePopover from './VariablePopover.vue';
 
 // A text input that highlights {{variables}} and shows their value on hover.

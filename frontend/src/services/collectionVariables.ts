@@ -1,7 +1,7 @@
 import { computed, inject, provide, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 
-import { useWorkspace } from '../stores/workspace';
-import type { Variable } from '../types';
+import { useWorkspace } from '@/stores/workspace';
+import type { Variable } from '@/types';
 
 interface Scope {
   /** Variables being edited in place, e.g. by the collection settings dialog. */

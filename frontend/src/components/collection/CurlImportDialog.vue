@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { parseCurl } from '../services/curl';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import ModalFrame from './ModalFrame.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import MethodBadge from '@/components/base/MethodBadge.vue';
+import ModalFrame from '@/components/base/ModalFrame.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { parseCurl } from '@/services/curl';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
 
 const props = defineProps<{ collectionId: string; parentId?: string }>();
 const emit = defineEmits<{ close: [] }>();
@@ -17,8 +21,8 @@ const placeholder = [
   `--data-raw '{"amount": 10}'`,
 ].join(' ');
 const text = ref('');
-const busy = ref(false);
-const area = ref<HTMLTextAreaElement | null>(null);
+const { busy: busy, run: runBusy } = useAsyncAction();
+const area = ref<InstanceType<typeof BaseInput> | null>(null);
 onMounted(() => nextTick(() => area.value?.focus()));
 
 const parsed = computed(() => {
@@ -37,18 +41,14 @@ const authLabel = computed(() => {
 });
 
 async function create() {
-  if (!parsed.value?.ok || busy.value) return;
-  busy.value = true;
-  try {
-    await ws.createRequest(props.collectionId, props.parentId ?? '', parsed.value.request);
+  const p = parsed.value;
+  if (!p?.ok || busy.value) return;
+  await runBusy(async () => {
+    await ws.createRequest(props.collectionId, props.parentId ?? '', p.request);
     ui.view = 'requests';
-    ui.toast(`Created "${parsed.value.request.name}" from cURL`, 'success');
+    ui.toast(`Created "${p.request.name}" from cURL`, 'success');
     emit('close');
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    busy.value = false;
-  }
+  });
 }
 </script>
 
@@ -58,8 +58,9 @@ async function create() {
       Paste a command, e.g. from your browser's developer tools (Network → right-click → Copy as cURL (bash)) or from
       API documentation.
     </p>
-    <textarea
+    <BaseInput
       ref="area"
+      multiline
       v-model="text"
       class="mono"
       rows="10"
@@ -72,7 +73,7 @@ async function create() {
     <p v-if="parsed && !parsed.ok" class="fail small">{{ parsed.error }}</p>
     <div v-else-if="parsed?.ok" class="preview small">
       <div class="row">
-        <span class="method" :class="parsed.request.method">{{ parsed.request.method }}</span>
+        <MethodBadge :method="parsed.request.method" />
         <code class="url">{{ parsed.request.url }}</code>
       </div>
       <div class="muted">
@@ -89,10 +90,10 @@ async function create() {
       </p>
     </div>
     <template #footer>
-      <button @click="emit('close')">Cancel</button>
-      <button class="primary" :disabled="!parsed?.ok || busy" title="Create (Ctrl+Enter)" @click="create">
+      <BaseButton @click="emit('close')">Cancel</BaseButton>
+      <BaseButton variant="primary" :disabled="!parsed?.ok || busy" title="Create (Ctrl+Enter)" @click="create">
         Create request
-      </button>
+      </BaseButton>
     </template>
   </ModalFrame>
 </template>

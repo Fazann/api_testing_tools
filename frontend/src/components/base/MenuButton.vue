@@ -72,7 +72,7 @@ onBeforeUnmount(close);
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px #0003;
+  box-shadow: var(--shadow-md);
 }
 .items button {
   text-align: left;

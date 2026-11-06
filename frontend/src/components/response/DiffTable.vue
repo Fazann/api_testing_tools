@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import type { DiffEntry } from '../types';
+import DataTable from '@/components/base/DataTable.vue';
+import type { DiffEntry } from '@/types';
 
 defineProps<{ diffs: DiffEntry[] }>();
+const COLUMNS = [
+  { key: 'kind', label: 'Change', class: 'kind' },
+  { key: 'path', label: 'Path', class: 'mono' },
+  { key: 'before', label: 'Baseline', class: 'mono' },
+  { key: 'after', label: 'Actual', class: 'mono' },
+];
 const labels: Record<string, string> = {
   added: 'Added',
   removed: 'Removed',
@@ -11,38 +18,25 @@ const labels: Record<string, string> = {
 </script>
 
 <template>
-  <table class="grid diff">
-    <thead>
-      <tr>
-        <th>Change</th>
-        <th>Path</th>
-        <th>Baseline</th>
-        <th>Actual</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="(d, i) in diffs" :key="i" :class="d.kind">
-        <td class="kind">{{ labels[d.kind] ?? d.kind }}</td>
-        <td class="mono">{{ d.path }}</td>
-        <td class="mono">{{ d.before ?? '' }}</td>
-        <td class="mono">{{ d.after ?? '' }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <DataTable class="diff" :columns="COLUMNS" :rows="diffs" :row-class="(d) => d.kind">
+    <template #cell-kind="{ row }">{{ labels[row.kind] ?? row.kind }}</template>
+    <template #cell-before="{ row }">{{ row.before ?? '' }}</template>
+    <template #cell-after="{ row }">{{ row.after ?? '' }}</template>
+  </DataTable>
 </template>
 
 <style scoped>
-.diff tr.added td {
+.diff :deep(tr).added td {
   background: var(--add-bg);
 }
-.diff tr.removed td {
+.diff :deep(tr).removed td {
   background: var(--rem-bg);
 }
-.diff tr.changed td,
-.diff tr.type_changed td {
+.diff :deep(tr).changed td,
+.diff :deep(tr).type_changed td {
   background: var(--chg-bg);
 }
-.kind {
+.diff :deep(.kind) {
   white-space: nowrap;
   font-weight: 600;
 }

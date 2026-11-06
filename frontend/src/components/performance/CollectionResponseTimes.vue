@@ -1,21 +1,42 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { api } from '../services/api';
-import { formatDuration } from '../services/model';
-import { formatChange, sparkPath } from '../services/responseTimes';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import type { CollectionTree, Request, ResponseTimeRow } from '../types';
+import DataTable from '@/components/base/DataTable.vue';
+import MethodBadge from '@/components/base/MethodBadge.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { sparkPath } from '@/services/responseTimes';
+import { useEnvironments } from '@/stores/environments';
+import type { CollectionTree, Request, ResponseTimeRow } from '@/types';
+import { formatChange, formatDuration } from '@/utils/format';
+
+import SlowDot from './SlowDot.vue';
 
 const props = defineProps<{ tree: CollectionTree }>();
 const emit = defineEmits<{ open: [request: Request] }>();
 const envs = useEnvironments();
-const ui = useUi();
+const { run } = useAsyncAction();
 
 const rows = ref<ResponseTimeRow[] | null>(null);
 type Sort = 'order' | 'median' | 'p95' | 'change';
 const sort = ref<Sort>('order');
+const SORTS: { value: Sort; label: string }[] = [
+  { value: 'order', label: 'Collection order' },
+  { value: 'median', label: 'Slowest median' },
+  { value: 'p95', label: 'Slowest p95' },
+  { value: 'change', label: 'Biggest slowdown' },
+];
+const COLUMNS = [
+  { key: 'method', label: 'Method' },
+  { key: 'name', label: 'Name', class: 'name' },
+  { key: 'median', label: 'Median', class: 'num' },
+  { key: 'p95', label: 'p95', class: 'num' },
+  { key: 'latest', label: 'Latest', class: 'num' },
+  { key: 'change', label: 'Change', class: 'num' },
+  { key: 'trend', label: 'Trend' },
+  { key: 'count', label: 'Responses', class: 'num muted' },
+];
 /** A change of at least this much is highlighted. */
 const NOTABLE_PCT = 20;
 
@@ -23,12 +44,8 @@ watch(
   () => [props.tree.collection.id, envs.selectedId] as const,
   async ([id, env]) => {
     rows.value = null;
-    try {
-      const r = await api.getCollectionResponseTimes(id, env);
-      if (props.tree.collection.id === id && envs.selectedId === env) rows.value = r;
-    } catch (e) {
-      ui.error(e);
-    }
+    const r = await run(() => api.getCollectionResponseTimes(id, env));
+    if (r && props.tree.collection.id === id && envs.selectedId === env) rows.value = r;
   },
   { immediate: true },
 );
@@ -69,80 +86,45 @@ function changeClass(pct: number | null) {
     <template v-else>
       <div class="row summary">
         <span>{{ withData.length }} of {{ rows.length }} requests have response times</span>
-        <span v-if="slowNow" class="small"
-          ><span class="key slow" aria-hidden="true" />{{ slowNow }} slower than usual in their latest response</span
-        >
+        <SlowDot v-if="slowNow" class="small">{{ slowNow }} slower than usual in their latest response</SlowDot>
         <span class="spacer" />
-        <label class="row small sort"
-          >Sort
-          <select v-model="sort">
-            <option value="order">Collection order</option>
-            <option value="median">Slowest median</option>
-            <option value="p95">Slowest p95</option>
-            <option value="change">Biggest slowdown</option>
-          </select>
-        </label>
+        <label class="row small sort">Sort <SelectField v-model="sort" :options="SORTS" /></label>
       </div>
-      <table class="grid list">
-        <thead>
-          <tr>
-            <th>Method</th>
-            <th>Name</th>
-            <th class="num">Median</th>
-            <th class="num">p95</th>
-            <th class="num">Latest</th>
-            <th class="num">Change</th>
-            <th>Trend</th>
-            <th class="num">Responses</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="r in sorted"
-            :key="r.requestId"
-            tabindex="0"
-            :title="`Open ${r.name}`"
-            @click="open(r)"
-            @keydown.enter.prevent="open(r)"
-          >
-            <td>
-              <span class="method" :class="r.method">{{ r.method }}</span>
-            </td>
-            <td class="name">
-              {{ r.name }}
-              <span v-if="r.mode === 'fail'" class="tag" title="A slowdown fails this request">fails if slow</span>
-              <span v-else-if="r.mode === 'off'" class="tag muted" title="Response-time check is off">check off</span>
-            </td>
-            <template v-if="r.stats.count">
-              <td class="num">{{ formatDuration(r.stats.medianMs) }}</td>
-              <td class="num">{{ formatDuration(r.stats.p95Ms) }}</td>
-              <td class="num">
-                <span v-if="r.lastSlower" class="key slow" title="Slower than usual" />
-                <span class="sr-only" v-if="r.lastSlower">slower than usual,</span>
-                {{ formatDuration(r.lastMs) }}
-              </td>
-              <td class="num" :class="changeClass(r.changePct)">{{ formatChange(r.changePct) }}</td>
-              <td>
-                <svg
-                  v-if="r.recent.length > 1"
-                  class="spark"
-                  width="80"
-                  height="18"
-                  viewBox="0 0 80 18"
-                  aria-hidden="true"
-                >
-                  <path :d="sparkPath(r.recent, 80, 18)" />
-                </svg>
-              </td>
-              <td class="num muted">{{ r.stats.count }}</td>
-            </template>
-            <td v-else colspan="6" class="muted small">No responses yet</td>
-          </tr>
-          <tr v-if="rows.length === 0" class="none">
-            <td colspan="8" class="muted small">This collection has no requests.</td>
-          </tr>
-        </tbody>
-      </table>
+      <DataTable
+        :columns="COLUMNS"
+        :rows="sorted"
+        :row-key="(r) => r.requestId"
+        :row-title="(r) => `Open ${r.name}`"
+        clickable
+        empty="This collection has no requests."
+        @row-click="open"
+      >
+        <template #cell-method="{ row }"><MethodBadge :method="row.method" /></template>
+        <template #cell-name="{ row }">
+          {{ row.name }}
+          <span v-if="row.mode === 'fail'" class="tag" title="A slowdown fails this request">fails if slow</span>
+          <span v-else-if="row.mode === 'off'" class="tag muted" title="Response-time check is off">check off</span>
+        </template>
+        <template #cell-median="{ row }">
+          <template v-if="row.stats.count">{{ formatDuration(row.stats.medianMs) }}</template>
+          <span v-else class="muted small">No responses yet</span>
+        </template>
+        <template #cell-p95="{ row }">{{ row.stats.count ? formatDuration(row.stats.p95Ms) : '' }}</template>
+        <template #cell-latest="{ row }">
+          <template v-if="row.stats.count">
+            <SlowDot v-if="row.lastSlower" label="slower than usual," />{{ formatDuration(row.lastMs) }}
+          </template>
+        </template>
+        <template #cell-change="{ row }">
+          <span v-if="row.stats.count" :class="changeClass(row.changePct)">{{ formatChange(row.changePct) }}</span>
+        </template>
+        <template #cell-trend="{ row }">
+          <svg v-if="row.recent.length > 1" class="spark" width="80" height="18" viewBox="0 0 80 18" aria-hidden="true">
+            <path :d="sparkPath(row.recent, 80, 18)" />
+          </svg>
+        </template>
+        <template #cell-count="{ row }">{{ row.stats.count || '' }}</template>
+      </DataTable>
     </template>
   </div>
 </template>
@@ -159,14 +141,7 @@ function changeClass(pct: number | null) {
   gap: 6px;
   align-items: center;
 }
-.list tbody tr:not(.none) {
-  cursor: pointer;
-}
-.list tbody tr:not(.none):hover,
-.list tbody tr:focus-visible {
-  background: var(--bg-muted);
-}
-.name {
+:deep(.name) {
   font-weight: 600;
 }
 .tag {
@@ -177,9 +152,7 @@ function changeClass(pct: number | null) {
   border: 1px solid var(--line);
   border-radius: 999px;
 }
-.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+:deep(.num) {
   white-space: nowrap;
 }
 .worse {
@@ -189,28 +162,10 @@ function changeClass(pct: number | null) {
 .better {
   color: var(--pass);
 }
-.key {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 5px;
-  vertical-align: middle;
-}
-.key.slow {
-  background: var(--warn);
-}
 .spark path {
   fill: none;
   stroke: var(--accent);
   stroke-width: 1.5;
   stroke-linejoin: round;
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
 }
 </style>

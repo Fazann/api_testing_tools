@@ -1,29 +1,33 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, toRef } from 'vue';
 
-import { provideCollectionVariables } from '../services/collectionVariables';
-import { clone } from '../services/model';
-import { useOpenRequest } from '../services/navigation';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { Collection, Request } from '../types';
-import AuthEditor from './AuthEditor.vue';
-import CollectionEndpoints from './CollectionEndpoints.vue';
-import CollectionResponseTimes from './CollectionResponseTimes.vue';
-import ModalFrame from './ModalFrame.vue';
-import PermissionMatrix from './PermissionMatrix.vue';
-import ScriptEditor from './ScriptEditor.vue';
-import VariableTable from './VariableTable.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import ModalFrame from '@/components/base/ModalFrame.vue';
+import TabBar from '@/components/base/TabBar.vue';
+import TextField from '@/components/base/TextField.vue';
+import CollectionResponseTimes from '@/components/performance/CollectionResponseTimes.vue';
+import AuthEditor from '@/components/request/AuthEditor.vue';
+import ScriptEditor from '@/components/request/ScriptEditor.vue';
+import PermissionMatrix from '@/components/security/PermissionMatrix.vue';
+import VariableTable from '@/components/variables/VariableTable.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { provideCollectionVariables } from '@/services/collectionVariables';
+import { useOpenRequest } from '@/services/navigation';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { Collection, Request } from '@/types';
+import { clone } from '@/utils/object';
 
-const props = defineProps<{
-  collection: Collection;
-  initialTab?: 'endpoints' | 'times' | 'permissions' | 'settings';
-}>();
+import CollectionEndpoints from './CollectionEndpoints.vue';
+
+type Tab = 'endpoints' | 'times' | 'permissions' | 'settings';
+const props = defineProps<{ collection: Collection; initialTab?: Tab }>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
 const ui = useUi();
 const openRequest = useOpenRequest();
-const tab = ref(props.initialTab ?? 'settings');
+const tab = ref<Tab>(props.initialTab ?? 'settings');
 const matrixDirty = ref(false);
 
 /** Closes the dialog, asking first when the permission matrix has unsaved changes. */
@@ -48,7 +52,7 @@ form.value.postResponseScript ??= '';
 provideCollectionVariables(toRef(() => form.value.variables));
 const required = ref((props.collection.requiredVariables ?? []).join(', '));
 const applyToAll = ref(false);
-const saving = ref(false);
+const { busy: saving, run: runSaving } = useAsyncAction();
 const original = JSON.stringify(form.value);
 const settingsChanged = computed(() => JSON.stringify(form.value) !== original);
 const tree = computed(() => ws.trees[props.collection.id]);
@@ -91,8 +95,7 @@ async function save() {
     .map((s) => s.trim())
     .filter(Boolean);
   form.value.variables = form.value.variables.filter((v) => v.key.trim() !== '' || v.value !== '');
-  saving.value = true;
-  try {
+  await runSaving(async () => {
     await ws.updateCollection(form.value);
     let message = 'Collection saved';
     if (applyToAll.value) {
@@ -101,24 +104,20 @@ async function save() {
     }
     ui.toast(message, 'success');
     emit('close');
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    saving.value = false;
-  }
+  });
 }
+
+const tabs = computed(() => [
+  { id: 'endpoints' as const, label: 'Endpoints', count: tree.value?.requests.length },
+  { id: 'times' as const, label: 'Response times' },
+  { id: 'permissions' as const, label: 'Permissions' },
+  { id: 'settings' as const, label: 'Settings & auth' },
+]);
 </script>
 
 <template>
   <ModalFrame :title="collection.name" wide :xwide="tab === 'permissions'" @close="requestClose">
-    <nav class="tabs" role="tablist">
-      <button :class="{ active: tab === 'endpoints' }" role="tab" @click="tab = 'endpoints'">
-        Endpoints<span v-if="tree" class="count">{{ tree.requests.length }}</span>
-      </button>
-      <button :class="{ active: tab === 'times' }" role="tab" @click="tab = 'times'">Response times</button>
-      <button :class="{ active: tab === 'permissions' }" role="tab" @click="tab = 'permissions'">Permissions</button>
-      <button :class="{ active: tab === 'settings' }" role="tab" @click="tab = 'settings'">Settings &amp; auth</button>
-    </nav>
+    <TabBar v-model="tab" :tabs="tabs" />
 
     <template v-if="tab === 'endpoints'">
       <CollectionEndpoints v-if="tree" :tree="tree" @open="openEndpoint" />
@@ -136,8 +135,8 @@ async function save() {
     </template>
 
     <template v-else>
-      <label class="field"><span>Name</span><input v-model="form.name" maxlength="200" /></label>
-      <label class="field"><span>Description</span><textarea v-model="form.description" rows="3" /></label>
+      <TextField v-model="form.name" label="Name" maxlength="200" />
+      <TextField v-model="form.description" label="Description" multiline rows="3" />
 
       <h3 class="section-title">Variables</h3>
       <p class="muted small">
@@ -148,13 +147,13 @@ async function save() {
       </p>
       <VariableTable :variables="form.variables" />
 
-      <label class="field">
-        <span>Required variables</span>
-        <input v-model="required" class="mono" placeholder="base_url, token" />
-        <span class="muted small"
-          >The collection will not run unless these are set and non-empty, here or in the selected environment.</span
-        >
-      </label>
+      <TextField
+        v-model="required"
+        label="Required variables"
+        input-class="mono"
+        placeholder="base_url, token"
+        hint="The collection will not run unless these are set and non-empty, here or in the selected environment."
+      />
 
       <h3 class="section-title">Authorization</h3>
       <p class="muted small">
@@ -162,20 +161,17 @@ async function save() {
         >. Requests whose Auth is “Inherit auth from collection” use it; any request can override it.
       </p>
       <AuthEditor :auth="form.auth" />
-      <label v-if="ownAuth.length > 0" class="row apply">
-        <input v-model="applyToAll" type="checkbox" />
-        <span>
-          <strong>Use this auth for all requests</strong> — {{ ownAuth.length }} request{{
-            ownAuth.length === 1 ? ' has' : 's have'
-          }}
-          their own auth ({{
-            ownAuth
-              .slice(0, 3)
-              .map((r) => r.name)
-              .join(', ')
-          }}{{ ownAuth.length > 3 ? ', …' : '' }}) and will be switched to inherit.
-        </span>
-      </label>
+      <CheckboxField v-if="ownAuth.length > 0" v-model="applyToAll" class="apply">
+        <strong>Use this auth for all requests</strong> — {{ ownAuth.length }} request{{
+          ownAuth.length === 1 ? ' has' : 's have'
+        }}
+        their own auth ({{
+          ownAuth
+            .slice(0, 3)
+            .map((r) => r.name)
+            .join(', ')
+        }}{{ ownAuth.length > 3 ? ', …' : '' }}) and will be switched to inherit.
+      </CheckboxField>
       <p v-else-if="ws.trees[collection.id]" class="muted small">All requests in this collection use this auth.</p>
 
       <h3 class="section-title">Scripts</h3>
@@ -184,10 +180,10 @@ async function save() {
 
     <template #footer>
       <span v-if="tab !== 'settings' && settingsChanged" class="muted small grow">Settings have unsaved changes.</span>
-      <button @click="requestClose">{{ tab === 'settings' || settingsChanged ? 'Cancel' : 'Close' }}</button>
-      <button v-if="tab === 'settings' || settingsChanged" class="primary" :disabled="saving" @click="save">
+      <BaseButton @click="requestClose">{{ tab === 'settings' || settingsChanged ? 'Cancel' : 'Close' }}</BaseButton>
+      <BaseButton v-if="tab === 'settings' || settingsChanged" variant="primary" :disabled="saving" @click="save">
         Save
-      </button>
+      </BaseButton>
     </template>
   </ModalFrame>
 </template>

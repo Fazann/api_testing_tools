@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
 
-import { HIGHLIGHT_LIMIT, highlightJs, highlightJson, type Token } from '../services/highlight';
+import { HIGHLIGHT_LIMIT, highlightJs, highlightJson, type Token } from '@/services/highlight';
 
 /**
  * A code editor styled like VS Code's Dark+ theme. A native <textarea> with
@@ -107,20 +107,37 @@ function onKeydown(e: KeyboardEvent) {
 .code-editor {
   --ce-bg: #1e1e1e;
   --ce-fg: #d4d4d4;
+  --ce-border: #3c3c3c;
+  --ce-focus: #007fd4;
+  --ce-gutter: #858585;
+  --ce-gutter-line: #2b2b2b;
+  --ce-gutter-current: #c6c6c6;
+  --ce-caret: #aeafad;
+  --ce-selection: #264f78;
+  --ce-placeholder: #6a6a6a;
+  --ce-comment: #6a9955;
+  --ce-string: #ce9178;
+  --ce-regex: #d16969;
+  --ce-number: #b5cea8;
+  --ce-keyword: #569cd6;
+  --ce-control: #c586c0;
+  --ce-function: #dcdcaa;
+  --ce-variable: #9cdcfe;
+  --ce-type: #4ec9b0;
   display: flex;
   min-height: 120px;
   resize: vertical;
   overflow: hidden;
   background: var(--ce-bg);
   color: var(--ce-fg);
-  border: 1px solid #3c3c3c;
+  border: 1px solid var(--ce-border);
   border-radius: var(--radius);
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.5;
 }
 .code-editor:focus-within {
-  border-color: #007fd4;
+  border-color: var(--ce-focus);
 }
 .gutter {
   flex-shrink: 0;
@@ -128,12 +145,12 @@ function onKeydown(e: KeyboardEvent) {
   padding: 8px 10px 8px 12px;
   min-width: 3.2em;
   text-align: right;
-  color: #858585;
+  color: var(--ce-gutter);
   user-select: none;
-  border-right: 1px solid #2b2b2b;
+  border-right: 1px solid var(--ce-gutter-line);
 }
 .gutter .current {
-  color: #c6c6c6;
+  color: var(--ce-gutter-current);
 }
 .area {
   position: relative;
@@ -173,48 +190,48 @@ textarea {
   overflow: auto;
   background: transparent;
   color: transparent;
-  caret-color: #aeafad;
+  caret-color: var(--ce-caret);
   outline: none;
   box-shadow: none;
 }
 textarea::selection {
-  background: #264f78;
+  background: var(--ce-selection);
   color: transparent;
 }
 textarea::placeholder {
-  color: #6a6a6a;
+  color: var(--ce-placeholder);
 }
 .tk-comment {
-  color: #6a9955;
+  color: var(--ce-comment);
 }
 .tk-string {
-  color: #ce9178;
+  color: var(--ce-string);
 }
 .tk-regex {
-  color: #d16969;
+  color: var(--ce-regex);
 }
 .tk-number {
-  color: #b5cea8;
+  color: var(--ce-number);
 }
 .tk-keyword,
 .tk-literal {
-  color: #569cd6;
+  color: var(--ce-keyword);
 }
 .tk-control {
-  color: #c586c0;
+  color: var(--ce-control);
 }
 .tk-function {
-  color: #dcdcaa;
+  color: var(--ce-function);
 }
 .tk-variable,
 .tk-property,
 .tk-key {
-  color: #9cdcfe;
+  color: var(--ce-variable);
 }
 .tk-type {
-  color: #4ec9b0;
+  color: var(--ce-type);
 }
 .tk-punct {
-  color: #d4d4d4;
+  color: var(--ce-fg);
 }
 </style>

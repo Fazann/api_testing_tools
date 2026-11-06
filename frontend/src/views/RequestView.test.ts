@@ -2,9 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { newRequest } from '../services/model';
-import { useWorkspace } from '../stores/workspace';
-import type { RunResult } from '../types';
+import { newRequest } from '@/services/model';
+import { useWorkspace } from '@/stores/workspace';
+import type { RunResult } from '@/types';
+
 import RequestView from './RequestView.vue';
 
 function result(over: Partial<RunResult> = {}): RunResult {

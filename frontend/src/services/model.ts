@@ -1,13 +1,5 @@
-import type { Assertion, AssertionKind, KeyValue, Operator, Request } from '../types';
-
-export function uid(): string {
-  return crypto.randomUUID();
-}
-
-/** Deep copy that also strips Vue reactivity proxies. */
-export function clone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v)) as T;
-}
+import type { Assertion, AssertionKind, KeyValue, Operator, Request } from '@/types';
+import { uid } from '@/utils/object';
 
 export function emptyRow(): KeyValue {
   return { key: '', value: '', enabled: true };
@@ -145,37 +137,6 @@ export function formatExpected(v: unknown): string {
     }
   }
   return JSON.stringify(v);
-}
-
-export function isDestructive(method: string): boolean {
-  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
-}
-
-export function formatBytes(n: number): string {
-  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`;
-  if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KB`;
-  return `${n} B`;
-}
-
-export function formatDuration(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`;
-}
-
-export function formatTime(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleString();
-}
-
-/** Pretty-prints JSON bodies; returns other text unchanged. */
-export function prettyBody(body: string, contentType = ''): string {
-  const t = body.trim();
-  if (!t || !(contentType.includes('json') || t.startsWith('{') || t.startsWith('['))) return body;
-  try {
-    return JSON.stringify(JSON.parse(t), null, 2);
-  } catch {
-    return body;
-  }
 }
 
 /** Appends an object key to a path using the same syntax as the Go engine. */

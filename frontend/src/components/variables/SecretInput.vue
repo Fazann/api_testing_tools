@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+
 import VariableInput from './VariableInput.vue';
 
 const model = defineModel<string | undefined>({ default: '' });
@@ -19,7 +22,7 @@ const isReference = computed(() => /^\s*\{\{[^}]+\}\}\s*$/.test(model.value ?? '
       :placeholder="placeholder"
       :aria-label="label"
     />
-    <input
+    <BaseInput
       v-else
       v-model="model"
       class="mono grow"
@@ -29,13 +32,8 @@ const isReference = computed(() => /^\s*\{\{[^}]+\}\}\s*$/.test(model.value ?? '
       autocomplete="off"
       spellcheck="false"
     />
-    <button
-      type="button"
-      class="ghost small"
-      :aria-label="visible ? 'Hide value' : 'Show value'"
-      @click="visible = !visible"
-    >
+    <BaseButton variant="ghost" small :aria-label="visible ? 'Hide value' : 'Show value'" @click="visible = !visible">
       {{ visible ? 'Hide' : 'Show' }}
-    </button>
+    </BaseButton>
   </span>
 </template>

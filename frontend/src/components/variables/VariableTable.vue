@@ -1,8 +1,20 @@
 <script setup lang="ts">
-import type { Variable } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import DataTable from '@/components/base/DataTable.vue';
+import type { Variable } from '@/types';
+
 import SecretInput from './SecretInput.vue';
 
 const props = defineProps<{ variables: Variable[] }>();
+const COLUMNS = [
+  { key: 'enabled', label: 'On', class: 'on' },
+  { key: 'key', label: 'Variable' },
+  { key: 'value', label: 'Value' },
+  { key: 'secret', label: 'Secret', class: 'sec' },
+  { key: 'remove', class: 'act' },
+];
 
 function add() {
   props.variables.push({ key: '', value: '', secret: false, enabled: true });
@@ -10,51 +22,42 @@ function add() {
 </script>
 
 <template>
-  <table class="grid vars">
-    <thead>
-      <tr>
-        <th class="on">On</th>
-        <th>Variable</th>
-        <th>Value</th>
-        <th class="sec">Secret</th>
-        <th class="act" />
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="(v, i) in variables" :key="i">
-        <td><input v-model="v.enabled" type="checkbox" :aria-label="`Enable ${v.key || 'variable'}`" /></td>
-        <td>
-          <input v-model="v.key" class="mono full" placeholder="name" :aria-label="`Variable name ${i + 1}`" />
-        </td>
-        <td>
-          <SecretInput v-if="v.secret" v-model="v.value" :label="`Value of ${v.key}`" />
-          <input v-else v-model="v.value" class="mono full" :aria-label="`Value of ${v.key}`" />
-        </td>
-        <td>
-          <input v-model="v.secret" type="checkbox" :aria-label="`Mark ${v.key || 'variable'} as secret`" />
-        </td>
-        <td>
-          <button class="ghost" :aria-label="`Remove ${v.key || 'variable'}`" @click="variables.splice(i, 1)">✕</button>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-  <div><button type="button" @click="add">＋ Add variable</button></div>
+  <DataTable class="vars" :columns="COLUMNS" :rows="variables">
+    <template #cell-enabled="{ row: v }">
+      <CheckboxField v-model="v.enabled" :aria-label="`Enable ${v.key || 'variable'}`" />
+    </template>
+    <template #cell-key="{ row: v, index }">
+      <BaseInput v-model="v.key" class="mono full" placeholder="name" :aria-label="`Variable name ${index + 1}`" />
+    </template>
+    <template #cell-value="{ row: v }">
+      <SecretInput v-if="v.secret" v-model="v.value" :label="`Value of ${v.key}`" />
+      <BaseInput v-else v-model="v.value" class="mono full" :aria-label="`Value of ${v.key}`" />
+    </template>
+    <template #cell-secret="{ row: v }">
+      <CheckboxField v-model="v.secret" :aria-label="`Mark ${v.key || 'variable'} as secret`" />
+    </template>
+    <template #cell-remove="{ row: v, index }">
+      <BaseButton variant="ghost" :aria-label="`Remove ${v.key || 'variable'}`" @click="variables.splice(index, 1)"
+        >✕</BaseButton
+      >
+    </template>
+  </DataTable>
+  <div><BaseButton @click="add">＋ Add variable</BaseButton></div>
 </template>
 
 <style scoped>
-.vars td {
+.vars :deep(td) {
   vertical-align: middle;
   padding: 3px 4px;
 }
 .full {
   width: 100%;
 }
-.on,
-.sec {
+.vars :deep(.on),
+.vars :deep(.sec) {
   width: 54px;
 }
-.act {
+.vars :deep(.act) {
   width: 36px;
 }
 </style>

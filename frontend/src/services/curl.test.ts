@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Environment, Request } from '../types';
+import type { Environment, Request } from '@/types';
+
 import { CurlParseError, looksLikeCurl, parseCurl, shellQuote, shellSplit, toCurl } from './curl';
 import { newRequest } from './model';
 

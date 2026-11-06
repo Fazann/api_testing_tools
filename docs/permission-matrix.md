@@ -212,8 +212,8 @@ are dropped on save. The matrix is not yet part of collection export or duplicat
 ```sh
 go test ./internal/security -run 'Classify|Judge' -v           # outcome and verdict rules
 go test ./tests/integration -run TestPermissionMatrix -v       # IDOR found, anonymous strips the token, no token in History
-cd frontend && npx vitest run src/components/PermissionMatrix.test.ts   # grid, cycling, run, approve
+cd frontend && npx vitest run src/components/security/PermissionMatrix.test.ts   # grid, cycling, run, approve
 ```
 
 The code is in `internal/security/matrix.go` (judging), `internal/service/security.go` (roles and running) and
-`frontend/src/components/PermissionMatrix.vue`.
+`frontend/src/components/security/PermissionMatrix.vue`.

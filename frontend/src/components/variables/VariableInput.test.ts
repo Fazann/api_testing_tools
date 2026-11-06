@@ -2,9 +2,10 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useEnvironments } from '../stores/environments';
-import { useWorkspace } from '../stores/workspace';
-import type { Environment } from '../types';
+import { useEnvironments } from '@/stores/environments';
+import { useWorkspace } from '@/stores/workspace';
+import type { Environment } from '@/types';
+
 import VariableInput from './VariableInput.vue';
 
 const env: Environment = {

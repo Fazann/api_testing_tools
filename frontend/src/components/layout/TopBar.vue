@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { useEnvironments } from '../stores/environments';
-import { useUi, type View } from '../stores/ui';
+import { computed } from 'vue';
+
+import BaseButton from '@/components/base/BaseButton.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import StatusBadge from '@/components/base/StatusBadge.vue';
+import { useEnvironments } from '@/stores/environments';
+import { useUi, type View } from '@/stores/ui';
 
 const ui = useUi();
 const envs = useEnvironments();
+const envOptions = computed(() => [
+  { value: '', label: 'No environment' },
+  ...envs.list.map((e) => ({ value: e.id, label: e.name + (e.protected ? ' (protected)' : '') })),
+]);
 
 const tabs: { id: View; label: string }[] = [
   { id: 'requests', label: 'Requests' },
@@ -18,7 +27,7 @@ const tabs: { id: View; label: string }[] = [
   <header class="topbar">
     <strong class="brand">API Regression Guard</strong>
     <nav class="nav" aria-label="Main">
-      <button
+      <BaseButton
         v-for="t in tabs"
         :key="t.id"
         :class="{ active: ui.view === t.id }"
@@ -26,21 +35,19 @@ const tabs: { id: View; label: string }[] = [
         @click="ui.view = t.id"
       >
         {{ t.label }}
-      </button>
+      </BaseButton>
     </nav>
     <span class="spacer" />
     <label class="env row">
       <span class="muted small">Environment</span>
-      <select v-model="envs.selectedId" aria-label="Environment">
-        <option value="">No environment</option>
-        <option v-for="e in envs.list" :key="e.id" :value="e.id">
-          {{ e.name }}{{ e.protected ? ' (protected)' : '' }}
-        </option>
-      </select>
+      <SelectField v-model="envs.selectedId" :options="envOptions" aria-label="Environment" />
     </label>
-    <span v-if="envs.selected?.protected" class="badge failed" title="Destructive requests require confirmation"
-      >protected</span
-    >
+    <StatusBadge
+      v-if="envs.selected?.protected"
+      status="failed"
+      label="protected"
+      title="Destructive requests require confirmation"
+    />
   </header>
 </template>
 

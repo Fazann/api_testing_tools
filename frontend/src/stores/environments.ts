@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 
-import { api } from '../services/api';
-import type { Environment } from '../types';
+import { api } from '@/services/api';
+import type { Environment } from '@/types';
 
 const STORAGE_KEY = 'arg.selectedEnvironment';
 

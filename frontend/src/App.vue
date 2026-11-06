@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
-import AppDialog from './components/AppDialog.vue';
-import AppToasts from './components/AppToasts.vue';
-import CollectionSidebar from './components/CollectionSidebar.vue';
-import TopBar from './components/TopBar.vue';
-import { api, BackendUnavailableError } from './services/api';
-import { useEnvironments } from './stores/environments';
-import { useRunner } from './stores/runner';
-import { useUi } from './stores/ui';
-import { useWorkspace } from './stores/workspace';
-import EnvironmentsView from './views/EnvironmentsView.vue';
-import HistoryView from './views/HistoryView.vue';
-import RequestView from './views/RequestView.vue';
-import RunView from './views/RunView.vue';
-import SettingsView from './views/SettingsView.vue';
+import EmptyState from '@/components/base/EmptyState.vue';
+import CollectionSidebar from '@/components/collection/CollectionSidebar.vue';
+import AppDialog from '@/components/layout/AppDialog.vue';
+import AppToasts from '@/components/layout/AppToasts.vue';
+import TopBar from '@/components/layout/TopBar.vue';
+import { api, BackendUnavailableError } from '@/services/api';
+import { useEnvironments } from '@/stores/environments';
+import { useRunner } from '@/stores/runner';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import EnvironmentsView from '@/views/EnvironmentsView.vue';
+import HistoryView from '@/views/HistoryView.vue';
+import RequestView from '@/views/RequestView.vue';
+import RunView from '@/views/RunView.vue';
+import SettingsView from '@/views/SettingsView.vue';
 
 const ui = useUi();
 const ws = useWorkspace();
@@ -54,12 +55,11 @@ function onKey(e: KeyboardEvent) {
 <template>
   <div class="shell">
     <TopBar />
-    <div v-if="backendMissing" class="empty">
-      <h2>Backend not connected</h2>
+    <EmptyState v-if="backendMissing" title="Backend not connected">
       <p>
         This interface runs inside the desktop app. Start it with <code>wails dev</code> or launch the packaged binary.
       </p>
-    </div>
+    </EmptyState>
     <div v-else class="body">
       <CollectionSidebar v-if="ui.view === 'requests' || ui.view === 'run'" />
       <main class="main">

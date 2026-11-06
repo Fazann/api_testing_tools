@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
 
-import { useUi } from '../stores/ui';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import ModalFrame from '@/components/base/ModalFrame.vue';
+import { useUi } from '@/stores/ui';
+
+const FORM_ID = 'app-dialog-form';
 
 const ui = useUi();
-const input = ref<HTMLInputElement | null>(null);
-const confirmBtn = ref<HTMLButtonElement | null>(null);
+const input = ref<InstanceType<typeof BaseInput> | null>(null);
+const confirmBtn = ref<{ focus(): void } | null>(null);
 
 watch(
   () => ui.dialog,
@@ -39,57 +44,37 @@ function cancel() {
 </script>
 
 <template>
-  <div v-if="ui.dialog" class="backdrop" @mousedown.self="cancel" @keydown.esc="cancel">
-    <form class="dialog" role="dialog" aria-modal="true" :aria-label="ui.dialog.title" @submit.prevent="submit">
-      <h2>{{ ui.dialog.title }}</h2>
+  <ModalFrame v-if="ui.dialog" :title="ui.dialog.title" stacked @close="cancel">
+    <form :id="FORM_ID" class="stack" @submit.prevent="submit">
       <p v-if="ui.dialog.message" class="muted">{{ ui.dialog.message }}</p>
       <ul v-if="ui.dialog.details?.length" class="details">
         <li v-for="(d, i) in ui.dialog.details" :key="i">{{ d }}</li>
       </ul>
-      <input
+      <BaseInput
         v-if="ui.dialog.type === 'prompt'"
         ref="input"
         v-model="ui.dialog.value"
+        :aria-label="ui.dialog.title"
         maxlength="200"
         @keydown.esc.stop="cancel"
       />
-      <div class="row actions">
-        <button type="button" @click="cancel">Cancel</button>
-        <button ref="confirmBtn" type="submit" :class="ui.dialog.danger ? 'danger' : 'primary'">
-          {{ ui.dialog.confirmLabel }}
-        </button>
-      </div>
     </form>
-  </div>
+    <template #footer>
+      <BaseButton @click="cancel">Cancel</BaseButton>
+      <BaseButton ref="confirmBtn" type="submit" :form="FORM_ID" :variant="ui.dialog.danger ? 'danger' : 'primary'">
+        {{ ui.dialog.confirmLabel }}
+      </BaseButton>
+    </template>
+  </ModalFrame>
 </template>
 
 <style scoped>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  background: #0006;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 40;
-  padding: 16px;
-}
-.dialog {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 18px;
-  width: min(480px, 100%);
+.stack {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 12px 40px #0004;
 }
-.dialog h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.dialog p {
+p {
   margin: 0;
 }
 .details {
@@ -100,9 +85,5 @@ function cancel() {
 }
 .details li {
   margin-bottom: 4px;
-}
-.actions {
-  justify-content: flex-end;
-  margin-top: 6px;
 }
 </style>

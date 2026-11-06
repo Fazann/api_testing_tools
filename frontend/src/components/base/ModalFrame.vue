@@ -1,14 +1,17 @@
 <script setup lang="ts">
-defineProps<{ title: string; wide?: boolean; xwide?: boolean }>();
+import BaseButton from './BaseButton.vue';
+
+// `stacked` raises the dialog above other open modals (confirm and prompt dialogs).
+defineProps<{ title: string; wide?: boolean; xwide?: boolean; stacked?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 </script>
 
 <template>
-  <div class="backdrop" @mousedown.self="emit('close')" @keydown.esc="emit('close')">
+  <div class="backdrop" :class="{ stacked }" @mousedown.self="emit('close')" @keydown.esc="emit('close')">
     <section class="modal" :class="{ wide, xwide }" role="dialog" aria-modal="true" :aria-label="title">
       <header class="row">
         <h2 class="grow">{{ title }}</h2>
-        <button class="ghost" aria-label="Close" @click="emit('close')">✕</button>
+        <BaseButton variant="ghost" aria-label="Close" @click="emit('close')">✕</BaseButton>
       </header>
       <div class="content"><slot /></div>
       <footer class="row"><slot name="footer" /></footer>
@@ -20,12 +23,15 @@ const emit = defineEmits<{ close: [] }>();
 .backdrop {
   position: fixed;
   inset: 0;
-  background: #0006;
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 35;
   padding: 16px;
+}
+.backdrop.stacked {
+  z-index: 40;
 }
 .modal {
   background: var(--bg);
@@ -35,7 +41,7 @@ const emit = defineEmits<{ close: [] }>();
   max-height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 40px #0004;
+  box-shadow: var(--shadow-lg);
 }
 .modal.wide {
   width: min(760px, 100%);

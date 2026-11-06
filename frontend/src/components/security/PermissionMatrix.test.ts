@@ -2,9 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { newRequest } from '../services/model';
-import { useUi } from '../stores/ui';
-import type { CollectionTree, PermissionMatrix as Matrix, MatrixReport, Method, Request } from '../types';
+import { newRequest } from '@/services/model';
+import { useUi } from '@/stores/ui';
+import type { CollectionTree, PermissionMatrix as Matrix, MatrixReport, Method, Request } from '@/types';
+
 import PermissionMatrix from './PermissionMatrix.vue';
 
 function req(id: string, name: string, method: Method): Request {

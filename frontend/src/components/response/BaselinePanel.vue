@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { api } from '../services/api';
-import { formatTime } from '../services/model';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { Baseline } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import CalloutBox from '@/components/base/CalloutBox.vue';
+import TextField from '@/components/base/TextField.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { Baseline } from '@/types';
+import { formatTime } from '@/utils/format';
 
 const ws = useWorkspace();
 const envs = useEnvironments();
@@ -15,36 +19,34 @@ const ui = useUi();
 const baseline = ref<Baseline | null>(null);
 const ignored = ref('');
 const tolerance = ref(0);
-const loading = ref(false);
+const { busy: loading, run: runLoad } = useAsyncAction();
+const { run } = useAsyncAction();
+const IGNORED_PLACEHOLDER = 'meta.request_id\nitems[*].updated_at\n**.timestamp';
 
 const requestId = computed(() => ws.draft?.id ?? '');
 
 async function load() {
   baseline.value = null;
   if (!requestId.value) return;
-  loading.value = true;
-  try {
-    baseline.value = await api.getBaseline(requestId.value, envs.selectedId);
+  const id = requestId.value;
+  await runLoad(async () => {
+    baseline.value = await api.getBaseline(id, envs.selectedId);
     ignored.value = baseline.value?.ignoredPaths.join('\n') ?? '';
     tolerance.value = baseline.value?.tolerance ?? 0;
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    loading.value = false;
-  }
+  });
 }
 watch([requestId, () => envs.selectedId, () => ws.currentResult?.regression?.baselineId], load, { immediate: true });
 defineExpose({ load });
 
 async function saveRules() {
-  if (!baseline.value) return;
-  try {
-    await api.updateBaselineRules(baseline.value.id, ignored.value.split('\n'), tolerance.value || 0);
+  const b = baseline.value;
+  if (!b) return;
+  const saved = await run(async () => {
+    await api.updateBaselineRules(b.id, ignored.value.split('\n'), tolerance.value || 0);
     ui.toast('Baseline rules saved. They apply from the next run.', 'success');
-    await load();
-  } catch (e) {
-    ui.error(e);
-  }
+    return true;
+  });
+  if (saved) await load();
 }
 
 async function remove() {
@@ -55,26 +57,25 @@ async function remove() {
     confirmLabel: 'Delete',
     danger: true,
   });
-  if (!ok) return;
-  try {
-    await api.deleteBaseline(baseline.value.id);
+  const b = baseline.value;
+  if (!ok || !b) return;
+  await run(async () => {
+    await api.deleteBaseline(b.id);
     baseline.value = null;
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 </script>
 
 <template>
   <div class="stack baseline">
-    <div v-if="!requestId" class="callout info">Save the request to use baselines.</div>
+    <CalloutBox v-if="!requestId" tone="info">Save the request to use baselines.</CalloutBox>
     <template v-else-if="loading" />
-    <div v-else-if="!baseline" class="callout info">
+    <CalloutBox v-else-if="!baseline" tone="info">
       No baseline for this request in <strong>{{ envs.selected?.name ?? 'No environment' }}</strong
       >. Send the request against a known-good environment, review the response, then choose
       <strong>Approve as baseline</strong> in the response panel. Baselines are per environment and are only changed
       when you approve them.
-    </div>
+    </CalloutBox>
     <template v-else>
       <p class="small muted">
         Approved {{ formatTime(baseline.updatedAt) }} for <strong>{{ envs.selected?.name ?? 'No environment' }}</strong
@@ -91,17 +92,25 @@ async function remove() {
         <span class="muted">Selected paths:</span>
         <code v-for="p in baseline.selectedPaths" :key="p" class="chip">{{ p }}</code>
       </div>
-      <label class="field">
-        <span>Ignored paths (one per line) — dynamic values such as timestamps and request IDs</span>
-        <textarea v-model="ignored" rows="4" placeholder="meta.request_id&#10;items[*].updated_at&#10;**.timestamp" />
-      </label>
-      <label v-if="baseline.mode !== 'schema'" class="field tol">
-        <span>Numeric tolerance (absolute)</span>
-        <input v-model.number="tolerance" type="number" min="0" step="any" />
-      </label>
+      <TextField
+        v-model="ignored"
+        label="Ignored paths (one per line) — dynamic values such as timestamps and request IDs"
+        multiline
+        rows="4"
+        :placeholder="IGNORED_PLACEHOLDER"
+      />
+      <TextField
+        v-if="baseline.mode !== 'schema'"
+        v-model="tolerance"
+        class="tol"
+        label="Numeric tolerance (absolute)"
+        type="number"
+        min="0"
+        step="any"
+      />
       <div class="row">
-        <button class="primary" @click="saveRules">Save rules</button>
-        <button class="danger" @click="remove">Delete baseline</button>
+        <BaseButton variant="primary" @click="saveRules">Save rules</BaseButton>
+        <BaseButton variant="danger" @click="remove">Delete baseline</BaseButton>
       </div>
       <details>
         <summary class="small muted">
@@ -117,7 +126,7 @@ async function remove() {
 .baseline {
   max-width: 720px;
 }
-.tol input {
+.tol :deep(input) {
   width: 140px;
 }
 .chip {

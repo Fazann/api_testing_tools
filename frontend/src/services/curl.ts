@@ -2,15 +2,8 @@
 // options browsers and API docs emit ("Copy as cURL"); output mirrors how
 // internal/runner/runner.go builds the HTTP request, so pasting it into a
 // terminal sends what the app would send.
-import {
-  METHODS,
-  type Auth,
-  type Environment,
-  type KeyValue,
-  type Method,
-  type Request,
-  type Variable,
-} from '../types';
+import { METHODS, type Auth, type Environment, type KeyValue, type Method, type Request, type Variable } from '@/types';
+
 import { describeVariable, splitVariables } from './variables';
 
 /** The fields of a request that a cURL command describes. */

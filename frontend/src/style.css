@@ -15,6 +15,10 @@
   --chg-bg: #fff8c5;
   --focus: #2563eb66;
   --radius: 6px;
+  --backdrop: #0006;
+  --shadow-sm: 0 4px 16px #0002;
+  --shadow-md: 0 8px 24px #0003;
+  --shadow-lg: 0 12px 40px #0004;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   color-scheme: light;
   /* JSON colors (VS Code Light+ / Dark+). */
@@ -361,4 +365,44 @@ pre.json-view {
 }
 .callout.info {
   border-left-color: var(--accent);
+}
+
+/* Shared layout pieces used by base components. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.tile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tile > b {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table-wrap {
+  max-height: 260px;
+  overflow: auto;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

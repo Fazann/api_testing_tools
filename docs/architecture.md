@@ -47,7 +47,53 @@ See `internal/storage/migrations/0001_init.sql`. It follows the spec, with these
 
 ## Frontend
 
-- `src/services/api.ts` — typed wrappers over the Wails bindings.
-- `src/stores` — `workspace` (collections, open draft, latest results), `environments`, `runner` (send / collection runs / confirmation), `ui` (view, dialogs, toasts).
-- `src/views` — Requests, Run, History, Environments, Settings.
-- Code style: Prettier with semicolons, single quotes, 120-column width and sorted imports (`npm run format`, `npm run lint`).
+```text
+frontend/src/
+  App.vue, main.ts, style.css   shell, global tokens and shared classes
+  views/                        one per top-bar tab: Request, Run, History, Environments, Settings
+  components/
+    base/                       reusable building blocks, no stores or API calls (see below)
+    layout/                     TopBar, AppDialog, AppToasts
+    collection/                 sidebar tree, collection settings, endpoints, import/export dialogs
+    request/                    request editor and its tabs: auth, tests, scripts, key/value rows
+    response/                   response viewer, test results, baseline diff and approval
+    run/                        run summary
+    performance/                response-time chart, Performance tab, collection overview
+    security/                   race test, permission matrix
+    variables/                  variable input, popover, table, secret input
+  composables/                  useAsyncAction (busy flag + error toast around backend calls)
+  services/                     domain logic without Vue: api (Wails bindings), model, curl, variables…
+  stores/                       Pinia: workspace, environments, runner, ui
+  utils/                        generic helpers: format (bytes, durations, times, changes), object, http
+  types/                        types shared with the Go backend
+```
+
+**Base components** (`components/base/`). Use these instead of hand-written markup, so look, accessibility and
+behaviour stay the same everywhere:
+
+| Component | Use for |
+| --- | --- |
+| `BaseButton` | Every button. `variant` = `default` / `primary` / `danger` / `ghost`, `small`, `type` (default `button`) |
+| `BaseInput` | Bare input or textarea (`multiline`) without a label, for toolbars, table cells and inline editors. All attributes go to the control; exposes `focus()` / `select()` |
+| `TextField` | Labelled input or textarea (`multiline`). `v-model`; `type="number"` emits numbers. `class` styles the wrapper, `input-class` the input |
+| `SelectField` | `<select>` from `options` (`{ value, label, disabled? }`). Without `label` it renders a bare select for toolbars |
+| `CheckboxField`, `RadioGroup` | Checkbox with a label (boolean, or an array with `value`); without a label it renders the bare checkbox for table cells, radio buttons from `options` |
+| `FormField` | Label + hint around a custom control |
+| `DataTable` | Every table. `columns` (`{ key, label, class, headClass }`), `rows`, `row-key`; `#cell-<key>` slots, `clickable` + `@row-click`, `empty`, `#after-row` for detail rows |
+| `TabBar` | Tabs from `{ id, label, count?, alert?, hidden?, disabled? }` with `v-model` |
+| `SelectableList` | A list with one selected item (environments, runs) |
+| `StatTile`, `StatusBadge`, `MethodBadge`, `FilterChip`, `CalloutBox`, `EmptyState` | Headline numbers, run status, HTTP method, filter toggles, notes, empty panels |
+| `ModalFrame`, `MenuButton`, `CodeEditor` | Dialog frame (`stacked` puts it above other modals), ⋯ menu, script editor |
+
+**Conventions**
+
+- `<script setup lang="ts">`, then `<template>`, then `<style scoped>`. Styles that reach into a child component use
+  `:deep()`.
+- Imports: `@/…` for anything outside the component's own folder, `./…` for siblings. Prettier sorts them in three
+  groups: packages, `@/` and relative (`npm run format`).
+- Backend calls go through `useAsyncAction()`: `const { busy, run } = useAsyncAction()` and
+  `await run(() => api.save(x))` shows errors as a toast and resolves to `undefined` on failure.
+- Display formatting lives in `utils/format.ts` and is not repeated in components.
+- Code style: Prettier with semicolons, single quotes, a 120-column width and sorted imports. `npm run lint` also fails
+  on any line longer than 120 characters, including template text Prettier cannot wrap.
+- Tests sit next to the code (`*.test.ts`); base components are covered in `components/base/BaseComponents.test.ts`.

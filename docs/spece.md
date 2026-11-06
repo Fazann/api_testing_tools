@@ -345,16 +345,99 @@ Only test systems and accounts for which the user has authorization.
 
 Keep request execution and assertion logic independent of Wails so the same engine can later power a CLI.
 
-### Frontend code style
+### Code standards
 
-All frontend code (`.ts`, `.vue`, `.css`) follows these rules, enforced by Prettier (`frontend/.prettierrc.json`) and checked in CI with `npm run lint`:
+Prefer reusing existing code over writing new code. Before adding a component, helper or package, check whether
+one already does the job; when the same markup or logic appears a second time, move it into a shared place instead of
+copying it. Use standard, framework-recommended patterns rather than custom ones. The full frontend conventions,
+including the table of base components, are in [architecture.md](architecture.md#frontend).
 
-- **Import order:** imports are sorted automatically — Node built-ins, then third-party packages, then a blank line, then local (`./`, `../`) imports.
-- **Semicolons:** every statement ends with a semicolon.
-- **Maximum line length: 120 characters.** Prettier wraps code at 120 columns; `scripts/check-line-length.mjs` fails the lint step for anything it cannot wrap, such as long strings or template text.
-- Single quotes and trailing commas.
+#### Frontend: reusable building blocks
+
+- **Base components** (`components/base/`) are the only place that writes raw form, table and button markup. Features
+  use `BaseButton`, `BaseInput`, `TextField`, `SelectField`, `CheckboxField`, `RadioGroup`, `FormField`, `DataTable`, `TabBar`,
+  `SelectableList`, `StatTile`, `StatusBadge`, `MethodBadge`, `FilterChip`, `CalloutBox`, `EmptyState`, `ModalFrame`,
+  `MenuButton` and `CodeEditor`, never a hand-written `<button>`, `<table>`, `<input>`, `<textarea>` or radio group. The one exception is
+  `VariableInput`, which is itself a control (an input with `{{variable}}` highlighting) built on the stores. Base components take
+  props and emit events only; they do not use stores or call the backend.
+- **Feature components** live in a folder per area (`layout`, `collection`, `request`, `response`, `run`,
+  `performance`, `security`, `variables`); **views** compose them, one per top-bar tab.
+- **Backend calls** go through the `useAsyncAction()` composable, which provides the busy flag and shows errors as a
+  toast. Do not repeat try / catch / finally around API calls; App startup is the one exception, because it must tell
+  a missing backend apart from other errors.
+- **Shared logic:** display formatting (bytes, durations, times, changes) belongs in `utils/format.ts`, generic object
+  and HTTP helpers in `utils/object.ts` and `utils/http.ts`, and domain logic without Vue in `services/`. Components
+  call these helpers instead of formatting or parsing inline.
+- **State** shared between screens lives in Pinia stores (`workspace`, `environments`, `runner`, `ui`); local UI state
+  stays in the component.
+- No new runtime dependencies without discussing them first.
+
+#### Frontend: Vue standards
+
+Follow the [Vue style guide](https://vuejs.org/style-guide/) (essential and strongly recommended rules) and the
+Composition API:
+
+- Single-file components in the order `<script setup lang="ts">`, `<template>`, `<style scoped>`.
+- Component files and names in PascalCase with more than one word (`RequestEditor.vue`, `BaseButton.vue`); base
+  components start with `Base` or name a generic control (`TextField`, `DataTable`).
+- Typed `defineProps<…>()` and `defineEmits<…>()`; props flow down, events flow up. Never mutate a prop; use
+  `defineModel()` / `v-model` for two-way bindings.
+- `computed` for derived values, `watch` only for side effects; no direct DOM access except through template refs.
+- Every `v-for` has a stable `:key`; do not put `v-if` and `v-for` on the same element.
+- Composables are named `useX` and return refs; Pinia stores use `defineStore` and are named `useX` too.
+- Styles are scoped; reach into a child component only with `:deep()`. Colours, shadows and radii come from the CSS
+  variables in `style.css`.
+
+#### Wails standards
+
+The app follows the standard [Wails v2](https://wails.io/docs/introduction) project layout (`wails.json`,
+`main.go`, `app.go`, `frontend/`, `build/`):
+
+- **Thin bindings.** `app.go` holds the one bound struct (`App`). Each exported method only forwards to
+  `internal/service`, passing the context saved in `OnStartup`; no business logic lives in the binding layer, so the
+  CLI can reuse the same service.
+- **Bindable types.** Bound methods take and return plain structs from `internal/domain` with JSON tags, and return
+  `error` as the last result when they can fail (simple getters such as `AppInfo` or `Cancel` do not). Wails turns a returned error into a rejected promise on the frontend.
+- **One frontend entry point.** Components never call `window.go` or `window.runtime` directly. Every backend call
+  is a typed function in `services/api.ts`, which throws `BackendUnavailableError` when the page runs without the
+  desktop backend (for example in plain `vite` dev or tests).
+- **Events for progress.** Long runs report progress with `runtime.EventsEmit` under a namespaced name
+  (`run:progress`, `matrix:progress`) and carry an operation ID; the frontend subscribes through helpers in
+  `services/api.ts` and unsubscribes when the component unmounts. Long operations can be cancelled by operation ID.
+- **Native features from Go.** File open/save dialogs and other OS features use the Wails `runtime` package in
+  `app.go`, not browser APIs, so they look native on Windows and Linux.
+- **Builds** use `wails build` for Windows and Linux; `wails dev` for development with hot reload.
+
+#### Frontend: style
+
+All frontend code (`.ts`, `.vue`, `.css`) is formatted by Prettier (`frontend/.prettierrc.json`) and checked with
+`npm run lint`:
+
+- **Imports:** `@/…` for anything outside the component's own folder, `./…` for files in the same folder. They are
+  sorted automatically into three groups separated by blank lines: packages, `@/` imports, relative imports.
+- **Semicolons**, single quotes and trailing commas.
+- **Maximum line length: 120 characters.** Prettier wraps code at 120 columns; `scripts/check-line-length.mjs` fails
+  the lint step for anything it cannot wrap, such as long strings or template text.
 
 Run `npm run format` to apply the style and `npm run lint` to check it.
+
+#### Go
+
+- Format with `gofmt` and keep `go vet` clean.
+- One package per responsibility under `internal/` (runner, assertions, regression, redact, storage, …). The desktop
+  app (`internal/service`) and the CLI (`internal/cli`) call the same packages; neither duplicates engine logic.
+- Shared concerns live in one place and are reused everywhere: secret redaction in `internal/redact`, the HTTP
+  client and its safety rules in `internal/httpclient`, domain types in `internal/domain`, atomic file writes in
+  `internal/fsutil`.
+- Use the standard library first; return wrapped errors (`fmt.Errorf("…: %w", err)`) instead of panicking.
+
+#### Tests and checks
+
+- Tests sit next to the code they cover (`*_test.go`, `*.test.ts`); base components are covered in
+  `components/base/BaseComponents.test.ts`.
+- Every bug fix comes with a test that fails without the fix.
+- `make check` runs frontend lint, typecheck and tests, `gofmt`, `go vet` and the Go tests; `make hooks` installs it
+  as a pre-commit hook.
 
 ---
 
@@ -392,16 +475,29 @@ api-regression-guard/
 │   ├── reports/
 │   │   ├── json.go
 │   │   └── html.go
-│   └── service/
-│       └── app_service.go
+│   ├── service/
+│   │   └── app_service.go
+│   └── …                 # also appdata, cli, collectionio, fsutil, perf, redact, scripting, security
+├── cmd/
+│   └── test-tool-kit-cli/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   ├── views/
-│   │   ├── stores/
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── router/
+│   │   │   ├── base/         # reusable building blocks, no stores or API calls
+│   │   │   ├── layout/
+│   │   │   ├── collection/
+│   │   │   ├── request/
+│   │   │   ├── response/
+│   │   │   ├── run/
+│   │   │   ├── performance/
+│   │   │   ├── security/
+│   │   │   └── variables/
+│   │   ├── composables/      # useAsyncAction
+│   │   ├── views/            # one per top-bar tab
+│   │   ├── stores/           # Pinia
+│   │   ├── services/         # domain logic without Vue, Wails bindings
+│   │   ├── utils/            # format, object, http helpers
+│   │   └── types/
 │   ├── package.json
 │   └── vite.config.ts
 ├── tests/

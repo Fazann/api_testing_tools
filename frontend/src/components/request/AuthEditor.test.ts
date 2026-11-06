@@ -2,7 +2,8 @@ import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { describe, expect, it } from 'vitest';
 
-import type { Auth, Collection } from '../types';
+import type { Auth, Collection } from '@/types';
+
 import AuthEditor from './AuthEditor.vue';
 
 const collection: Collection = {

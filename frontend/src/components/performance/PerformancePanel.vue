@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { api } from '../services/api';
-import { formatDuration, formatTime } from '../services/model';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { PerformanceCheck, ResponseTimeTrend } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import DataTable from '@/components/base/DataTable.vue';
+import RadioGroup from '@/components/base/RadioGroup.vue';
+import StatTile from '@/components/base/StatTile.vue';
+import TextField from '@/components/base/TextField.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { PerformanceCheck, ResponseTimeTrend } from '@/types';
+import { formatDuration, formatTime } from '@/utils/format';
+
 import ResponseTimeChart from './ResponseTimeChart.vue';
+import SlowDot from './SlowDot.vue';
 
 const ws = useWorkspace();
 const envs = useEnvironments();
@@ -20,14 +28,23 @@ const saved = computed(
 const trend = ref<ResponseTimeTrend | null>(null);
 const form = ref<PerformanceCheck | null>(null);
 const savedForm = ref('');
-const loading = ref(false);
-const saving = ref(false);
+const { busy: loading, run: runLoad } = useAsyncAction();
+const { busy: saving, run: runSave } = useAsyncAction();
 const showTable = ref(false);
 
 const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== savedForm.value);
 const envName = computed(() => envs.selected?.name ?? 'No environment');
 const slowCount = computed(() => trend.value?.points.filter((p) => p.slower).length ?? 0);
 const latestFirst = computed(() => [...(trend.value?.points ?? [])].reverse().slice(0, 50));
+
+const TABLE_COLUMNS = [
+  { key: 'at', label: 'When' },
+  { key: 'durationMs', label: 'Time', class: 'num' },
+  { key: 'statusCode', label: 'HTTP' },
+  { key: 'status', label: 'Result' },
+  { key: 'slower' },
+];
+const statText = (ms: number) => (trend.value?.stats.count ? formatDuration(ms) : '—');
 
 const MODES = [
   { value: 'warn', label: 'Warn', hint: 'Show "slower than usual" but keep the request passing' },
@@ -42,8 +59,7 @@ async function load() {
     form.value = null;
     return;
   }
-  loading.value = true;
-  try {
+  await runLoad(async () => {
     const t = await api.getResponseTimeTrend(id, envs.selectedId);
     if (req.value.id !== id) return;
     trend.value = t;
@@ -52,11 +68,7 @@ async function load() {
       form.value = { ...t.check };
       savedForm.value = JSON.stringify(form.value);
     }
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    loading.value = false;
-  }
+  });
 }
 
 // Reload for another request or environment, and after each send.
@@ -70,19 +82,16 @@ watch(
 );
 
 async function save() {
-  if (!form.value) return;
-  saving.value = true;
-  try {
-    const c = await api.savePerformanceCheck({ ...form.value, requestId: req.value.id });
+  const current = form.value;
+  if (!current) return;
+  const ok = await runSave(async () => {
+    const c = await api.savePerformanceCheck({ ...current, requestId: req.value.id });
     form.value = { ...c };
     savedForm.value = JSON.stringify(form.value);
     ui.toast('Performance check saved', 'success');
-    await load();
-  } catch (e) {
-    ui.error(e);
-  } finally {
-    saving.value = false;
-  }
+    return true;
+  });
+  if (ok) await load();
 }
 
 function reset() {
@@ -104,37 +113,26 @@ function reset() {
       </p>
 
       <div v-if="trend" class="tiles">
-        <div class="tile">
-          <span class="label">Median</span
-          ><strong>{{ trend.stats.count ? formatDuration(trend.stats.medianMs) : '—' }}</strong>
-        </div>
-        <div class="tile">
-          <span class="label">p95</span
-          ><strong>{{ trend.stats.count ? formatDuration(trend.stats.p95Ms) : '—' }}</strong>
-        </div>
-        <div class="tile">
-          <span class="label">Fastest / slowest</span>
-          <strong>{{
-            trend.stats.count ? `${formatDuration(trend.stats.minMs)} / ${formatDuration(trend.stats.maxMs)}` : '—'
-          }}</strong>
-        </div>
-        <div class="tile">
-          <span class="label">Next response is slower from</span>
-          <strong v-if="trend.check.mode === 'off'" class="muted">check off</strong>
-          <strong v-else-if="trend.next.thresholdMs">{{ formatDuration(trend.next.thresholdMs) }}</strong>
-          <strong v-else class="muted">{{ trend.next.samples }}/{{ trend.next.needed }} responses</strong>
-        </div>
+        <StatTile label="Median" :value="statText(trend.stats.medianMs)" />
+        <StatTile label="p95" :value="statText(trend.stats.p95Ms)" />
+        <StatTile
+          label="Fastest / slowest"
+          :value="trend.stats.count ? `${statText(trend.stats.minMs)} / ${statText(trend.stats.maxMs)}` : '—'"
+        />
+        <StatTile label="Next response is slower from">
+          <span v-if="trend.check.mode === 'off'" class="muted">check off</span>
+          <template v-else-if="trend.next.thresholdMs">{{ formatDuration(trend.next.thresholdMs) }}</template>
+          <span v-else class="muted">{{ trend.next.samples }}/{{ trend.next.needed }} responses</span>
+        </StatTile>
       </div>
 
       <div v-if="trend && trend.points.length" class="chart-card">
         <div class="row chart-head">
           <strong class="grow">Last {{ trend.points.length }} responses</strong>
-          <span v-if="slowCount" class="small"
-            ><span class="key slow" aria-hidden="true" />{{ slowCount }} slower than usual</span
-          >
-          <button class="small ghost" :aria-pressed="showTable" @click="showTable = !showTable">
+          <SlowDot v-if="slowCount" class="small">{{ slowCount }} slower than usual</SlowDot>
+          <BaseButton variant="ghost" small :aria-pressed="showTable" @click="showTable = !showTable">
             {{ showTable ? 'Show chart' : 'Show table' }}
-          </button>
+          </BaseButton>
         </div>
         <ResponseTimeChart
           v-if="!showTable"
@@ -143,30 +141,14 @@ function reset() {
           :threshold-ms="trend.check.mode === 'off' ? 0 : trend.next.thresholdMs"
         />
         <div v-else class="table-wrap">
-          <table class="grid">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th class="num">Time</th>
-                <th>HTTP</th>
-                <th>Result</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in latestFirst" :key="p.resultId">
-                <td>{{ formatTime(p.at) }}</td>
-                <td class="num">{{ formatDuration(p.durationMs) }}</td>
-                <td>{{ p.statusCode || '—' }}</td>
-                <td>{{ p.status }}</td>
-                <td>
-                  <span v-if="p.slower" class="small"
-                    ><span class="key slow" aria-hidden="true" />slower than usual</span
-                  >
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <DataTable :columns="TABLE_COLUMNS" :rows="latestFirst" :row-key="(p) => p.resultId">
+            <template #cell-at="{ row }">{{ formatTime(row.at) }}</template>
+            <template #cell-durationMs="{ row }">{{ formatDuration(row.durationMs) }}</template>
+            <template #cell-statusCode="{ row }">{{ row.statusCode || '—' }}</template>
+            <template #cell-slower="{ row }">
+              <SlowDot v-if="row.slower" class="small">slower than usual</SlowDot>
+            </template>
+          </DataTable>
         </div>
       </div>
       <p v-else-if="trend && !loading" class="muted small">
@@ -175,34 +157,24 @@ function reset() {
 
       <fieldset v-if="form" class="settings">
         <legend>When a response is slower than usual</legend>
-        <div class="row modes" role="radiogroup" aria-label="Performance check mode">
-          <label v-for="m in MODES" :key="m.value" class="mode" :title="m.hint">
-            <input v-model="form.mode" type="radio" name="perf-mode" :value="m.value" />
-            {{ m.label }}
-          </label>
-        </div>
+        <RadioGroup v-model="form.mode" :options="MODES" name="perf-mode" label="Performance check mode" />
         <p class="muted small">{{ MODES.find((m) => m.value === form!.mode)?.hint }}</p>
         <div v-if="form.mode !== 'off'" class="row fields">
-          <label class="field">
-            <span>At least × median</span>
-            <input v-model.number="form.factor" type="number" min="1.1" max="10" step="0.1" />
-          </label>
-          <label class="field">
-            <span>And at least (ms) more</span>
-            <input v-model.number="form.minDeltaMs" type="number" min="0" max="600000" step="10" />
-          </label>
-          <label class="field">
-            <span>Median of last</span>
-            <input v-model.number="form.window" type="number" min="5" max="200" />
-          </label>
-          <label class="field">
-            <span>Start after</span>
-            <input v-model.number="form.minSamples" type="number" min="3" :max="form.window" />
-          </label>
+          <TextField v-model="form.factor" label="At least × median" type="number" min="1.1" max="10" step="0.1" />
+          <TextField
+            v-model="form.minDeltaMs"
+            label="And at least (ms) more"
+            type="number"
+            min="0"
+            max="600000"
+            step="10"
+          />
+          <TextField v-model="form.window" label="Median of last" type="number" min="5" max="200" />
+          <TextField v-model="form.minSamples" label="Start after" type="number" min="3" :max="form.window" />
         </div>
         <div class="row">
-          <button class="primary small" :disabled="!dirty || saving" @click="save">Save check</button>
-          <button class="small ghost" @click="reset">Defaults</button>
+          <BaseButton variant="primary" small :disabled="!dirty || saving" @click="save">Save check</BaseButton>
+          <BaseButton variant="ghost" small @click="reset">Defaults</BaseButton>
         </div>
       </fieldset>
     </template>
@@ -217,27 +189,6 @@ function reset() {
   margin: 0;
   max-width: 760px;
 }
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-.tile .label {
-  color: var(--fg-muted);
-  font-size: 12px;
-}
-.tile strong {
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-}
 .chart-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -246,25 +197,6 @@ function reset() {
 .chart-head {
   gap: 10px;
   margin-bottom: 4px;
-}
-.key {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 5px;
-  vertical-align: middle;
-}
-.key.slow {
-  background: var(--warn);
-}
-.table-wrap {
-  max-height: 260px;
-  overflow: auto;
-}
-.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 .settings {
   border: 1px solid var(--line);
@@ -280,14 +212,6 @@ function reset() {
 }
 .settings p {
   margin: 0;
-}
-.modes {
-  gap: 16px;
-}
-.mode {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 .fields {
   flex-wrap: wrap;

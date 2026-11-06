@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { apiVersion, compareVersions, formatExpected, joinKey, jsonPaths, parseExpected, prettyBody } from './model';
+import { apiVersion, compareVersions, formatExpected, joinKey, jsonPaths, parseExpected } from './model';
 
 describe('expected values', () => {
   it('parses JSON and falls back to strings', () => {
@@ -31,13 +31,6 @@ describe('json paths', () => {
       'data.empty',
       'ok',
     ]);
-  });
-});
-
-describe('prettyBody', () => {
-  it('formats JSON and leaves other text alone', () => {
-    expect(prettyBody('{"a":1}')).toBe('{\n  "a": 1\n}');
-    expect(prettyBody('<html>')).toBe('<html>');
   });
 });
 

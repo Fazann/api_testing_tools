@@ -197,5 +197,5 @@ go test ./tests/integration -run TestRaceTest -v          # double redeem, locke
 ```
 
 The code is in `internal/runner/burst.go` (start gate), `internal/security/race.go` (evaluation),
-`internal/service/security.go` (orchestration) and `frontend/src/components/RaceTestPanel.vue`. The integration
+`internal/service/security.go` (orchestration) and `frontend/src/components/security/RaceTestPanel.vue`. The integration
 tests use the mock API in `tests/integration/security_test.go`.

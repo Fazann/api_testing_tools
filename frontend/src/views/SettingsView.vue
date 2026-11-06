@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-import { api } from '../services/api';
-import { clone, formatBytes } from '../services/model';
-import { useEnvironments } from '../stores/environments';
-import { useUi } from '../stores/ui';
-import { useWorkspace } from '../stores/workspace';
-import type { AppInfo, DataInfo, Settings } from '../types';
+import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
+import CheckboxField from '@/components/base/CheckboxField.vue';
+import FormField from '@/components/base/FormField.vue';
+import SelectField from '@/components/base/SelectField.vue';
+import TextField from '@/components/base/TextField.vue';
+import { useAsyncAction } from '@/composables/useAsyncAction';
+import { api } from '@/services/api';
+import { useEnvironments } from '@/stores/environments';
+import { useUi } from '@/stores/ui';
+import { useWorkspace } from '@/stores/workspace';
+import type { AppInfo, DataInfo, Settings } from '@/types';
+import { formatBytes } from '@/utils/format';
+import { clone } from '@/utils/object';
 
 const ui = useUi();
+const { run } = useAsyncAction();
 const ws = useWorkspace();
 const envs = useEnvironments();
 
@@ -29,27 +38,24 @@ const historyBodyKb = computed({
 });
 
 async function load() {
-  try {
+  await run(async () => {
     const [s, d, a] = await Promise.all([api.getSettings(), api.dataInfo(), api.appInfo()]);
     form.value = s;
     snapshot.value = JSON.stringify(s);
     info.value = d;
     app.value = a;
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 onMounted(load);
 
 async function save() {
-  if (!form.value) return;
-  try {
-    await api.saveSettings(clone(form.value));
-    snapshot.value = JSON.stringify(form.value);
+  const settings = form.value;
+  if (!settings) return;
+  await run(async () => {
+    await api.saveSettings(clone(settings));
+    snapshot.value = JSON.stringify(settings);
     ui.toast('Settings saved', 'success');
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 
 async function chooseCA() {
@@ -59,13 +65,11 @@ async function chooseCA() {
 }
 
 async function compact() {
-  try {
+  await run(async () => {
     await api.compactDatabase();
     info.value = await api.dataInfo();
     ui.toast('Database compacted', 'success');
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
 
 async function deleteAll() {
@@ -78,15 +82,19 @@ async function deleteAll() {
     danger: true,
   });
   if (!ok) return;
-  try {
+  await run(async () => {
     await api.deleteAllData();
     ws.closeDraft();
     await Promise.all([ws.load(), envs.load(), load()]);
     ui.toast('All local data deleted', 'success');
-  } catch (e) {
-    ui.error(e);
-  }
+  });
 }
+
+const PROXY_MODES: { value: Settings['proxyMode']; label: string }[] = [
+  { value: 'system', label: 'Use system proxy variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)' },
+  { value: 'none', label: 'No proxy — connect directly' },
+  { value: 'custom', label: 'Custom proxy URL' },
+];
 </script>
 
 <template>
@@ -94,63 +102,65 @@ async function deleteAll() {
     <template v-if="form">
       <div class="row head">
         <h2 class="grow">Settings</h2>
-        <button class="primary" :disabled="!dirty" @click="save">Save settings</button>
+        <BaseButton variant="primary" :disabled="!dirty" @click="save">Save settings</BaseButton>
       </div>
 
       <h3 class="section-title">Requests</h3>
-      <label class="field">
-        <span>Response size limit (MB) — larger bodies are truncated</span>
-        <input v-model.number="maxResponseMb" type="number" min="0.001" max="512" step="1" />
-      </label>
-      <label class="field">
-        <span>Parallel requests in collection runs (1 = strictly in order)</span>
-        <input v-model.number="form.concurrency" type="number" min="1" max="8" />
-      </label>
+      <TextField
+        v-model="maxResponseMb"
+        label="Response size limit (MB) — larger bodies are truncated"
+        type="number"
+        min="0.001"
+        max="512"
+        step="1"
+      />
+      <TextField
+        v-model="form.concurrency"
+        label="Parallel requests in collection runs (1 = strictly in order)"
+        type="number"
+        min="1"
+        max="8"
+      />
 
       <h3 class="section-title">Network &amp; TLS</h3>
-      <label class="field">
-        <span>Proxy</span>
-        <select v-model="form.proxyMode">
-          <option value="system">Use system proxy variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)</option>
-          <option value="none">No proxy — connect directly</option>
-          <option value="custom">Custom proxy URL</option>
-        </select>
-      </label>
-      <label v-if="form.proxyMode === 'custom'" class="field">
-        <span>Proxy URL</span>
-        <input v-model="form.proxyUrl" class="mono" placeholder="http://proxy.local:3128" />
-      </label>
-      <label class="field">
-        <span>Extra trusted CA certificates (PEM file, optional)</span>
+      <SelectField v-model="form.proxyMode" label="Proxy" :options="PROXY_MODES" />
+      <TextField
+        v-if="form.proxyMode === 'custom'"
+        v-model="form.proxyUrl"
+        label="Proxy URL"
+        input-class="mono"
+        placeholder="http://proxy.local:3128"
+      />
+      <FormField label="Extra trusted CA certificates (PEM file, optional)">
         <span class="row">
-          <input v-model="form.caCertFile" class="mono grow" placeholder="/path/to/ca.pem" />
-          <button @click="chooseCA">Browse…</button>
+          <BaseInput v-model="form.caCertFile" class="mono grow" placeholder="/path/to/ca.pem" />
+          <BaseButton @click="chooseCA">Browse…</BaseButton>
         </span>
-      </label>
-      <label class="row check">
-        <input v-model="form.insecureSkipVerify" type="checkbox" />
-        <span>
-          <strong class="fail">Disable TLS certificate verification</strong> — only for local test servers with
-          self-signed certificates. Reports record when this is off.
-        </span>
-      </label>
-      <label class="row check">
-        <input v-model="form.allowSensitiveDestinations" type="checkbox" />
-        <span>
-          Allow requests to link-local and cloud metadata addresses (169.254.0.0/16, metadata.google.internal). Blocked
-          by default to protect against untrusted imported collections.
-        </span>
-      </label>
+      </FormField>
+      <CheckboxField v-model="form.insecureSkipVerify" class="check">
+        <strong class="fail">Disable TLS certificate verification</strong> — only for local test servers with
+        self-signed certificates. Reports record when this is off.
+      </CheckboxField>
+      <CheckboxField v-model="form.allowSensitiveDestinations" class="check">
+        Allow requests to link-local and cloud metadata addresses (169.254.0.0/16, metadata.google.internal). Blocked by
+        default to protect against untrusted imported collections.
+      </CheckboxField>
 
       <h3 class="section-title">History</h3>
-      <label class="field">
-        <span>Runs to keep (older runs are deleted automatically)</span>
-        <input v-model.number="form.historyRetentionRuns" type="number" min="1" max="100000" />
-      </label>
-      <label class="field">
-        <span>Response body stored per result (KB)</span>
-        <input v-model.number="historyBodyKb" type="number" min="0" max="10240" />
-      </label>
+      <TextField
+        v-model="form.historyRetentionRuns"
+        label="Runs to keep (older runs are deleted automatically)"
+        type="number"
+        min="1"
+        max="100000"
+      />
+      <TextField
+        v-model="historyBodyKb"
+        label="Response body stored per result (KB)"
+        type="number"
+        min="0"
+        max="10240"
+      />
 
       <h3 class="section-title">Local data</h3>
       <div v-if="info" class="stack small">
@@ -165,8 +175,8 @@ async function deleteAll() {
           Back up your data by copying this file while the app is closed, or by exporting collections.
         </div>
         <div class="row">
-          <button @click="compact">Compact database</button>
-          <button class="danger" @click="deleteAll">Delete all local data…</button>
+          <BaseButton @click="compact">Compact database</BaseButton>
+          <BaseButton variant="danger" @click="deleteAll">Delete all local data…</BaseButton>
         </div>
       </div>
       <p v-if="app" class="muted small about">
@@ -189,11 +199,8 @@ async function deleteAll() {
   margin: 0;
   font-size: 17px;
 }
-.field input[type='number'] {
+:deep(.field input[type='number']) {
   width: 160px;
-}
-.check {
-  align-items: flex-start;
 }
 .about {
   margin-top: 16px;

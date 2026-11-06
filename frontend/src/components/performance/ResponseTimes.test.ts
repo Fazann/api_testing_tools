@@ -2,8 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { newRequest } from '../services/model';
-import { useWorkspace } from '../stores/workspace';
+import ResponseViewer from '@/components/response/ResponseViewer.vue';
+import { newRequest } from '@/services/model';
+import { useWorkspace } from '@/stores/workspace';
 import type {
   CollectionTree,
   PerformanceCheck,
@@ -12,11 +13,11 @@ import type {
   ResponseTimeRow,
   ResponseTimeTrend,
   RunResult,
-} from '../types';
+} from '@/types';
+
 import CollectionResponseTimes from './CollectionResponseTimes.vue';
 import PerformancePanel from './PerformancePanel.vue';
 import ResponseTimeChart from './ResponseTimeChart.vue';
-import ResponseViewer from './ResponseViewer.vue';
 
 function point(i: number, durationMs: number, slower = false): ResponseTimePoint {
   return {
@@ -126,7 +127,7 @@ describe('CollectionResponseTimes', () => {
     expect(names()).toEqual(['Search', 'Orders', 'New']);
     const change = w.findAll('tbody tr')[0].findAll('td')[5];
     expect(change.text()).toBe('+64%');
-    expect(change.classes()).toContain('worse');
+    expect(change.find('span').classes()).toContain('worse');
 
     await w.findAll('tbody tr')[0].trigger('click');
     expect(w.emitted('open')?.[0]?.[0]).toMatchObject({ id: 'r2' });
