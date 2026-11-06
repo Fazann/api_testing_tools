@@ -63,10 +63,10 @@ make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12
 make build-windows     # Windows amd64 + arm64 .exe (cross-compiles from Linux, no C toolchain needed)
 make build-cli         # headless CLI for CI → build/bin/api-test-kits-cli (pure Go)
 make release-cli       # CLI for Linux, Windows and macOS (amd64 + arm64) → release/
-make release           # tests, then packaged builds of every platform this host can build → release/
+make release           # bump the patch version (0.1.0 → 0.1.1 → …), tag, test, build every package → release/
 ```
 
-`make release` calls [`scripts/build.sh`](scripts/build.sh), which can also be used directly:
+`make release` bumps the version on every run, then calls [`scripts/build.sh`](scripts/build.sh), which can also be used directly:
 
 ```sh
 scripts/build.sh --help

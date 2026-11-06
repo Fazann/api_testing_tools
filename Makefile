@@ -123,8 +123,9 @@ build-cli: ## Build the headless CLI for this machine (build/bin/api-test-kits-c
 release-cli: ## Cross-compile and package the CLI for Linux, Windows and macOS (release/)
 	scripts/build-cli.sh -v $(VERSION)
 
-release: ## Test, then build and package every platform this host can build (release/)
-	scripts/build.sh -v $(VERSION) all
+release: ## New release: bump the patch version (every run), commit, tag, test, build all packages + latest.json
+	scripts/bump-version.sh patch $(if $(NOTES),-m "$(NOTES)",)
+	$(MAKE) release-all
 
 release-windows-installer: ## Windows builds plus NSIS installers (needs makensis)
 	scripts/build.sh -v $(VERSION) --nsis windows
