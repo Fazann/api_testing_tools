@@ -15,6 +15,7 @@ import type { Collection } from '@/types';
 import CollectionSettingsDialog from './CollectionSettingsDialog.vue';
 import CurlImportDialog from './CurlImportDialog.vue';
 import ExportDialog from './ExportDialog.vue';
+import SignoffDialog from './SignoffDialog.vue';
 import TreeFolder from './TreeFolder.vue';
 
 const ws = useWorkspace();
@@ -23,6 +24,7 @@ const { run } = useAsyncAction();
 const runner = useRunner();
 const envs = useEnvironments();
 const exporting = ref<Collection | null>(null);
+const signoff = ref<Collection | null>(null);
 const curlTarget = ref<Collection | null>(null);
 const editing = ref<{
   collection: Collection;
@@ -63,6 +65,7 @@ function menu(c: Collection) {
     { label: 'Response times…', action: () => (editing.value = { collection: c, tab: 'times' }) },
     { label: 'Compare environments…', action: () => (editing.value = { collection: c, tab: 'compare' }) },
     { label: 'Rules…', action: () => (editing.value = { collection: c, tab: 'rules' }) },
+    { label: 'Sign-off report…', action: () => (signoff.value = c) },
     { label: 'Permission matrix…', action: () => (editing.value = { collection: c, tab: 'permissions' }) },
     { label: 'Settings & auth…', action: () => (editing.value = { collection: c, tab: 'settings' }) },
     { label: 'Rename', action: () => rename(c) },
@@ -140,6 +143,7 @@ async function remove(c: Collection) {
       </div>
     </div>
     <ExportDialog v-if="exporting" :collection="exporting" @close="exporting = null" />
+    <SignoffDialog v-if="signoff" :collection="signoff" @close="signoff = null" />
     <CurlImportDialog v-if="curlTarget" :collection-id="curlTarget.id" @close="curlTarget = null" />
     <CollectionSettingsDialog
       v-if="editing"

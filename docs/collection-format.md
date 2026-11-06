@@ -264,6 +264,7 @@ ignore it.
 | `mode` | `values` (default) or `schema`. In schema mode `snapshot` is the inferred structure (see [schema-regression.md](schema-regression.md#stored-format)). |
 | `snapshot` | The approved JSON. With `selectedPaths` it maps each path to its approved value. Bodies were redacted when they were approved. |
 | `selectedPaths`, `ignoredPaths`, `tolerance` | The comparison rules, as on the request's **Baseline** tab. |
+| `approvedBy` | Optional. The name entered when the baseline was approved, shown in [sign-off reports](signoff-report.md). |
 
 On import a baseline is attached to the environment with that name, either from the same file or one that already
 exists. Baselines whose environment exists in neither place are skipped and counted in the import message. The CLI

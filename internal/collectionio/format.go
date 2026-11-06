@@ -62,6 +62,8 @@ type Baseline struct {
 	SelectedPaths []string            `json:"selectedPaths"`
 	IgnoredPaths  []string            `json:"ignoredPaths"`
 	Tolerance     float64             `json:"tolerance"`
+	// ApprovedBy is who approved the baseline, as entered (optional).
+	ApprovedBy string `json:"approvedBy,omitempty"`
 }
 
 // SecretFinding describes a secret value that an export would contain.
@@ -396,7 +398,7 @@ func validateBaselines(list []Baseline, newID map[string]string) ([]ImportedBase
 			}
 		}
 		out = append(out, ImportedBaseline{Environment: b.Environment, Baseline: domain.Baseline{
-			RequestID: id, Mode: b.Mode, Snapshot: b.Snapshot, Tolerance: b.Tolerance,
+			RequestID: id, Mode: b.Mode, Snapshot: b.Snapshot, Tolerance: b.Tolerance, ApprovedBy: limitName(b.ApprovedBy),
 			SelectedPaths: nonNilStrings(b.SelectedPaths), IgnoredPaths: nonNilStrings(b.IgnoredPaths),
 		}})
 	}
@@ -406,6 +408,15 @@ func validateBaselines(list []Baseline, newID map[string]string) ([]ImportedBase
 func nonNilStrings(s []string) []string {
 	if s == nil {
 		return []string{}
+	}
+	return s
+}
+
+// limitName trims an imported approver name to the length the app accepts.
+func limitName(s string) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > domain.MaxNameLength {
+		s = string(r[:domain.MaxNameLength])
 	}
 	return s
 }

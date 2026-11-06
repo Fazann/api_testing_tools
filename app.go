@@ -178,6 +178,21 @@ func (a *App) RunPermissionMatrix(opID, collectionID, envID string, confirmed bo
 	})
 }
 
+// ---- release sign-off report ----
+
+func (a *App) BuildSignoffReport(in service.SignoffInput) (service.SignoffResult, error) {
+	return a.svc.BuildSignoffReport(a.ctx, in)
+}
+
+// SaveSignoffReport writes the previewed report HTML to a user-chosen file.
+func (a *App) SaveSignoffReport(fileName, html string) (string, error) {
+	if html == "" || len(html) > 20<<20 {
+		return "", fmt.Errorf("nothing to save; preview the report first")
+	}
+	filter := runtime.FileFilter{DisplayName: "HTML report (*.html)", Pattern: "*.html"}
+	return a.saveWithDialog(fileName, filter, []byte(html))
+}
+
 // ---- collection rules ----
 
 func (a *App) SaveCollectionRules(collectionID string, list []domain.Rule) ([]domain.Rule, error) {

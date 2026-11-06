@@ -33,10 +33,10 @@ func runScope(env *domain.Environment, c *domain.Collection) *runner.Scope {
 		PreRequestScript: c.PreRequestScript, PostResponseScript: c.PostResponseScript}
 }
 
-func (s *Service) newRun(c *domain.Collection, env *domain.Environment) domain.Run {
+func (s *Service) newRun(c *domain.Collection, env *domain.Environment, kind string) domain.Run {
 	// Race tests and matrices send requests concurrently, so their durations
-	// are left out of response-time trends.
-	run := domain.Run{ID: uuid.NewString(), StartedAt: time.Now().UTC(), Kind: domain.RunKindBurst}
+	// are left out of response-time trends (which only count RunKindNormal).
+	run := domain.Run{ID: uuid.NewString(), StartedAt: time.Now().UTC(), Kind: kind}
 	if c != nil {
 		run.CollectionID, run.CollectionName = c.ID, c.Name
 	}
@@ -131,7 +131,7 @@ func (s *Service) RunRaceTest(ctx context.Context, opID string, t domain.RaceTes
 
 	opCtx, done := s.beginOp(ctx, opID)
 	defer done()
-	run := s.newRun(c, env)
+	run := s.newRun(c, env, domain.RunKindRace)
 
 	var before, after *security.StateValue
 	readState := func(label string) *security.StateValue {
@@ -297,7 +297,7 @@ func (s *Service) RunPermissionMatrix(ctx context.Context, opID, collectionID, e
 
 	opCtx, done := s.beginOp(ctx, opID)
 	defer done()
-	run := s.newRun(c, env)
+	run := s.newRun(c, env, domain.RunKindMatrix)
 
 	report := security.MatrixReport{Roles: []security.MatrixRole{}, Requests: []security.MatrixRequest{}, Cells: []security.MatrixCell{}}
 	for _, req := range reqs {

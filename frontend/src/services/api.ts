@@ -30,6 +30,8 @@ import type {
   RunResult,
   SecretFinding,
   Settings,
+  SignoffInput,
+  SignoffResult,
   SocketEvent,
   SocketFrame,
   SocketMessage,
@@ -113,6 +115,10 @@ export const api = {
   runPermissionMatrix: (opId: string, collectionId: string, envId: string, confirmed: boolean) =>
     call<MatrixReport>('RunPermissionMatrix', opId, collectionId, envId, confirmed),
 
+  buildSignoffReport: (input: SignoffInput) => call<SignoffResult>('BuildSignoffReport', input),
+  /** Opens a save dialog; resolves to the chosen path, or '' when cancelled. */
+  saveSignoffReport: (fileName: string, html: string) => call<string>('SaveSignoffReport', fileName, html),
+
   saveCollectionRules: (collectionId: string, rules: Rule[]) =>
     call<Rule[]>('SaveCollectionRules', collectionId, rules),
   checkCollectionRules: (collectionId: string, rules: Rule[]) =>
@@ -137,6 +143,7 @@ export const api = {
     ignoredPaths: string[];
     tolerance: number;
     mode: BaselineMode;
+    approvedBy: string;
   }) => call<Baseline>('ApproveBaseline', input),
   updateBaselineRules: (id: string, ignored: string[], tolerance: number) =>
     call<void>('UpdateBaselineRules', id, ignored, tolerance),

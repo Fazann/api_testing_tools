@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // Settings are application-wide preferences stored locally.
@@ -25,6 +26,9 @@ type Settings struct {
 	AllowSensitiveDestinations bool `json:"allowSensitiveDestinations"`
 	// CheckForUpdates looks for a newer version when the desktop app starts.
 	CheckForUpdates bool `json:"checkForUpdates"`
+	// ReviewerName is the user's name, the default for "Approved by" on
+	// baselines and "Prepared by" in sign-off reports.
+	ReviewerName string `json:"reviewerName"`
 }
 
 // DefaultSettings are safe defaults: TLS verified, metadata endpoints blocked,
@@ -41,6 +45,10 @@ func DefaultSettings() Settings {
 }
 
 func (s *Settings) Validate() error {
+	s.ReviewerName = strings.TrimSpace(s.ReviewerName)
+	if len([]rune(s.ReviewerName)) > MaxNameLength {
+		return fmt.Errorf("your name must be at most %d characters", MaxNameLength)
+	}
 	if s.MaxResponseBytes < 1<<10 || s.MaxResponseBytes > 512<<20 {
 		return fmt.Errorf("response size limit must be between 1 KB and 512 MB")
 	}

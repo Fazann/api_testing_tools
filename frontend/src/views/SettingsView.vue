@@ -164,6 +164,14 @@ const PROXY_MODES: { value: Settings['proxyMode']; label: string }[] = [
         max="10240"
       />
 
+      <h3 class="section-title">You</h3>
+      <TextField
+        v-model="form.reviewerName"
+        label="Your name — the default for “Approved by” on baselines and “Prepared by” in sign-off reports"
+        maxlength="200"
+        placeholder="e.g. Dana (QA)"
+      />
+
       <h3 class="section-title">Updates</h3>
       <CheckboxField v-model="form.checkForUpdates" class="check">
         Check for a new version when the app starts. Updates install in place — no uninstall needed, and your data is

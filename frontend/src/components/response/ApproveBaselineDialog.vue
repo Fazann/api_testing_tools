@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
@@ -40,6 +40,11 @@ const filter = ref('');
 const selected = ref<string[]>([]);
 const ignored = ref((props.existingIgnored ?? []).join('\n'));
 const tolerance = ref(0);
+/** Shown in sign-off reports; defaults to Settings → Your name. */
+const approvedBy = ref('');
+onMounted(async () => {
+  approvedBy.value = (await api.getSettings().catch(() => null))?.reviewerName ?? '';
+});
 const { busy, run: runBusy } = useAsyncAction();
 
 const doc = computed(() => {
@@ -79,6 +84,7 @@ async function approve() {
       ignoredPaths: ignored.value.split('\n'),
       tolerance: mode.value === 'schema' ? 0 : tolerance.value || 0,
       mode: mode.value === 'schema' ? 'schema' : 'values',
+      approvedBy: approvedBy.value,
     });
     ui.toast('Baseline approved', 'success');
     emit('approved');
@@ -143,6 +149,12 @@ async function approve() {
         type="number"
         min="0"
         step="any"
+      />
+      <TextField
+        v-model="approvedBy"
+        label="Approved by — shown in sign-off reports (default: Settings → Your name)"
+        maxlength="200"
+        placeholder="Your name"
       />
     </template>
     <template #footer>

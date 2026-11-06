@@ -189,9 +189,8 @@ func (s *Service) CompareEnvironments(ctx context.Context, opID string, cfg doma
 		if err != nil {
 			return report, err
 		}
-		sides[i] = &envSide{env: env, reqs: reqs, scope: runScope(env, c), runRec: s.newRun(c, env)}
+		sides[i] = &envSide{env: env, reqs: reqs, scope: runScope(env, c), runRec: s.newRun(c, env, domain.RunKindNormal)}
 		// The first pass is an ordinary run; only the detection calls are extra.
-		sides[i].runRec.Kind = domain.RunKindNormal
 	}
 	report.A = compare.EnvRef{ID: sides[0].env.ID, Name: sides[0].env.Name}
 	report.B = compare.EnvRef{ID: sides[1].env.ID, Name: sides[1].env.Name}

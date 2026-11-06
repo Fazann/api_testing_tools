@@ -95,6 +95,10 @@ type RunResult struct {
 const (
 	RunKindNormal = "run"
 	RunKindBurst  = "burst"
+	// RunKindRace and RunKindMatrix are race tests and permission matrices.
+	// Older ones were recorded as RunKindBurst.
+	RunKindRace   = "race"
+	RunKindMatrix = "matrix"
 )
 
 // Run is a single execution of one request or a whole collection.
@@ -182,7 +186,10 @@ type Baseline struct {
 	SelectedPaths []string        `json:"selectedPaths"`
 	IgnoredPaths  []string        `json:"ignoredPaths"`
 	// Tolerance is an absolute tolerance used when comparing numbers.
-	Tolerance float64   `json:"tolerance"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Tolerance float64 `json:"tolerance"`
+	// ApprovedBy is the name entered when the baseline was approved; the app
+	// has no accounts, so it is not verified. Empty for older baselines.
+	ApprovedBy string    `json:"approvedBy"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }

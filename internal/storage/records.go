@@ -96,7 +96,7 @@ func (s *Store) DeleteEnvironment(ctx context.Context, id string) error {
 
 // ---- baselines ----
 
-const baselineColumns = `id, request_id, IFNULL(environment_id, ''), mode, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, created_at, updated_at`
+const baselineColumns = `id, request_id, IFNULL(environment_id, ''), mode, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, approved_by, created_at, updated_at`
 
 // GetBaseline returns the baseline for a request in an environment
 // (environmentID may be empty for "no environment").
@@ -104,7 +104,7 @@ func (s *Store) GetBaseline(ctx context.Context, requestID, environmentID string
 	row := s.db.QueryRowContext(ctx, `SELECT `+baselineColumns+` FROM baselines WHERE request_id = ? AND IFNULL(environment_id, '') = ?`, requestID, environmentID)
 	var b domain.Baseline
 	var snap, selected, ignored, created, updated, mode string
-	err := row.Scan(&b.ID, &b.RequestID, &b.EnvironmentID, &mode, &snap, &selected, &ignored, &b.Tolerance, &created, &updated)
+	err := row.Scan(&b.ID, &b.RequestID, &b.EnvironmentID, &mode, &snap, &selected, &ignored, &b.Tolerance, &b.ApprovedBy, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -146,12 +146,13 @@ func (s *Store) SaveBaseline(ctx context.Context, b domain.Baseline) (domain.Bas
 			b.Mode = domain.BaselineValues
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO baselines (id, request_id, environment_id, mode, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO baselines (id, request_id, environment_id, mode, response_snapshot, selected_paths_json, ignored_paths_json, tolerance, approved_by, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET mode = excluded.mode, response_snapshot = excluded.response_snapshot, selected_paths_json = excluded.selected_paths_json,
-				ignored_paths_json = excluded.ignored_paths_json, tolerance = excluded.tolerance, updated_at = excluded.updated_at`,
+				ignored_paths_json = excluded.ignored_paths_json, tolerance = excluded.tolerance, approved_by = excluded.approved_by,
+				updated_at = excluded.updated_at`,
 			b.ID, b.RequestID, nullable(b.EnvironmentID), string(b.Mode), string(b.Snapshot), mustJSON(nonNil(b.SelectedPaths)), mustJSON(nonNil(b.IgnoredPaths)),
-			b.Tolerance, ts(b.CreatedAt), ts(b.UpdatedAt))
+			b.Tolerance, b.ApprovedBy, ts(b.CreatedAt), ts(b.UpdatedAt))
 		return err
 	})
 	return b, err
@@ -261,7 +262,7 @@ func (s *Store) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.Run,
 		where = append(where, "status = ?")
 		args = append(args, f.Status)
 	}
-	q := `SELECT id, IFNULL(collection_id, ''), collection_name, environment_name, kind, status, started_at, IFNULL(finished_at, ''),
+	q := `SELECT id, IFNULL(collection_id, ''), collection_name, environment_name, IFNULL(environment_id, ''), kind, status, started_at, IFNULL(finished_at, ''),
 		passed_count, failed_count, error_count, duration_ms FROM runs`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
@@ -281,7 +282,7 @@ func (s *Store) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.Run,
 	for rows.Next() {
 		var r domain.Run
 		var started, finished string
-		if err := rows.Scan(&r.ID, &r.CollectionID, &r.CollectionName, &r.EnvironmentName, &r.Kind, &r.Status, &started, &finished,
+		if err := rows.Scan(&r.ID, &r.CollectionID, &r.CollectionName, &r.EnvironmentName, &r.EnvironmentID, &r.Kind, &r.Status, &started, &finished,
 			&r.PassedCount, &r.FailedCount, &r.ErrorCount, &r.DurationMs); err != nil {
 			return nil, err
 		}
@@ -461,7 +462,7 @@ type NamedBaseline struct {
 // ListCollectionBaselines returns every baseline of the collection's requests.
 func (s *Store) ListCollectionBaselines(ctx context.Context, collectionID string) ([]NamedBaseline, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT b.id, b.request_id, IFNULL(b.environment_id, ''), b.mode, b.response_snapshot,
-		b.selected_paths_json, b.ignored_paths_json, b.tolerance, b.created_at, b.updated_at, IFNULL(e.name, '')
+		b.selected_paths_json, b.ignored_paths_json, b.tolerance, b.approved_by, b.created_at, b.updated_at, IFNULL(e.name, '')
 		FROM baselines b JOIN requests r ON r.id = b.request_id LEFT JOIN environments e ON e.id = b.environment_id
 		WHERE r.collection_id = ? ORDER BY r.sort_order, r.name, IFNULL(e.name, '')`, collectionID)
 	if err != nil {
@@ -474,7 +475,7 @@ func (s *Store) ListCollectionBaselines(ctx context.Context, collectionID string
 		b := &nb.Baseline
 		var snap, selected, ignored, created, updated, mode string
 		if err := rows.Scan(&b.ID, &b.RequestID, &b.EnvironmentID, &mode, &snap, &selected, &ignored, &b.Tolerance,
-			&created, &updated, &nb.EnvironmentName); err != nil {
+			&b.ApprovedBy, &created, &updated, &nb.EnvironmentName); err != nil {
 			return nil, err
 		}
 		b.Snapshot = json.RawMessage(snap)

@@ -161,6 +161,14 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 3. Check the rule against the last run while writing it, then save.
 4. Every collection run (and the CLI) evaluates the rules after the requests and fails when one does not hold.
 
+### Workflow K: Sign off a release
+
+1. Run the collection (and its race tests and permission matrix) in the release environment.
+2. Open the collection's **Sign-off report**, enter the release name and your name, and preview.
+3. Review the verdict and its reasons: failures, regressions, security checks, slower requests, coverage gaps and who
+   approved each baseline.
+4. Save the HTML or print it to PDF, sign it and hand it over.
+
 ---
 
 ## 4. MVP Feature Requirements
@@ -387,6 +395,24 @@ Checks that span several requests of one run, without scripts. Guide: [collectio
   in the run's tally, history, reports, JUnit and the CLI exit code. Values come from redacted results.
 - **Check against last run** evaluates unsaved rules against the newest history run of the collection without sending
   requests.
+
+### Release sign-off report — implemented after the MVP
+
+A summary of one collection in one environment for QA hand-off and audits. Guide: [signoff-report.md](signoff-report.md).
+
+- Inputs: release name (required), environment, prepared by (default: the reviewer name in Settings), notes.
+- Built only from stored data (history, baselines, response times); no request is sent.
+- Sections: verdict with reasons; the newest collection run in the environment (counts, coverage, failures with
+  messages, collection rules); regressions with their first differences; the newest race test per request and the
+  newest permission matrix run; requests flagged slower than usual or whose median changed by ≥ 20 %; baselines with
+  mode, approval time and approver; coverage (requests without tests, without a baseline, not in the run); sign-off
+  block with signature lines.
+- *Ready for release* requires a run that passed with no regressions and passing newest security checks; everything
+  else is listed, not blocking.
+- Baselines record **approved by** (the name entered when approving). Race tests and permission matrices are recorded
+  with their own run kinds (`race`, `matrix`); older `burst` runs are still recognised.
+- Output: one self-contained HTML file without scripts, with print styles; PDF through the system print dialog from an
+  in-app preview. Values are redacted again with the current secrets; response bodies are not included.
 
 ### P2 — Only after validating demand
 
@@ -715,6 +741,7 @@ Use SQLite migrations from the beginning.
 - `environment_id`: optional foreign key
 - `response_snapshot`: text or JSON
 - `ignored_paths_json`: text
+- `approved_by`: text — the name entered when the baseline was approved (empty for older baselines)
 - `created_at`: timestamp
 - `updated_at`: timestamp
 
@@ -723,6 +750,8 @@ Use SQLite migrations from the beginning.
 - `id`: text UUID primary key
 - `collection_id`: optional foreign key
 - `environment_name`: text
+- `kind`: text — `run` (sends and collection runs), `race`, `matrix`, or `burst` (race tests and matrices recorded before
+  they had their own kinds); only `run` counts towards response-time trends
 - `status`: text
 - `started_at`: timestamp
 - `finished_at`: optional timestamp
@@ -843,6 +872,7 @@ API clients can access sensitive systems, so security must be part of the MVP.
 15. Compare tab in the collection dialog (environment pickers, options, summary, per-request differences)
 16. Changing-field suggestions in the approve-baseline dialog and the Baseline tab
 17. Rules tab in the collection dialog (rule builder, check against the last run)
+18. Sign-off report dialog (release details, preview, save HTML, print to PDF)
 
 Keep the first version focused. Do not build a complex dashboard before the request and test workflows are reliable.
 

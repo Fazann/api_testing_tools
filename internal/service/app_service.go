@@ -635,6 +635,8 @@ type ApproveBaselineInput struct {
 	Tolerance     float64  `json:"tolerance"`
 	// Mode is "values" (default) or "schema".
 	Mode domain.BaselineMode `json:"mode"`
+	// ApprovedBy is the approver's name, shown in sign-off reports (optional).
+	ApprovedBy string `json:"approvedBy"`
 }
 
 // ApproveBaseline saves a reviewed response as the baseline for a request.
@@ -650,6 +652,10 @@ func (s *Service) ApproveBaseline(ctx context.Context, in ApproveBaselineInput) 
 	}
 	if in.Tolerance < 0 {
 		return domain.Baseline{}, errors.New("tolerance must not be negative")
+	}
+	in.ApprovedBy = strings.TrimSpace(in.ApprovedBy)
+	if len([]rune(in.ApprovedBy)) > domain.MaxNameLength {
+		return domain.Baseline{}, fmt.Errorf("the approver's name must be at most %d characters", domain.MaxNameLength)
 	}
 	switch in.Mode {
 	case "":
@@ -694,7 +700,7 @@ func (s *Service) ApproveBaseline(ctx context.Context, in ApproveBaselineInput) 
 	}
 	return s.store.SaveBaseline(ctx, domain.Baseline{
 		RequestID: in.RequestID, EnvironmentID: in.EnvironmentID, Mode: in.Mode, Snapshot: snap,
-		SelectedPaths: paths, IgnoredPaths: cleanPaths(in.IgnoredPaths), Tolerance: in.Tolerance,
+		SelectedPaths: paths, IgnoredPaths: cleanPaths(in.IgnoredPaths), Tolerance: in.Tolerance, ApprovedBy: in.ApprovedBy,
 	})
 }
 
@@ -912,7 +918,8 @@ func (s *Service) ExportCollection(ctx context.Context, collectionID string, env
 		for _, nb := range list {
 			b := nb.Baseline
 			doc.Baselines = append(doc.Baselines, collectionio.Baseline{RequestID: b.RequestID, Environment: nb.EnvironmentName,
-				Mode: b.Mode, Snapshot: b.Snapshot, SelectedPaths: b.SelectedPaths, IgnoredPaths: b.IgnoredPaths, Tolerance: b.Tolerance})
+				Mode: b.Mode, Snapshot: b.Snapshot, SelectedPaths: b.SelectedPaths, IgnoredPaths: b.IgnoredPaths, Tolerance: b.Tolerance,
+				ApprovedBy: b.ApprovedBy})
 		}
 	}
 	var buf bytes.Buffer

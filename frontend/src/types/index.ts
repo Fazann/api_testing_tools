@@ -348,6 +348,8 @@ export interface Baseline {
   selectedPaths: string[];
   ignoredPaths: string[];
   tolerance: number;
+  /** As entered when approving; empty for older baselines. */
+  approvedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -398,6 +400,8 @@ export interface Settings {
   proxyUrl: string;
   allowSensitiveDestinations: boolean;
   checkForUpdates: boolean;
+  /** Default for "Approved by" on baselines and "Prepared by" in sign-off reports. */
+  reviewerName: string;
 }
 
 export interface DataInfo {
@@ -728,4 +732,21 @@ export interface RulesCheck {
   startedAt: string;
   environmentName: string;
   outcomes: RuleOutcome[];
+}
+
+// ---- release sign-off report (docs/signoff-report.md) ----
+
+export interface SignoffInput {
+  collectionId: string;
+  environmentId: string;
+  release: string;
+  preparedBy: string;
+  notes: string;
+}
+
+export interface SignoffResult {
+  html: string;
+  fileName: string;
+  ready: boolean;
+  reasons: string[];
 }

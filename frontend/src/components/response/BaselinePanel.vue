@@ -81,7 +81,11 @@ async function remove() {
     </CalloutBox>
     <template v-else>
       <p class="small muted">
-        Approved {{ formatTime(baseline.updatedAt) }} for <strong>{{ envs.selected?.name ?? 'No environment' }}</strong
+        Approved {{ formatTime(baseline.updatedAt) }}
+        <template v-if="baseline.approvedBy"
+          >by <strong>{{ baseline.approvedBy }}</strong></template
+        >
+        for <strong>{{ envs.selected?.name ?? 'No environment' }}</strong
         >. Compares
         {{
           baseline.mode === 'schema'
