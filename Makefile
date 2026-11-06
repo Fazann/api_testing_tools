@@ -1,4 +1,4 @@
-# API Regression Guard — common development and release tasks.
+# API test kits — common development and release tasks.
 # Run `make help` for the list of targets.
 
 APP      := api-test-kits

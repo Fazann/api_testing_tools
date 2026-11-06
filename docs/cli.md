@@ -13,7 +13,7 @@ APIGUARD_VAR_token="$API_TOKEN" \
 ```
 
 ```
-API Regression Guard CLI 1.2.0
+API test kits CLI 1.2.0
 Collection "Wallet demo" from wallet.collection.json · environment "Staging" · 6 request(s) · 1 baseline(s)
 
 ✔ PASS  GET     Health check                                   200      12 ms

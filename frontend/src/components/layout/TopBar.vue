@@ -25,7 +25,7 @@ const tabs: { id: View; label: string }[] = [
 
 <template>
   <header class="topbar">
-    <strong class="brand">API Regression Guard</strong>
+    <strong class="brand">API test kits</strong>
     <nav class="nav" aria-label="Main">
       <BaseButton
         v-for="t in tabs"

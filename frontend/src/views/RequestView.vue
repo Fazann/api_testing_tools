@@ -49,7 +49,7 @@ async function quickStart() {
   <EmptyState
     v-if="!ws.draft"
     class="welcome"
-    :title="ws.collections.length ? 'Select a request' : 'Welcome to API Regression Guard'"
+    :title="ws.collections.length ? 'Select a request' : 'Welcome to API test kits'"
   >
     <p v-if="!ws.collections.length">
       Test HTTP APIs locally, check business rules — not just status codes — and catch regressions by comparing

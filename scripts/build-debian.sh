@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds API Regression Guard inside a Debian 12 container and packages it as a .deb.
+# Builds API test kits inside a Debian 12 container and packages it as a .deb.
 #
 #   scripts/build-debian.sh [-v VERSION] [--feed URL]
 #
@@ -99,7 +99,7 @@ install -d "$PKG/usr/share/applications"
 cat > "$PKG/usr/share/applications/$APP.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=API Regression Guard
+Name=API test kits
 Comment=Local-first API testing and regression detection
 Exec=$APP
 Icon=$APP
@@ -120,7 +120,7 @@ cat > "$PKG/DEBIAN/control" <<EOF
 Package: $APP
 Version: $DEB_VERSION
 Architecture: $ARCH
-Maintainer: API Regression Guard contributors
+Maintainer: API test kits contributors
 Installed-Size: $(du -sk "$PKG/usr" | cut -f1)
 Depends: $DEPENDS
 Conflicts: test-tool-kit

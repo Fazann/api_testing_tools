@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds API Regression Guard desktop binaries and packages them into release/.
+# Builds API test kits desktop binaries and packages them into release/.
 #
 #   scripts/build.sh [options] [platform...]
 #

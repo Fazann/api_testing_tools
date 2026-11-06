@@ -259,7 +259,7 @@ func Read(r io.Reader) (*Imported, error) {
 	case probe.Format != "":
 		return nil, fmt.Errorf("unrecognized file format %q (expected %q or an OpenAPI/Swagger document)", probe.Format, FormatName)
 	}
-	return nil, errors.New("unrecognized file: expected an API Regression Guard collection export " +
+	return nil, errors.New("unrecognized file: expected an API test kits collection export " +
 		"or an OpenAPI 3 / Swagger 2 document (swagger.json, openapi.json or .yaml)")
 }
 

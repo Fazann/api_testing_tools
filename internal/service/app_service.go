@@ -28,7 +28,7 @@ import (
 	"api-test-kits/internal/storage"
 )
 
-const AppName = "API Regression Guard"
+const AppName = "API test kits"
 
 // Version is set at build time with -ldflags "-X api-test-kits/internal/service.Version=…".
 var Version = "0.1.0-dev"

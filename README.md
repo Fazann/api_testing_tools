@@ -1,4 +1,4 @@
-# API Regression Guard
+# API test kits
 
 A free, local-first desktop app for testing HTTP APIs, checking business rules, and catching regressions by comparing responses with an approved baseline. No account, no cloud, no telemetry.
 

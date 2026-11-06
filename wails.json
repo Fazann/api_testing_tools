@@ -8,10 +8,10 @@
   "frontend:dev:serverUrl": "auto",
   "wailsjsdir": "./frontend",
   "author": {
-    "name": "API Regression Guard contributors"
+    "name": "API test kits contributors"
   },
   "info": {
-    "productName": "API Regression Guard",
+    "productName": "API test kits",
     "productVersion": "0.1.1",
     "comments": "Local-first API testing and regression detection"
   }
