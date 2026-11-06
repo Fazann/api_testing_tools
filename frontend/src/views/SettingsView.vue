@@ -86,7 +86,7 @@ async function deleteAll() {
   if (!ok) return;
   await run(async () => {
     await api.deleteAllData();
-    ws.closeDraft();
+    ws.closeAll();
     await Promise.all([ws.load(), envs.load(), load()]);
     ui.toast('All local data deleted', 'success');
   });

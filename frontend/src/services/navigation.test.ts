@@ -40,14 +40,16 @@ describe('useOpenRequest', () => {
     expect(ui.view).toBe('requests');
   });
 
-  it('keeps unsaved edits when the user declines to discard them', async () => {
+  it('opens another request in a new tab and keeps unsaved edits in the current one', async () => {
     const ws = useWorkspace();
     const ui = useUi();
     ws.open({ ...newRequest('c1', ''), id: 'r1', name: 'Current' });
     ws.draft!.url = 'http://changed';
-    const confirm = vi.spyOn(ui, 'confirm').mockResolvedValue(false);
-    expect(await useOpenRequest()(target)).toBe(false);
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(ws.draft?.id).toBe('r1');
+    const confirm = vi.spyOn(ui, 'confirm');
+    expect(await useOpenRequest()(target)).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(ws.tabs.map((t) => t.draft.id)).toEqual(['r1', 'r2']);
+    expect(ws.draft?.id).toBe('r2');
+    expect(ws.tabs[0].draft.url).toBe('http://changed');
   });
 });

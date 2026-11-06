@@ -6,19 +6,32 @@ import { newRequest } from '@/services/model';
 import type { Collection, CollectionTree, Request, RunResult } from '@/types';
 import { clone } from '@/utils/object';
 
+/** A request open in the editor. Edits stay in `draft` until saved; `snapshot` is the saved state. */
+export interface OpenTab {
+  key: string;
+  draft: Request;
+  snapshot: string;
+}
+
+let nextTabKey = 1;
+
 export const useWorkspace = defineStore('workspace', () => {
   const collections = ref<Collection[]>([]);
   const trees = ref<Record<string, CollectionTree>>({});
   const expanded = ref<Record<string, boolean>>({});
   const loaded = ref(false);
 
-  /** The request open in the editor; edits apply here until saved. */
-  const draft = ref<Request | null>(null);
-  const savedSnapshot = ref('');
+  /** Requests open in editor tabs, in tab order; each keeps its own unsaved edits. */
+  const tabs = ref<OpenTab[]>([]);
+  const activeKey = ref('');
   /** Latest result per request id ('' for unsaved drafts). */
   const results = ref<Record<string, RunResult>>({});
 
-  const dirty = computed(() => draft.value !== null && JSON.stringify(draft.value) !== savedSnapshot.value);
+  const activeTab = computed(() => tabs.value.find((t) => t.key === activeKey.value) ?? null);
+  /** The request in the active tab. */
+  const draft = computed(() => activeTab.value?.draft ?? null);
+  const isDirty = (t: OpenTab) => JSON.stringify(t.draft) !== t.snapshot;
+  const dirty = computed(() => !!activeTab.value && isDirty(activeTab.value));
   const currentResult = computed(() => (draft.value ? (results.value[draft.value.id] ?? null) : null));
   const currentCollection = computed(() =>
     draft.value ? (collections.value.find((c) => c.id === draft.value!.collectionId) ?? null) : null,
@@ -71,7 +84,7 @@ export const useWorkspace = defineStore('workspace', () => {
     // Follow along in the editor unless the open request has unsaved edits.
     if (draft.value?.collectionId === id && !dirty.value) {
       const fresh = tree.requests.find((r) => r.id === draft.value!.id);
-      if (fresh) open(fresh);
+      if (fresh) replaceActive(fresh);
     }
     return changed;
   }
@@ -84,7 +97,7 @@ export const useWorkspace = defineStore('workspace', () => {
 
   async function deleteCollection(id: string) {
     await api.deleteCollection(id);
-    if (draft.value?.collectionId === id) closeDraft();
+    closeTabsWhere((t) => t.draft.collectionId === id);
     delete trees.value[id];
     await load();
   }
@@ -106,13 +119,58 @@ export const useWorkspace = defineStore('workspace', () => {
   async function deleteFolder(collectionId: string, folderId: string) {
     await api.deleteFolder(folderId);
     await loadTree(collectionId);
-    if (draft.value && !trees.value[collectionId]?.requests.some((r) => r.id === draft.value!.id) && draft.value.id)
-      closeDraft();
+    const remaining = new Set(trees.value[collectionId]?.requests.map((r) => r.id));
+    closeTabsWhere((t) => t.draft.collectionId === collectionId && !!t.draft.id && !remaining.has(t.draft.id));
   }
 
+  /**
+   * Shows a request in a tab: switches to its tab when it is already open
+   * (keeping any unsaved edits there), otherwise appends a new tab after the
+   * current one. Other tabs are never touched.
+   */
   function open(req: Request) {
-    draft.value = clone(req);
-    savedSnapshot.value = JSON.stringify(draft.value);
+    const existing = req.id ? tabs.value.find((t) => t.draft.id === req.id) : undefined;
+    if (existing) {
+      activeKey.value = existing.key;
+      return;
+    }
+    const d = clone(req);
+    const tab: OpenTab = { key: `tab-${nextTabKey++}`, draft: d, snapshot: JSON.stringify(d) };
+    const at = tabs.value.findIndex((t) => t.key === activeKey.value);
+    tabs.value.splice(at < 0 ? tabs.value.length : at + 1, 0, tab);
+    activeKey.value = tab.key;
+  }
+
+  /** Replaces the active tab's request with its saved state. */
+  function replaceActive(req: Request) {
+    const tab = activeTab.value;
+    if (!tab) return open(req);
+    tab.draft = clone(req);
+    tab.snapshot = JSON.stringify(tab.draft);
+  }
+
+  function activate(key: string) {
+    if (tabs.value.some((t) => t.key === key)) activeKey.value = key;
+  }
+
+  /** Closes a tab without asking; callers confirm unsaved edits first (see tabIsDirty). */
+  function closeTab(key: string) {
+    const i = tabs.value.findIndex((t) => t.key === key);
+    if (i < 0) return;
+    tabs.value.splice(i, 1);
+    if (activeKey.value === key) {
+      // Like a browser: the tab to the right takes its place, else the one to the left.
+      activeKey.value = tabs.value[Math.min(i, tabs.value.length - 1)]?.key ?? '';
+    }
+  }
+
+  function closeTabsWhere(match: (t: OpenTab) => boolean) {
+    for (const t of tabs.value.filter(match)) closeTab(t.key);
+  }
+
+  function tabIsDirty(key: string) {
+    const t = tabs.value.find((x) => x.key === key);
+    return !!t && isDirty(t);
   }
 
   /** Creates and opens a request; `fields` overrides the defaults, e.g. from a pasted cURL command. */
@@ -121,15 +179,17 @@ export const useWorkspace = defineStore('workspace', () => {
     expanded.value[collectionId] = true;
     if (parentId) expanded.value[parentId] = true;
     await loadTree(collectionId);
-    open(saved);
+    open(saved); // a new tab next to the current one; the current tab keeps its edits
     return saved;
   }
 
   async function saveDraft() {
     if (!draft.value) return;
-    const saved = await api.saveRequest(clone(draft.value));
-    const prevId = draft.value.id;
-    open(saved);
+    const tab = activeTab.value!;
+    const saved = await api.saveRequest(clone(tab.draft));
+    const prevId = tab.draft.id;
+    tab.draft = clone(saved);
+    tab.snapshot = JSON.stringify(tab.draft);
     if (!prevId && results.value['']) results.value[saved.id] = results.value[''];
     await loadTree(saved.collectionId);
     return saved;
@@ -148,19 +208,27 @@ export const useWorkspace = defineStore('workspace', () => {
       return;
     }
     await api.saveRequest({ ...clone(r), name });
+    // An open tab of this request shows the new name without losing its other edits.
+    const tab = tabs.value.find((t) => t.draft.id === r.id);
+    if (tab) {
+      tab.draft.name = name;
+      const saved = JSON.parse(tab.snapshot) as Request;
+      tab.snapshot = JSON.stringify({ ...saved, name });
+    }
     await loadTree(r.collectionId);
   }
 
   async function deleteRequest(r: Request) {
     await api.deleteRequest(r.id);
-    if (draft.value?.id === r.id) closeDraft();
+    closeTabsWhere((t) => t.draft.id === r.id);
     delete results.value[r.id];
     await loadTree(r.collectionId);
   }
 
-  function closeDraft() {
-    draft.value = null;
-    savedSnapshot.value = '';
+  /** Closes every tab (e.g. after deleting all data). */
+  function closeAll() {
+    tabs.value = [];
+    activeKey.value = '';
   }
 
   function setResult(requestId: string, r: RunResult) {
@@ -172,6 +240,8 @@ export const useWorkspace = defineStore('workspace', () => {
     trees,
     expanded,
     loaded,
+    tabs,
+    activeKey,
     draft,
     dirty,
     results,
@@ -190,12 +260,15 @@ export const useWorkspace = defineStore('workspace', () => {
     renameFolder,
     deleteFolder,
     open,
+    activate,
+    closeTab,
+    tabIsDirty,
+    closeAll,
     createRequest,
     saveDraft,
     duplicateRequest,
     renameRequest,
     deleteRequest,
-    closeDraft,
     setResult,
   };
 });

@@ -3,28 +3,17 @@ import { useWorkspace } from '@/stores/workspace';
 import type { Request } from '@/types';
 
 /**
- * Returns a function that opens a request in the editor: it asks before
- * discarding unsaved edits, expands the request's collection and folders in
- * the sidebar, and switches to the Requests view. It resolves to false when
- * the user keeps the current draft.
+ * Returns a function that opens a request in the editor: in its existing tab,
+ * or in a new tab (other tabs and their unsaved edits stay open). It expands
+ * the request's collection and folders in the sidebar and switches to the
+ * Requests view.
  */
 export function useOpenRequest() {
   const ws = useWorkspace();
   const ui = useUi();
 
   return async function openRequest(r: Request): Promise<boolean> {
-    if (ws.draft?.id !== r.id) {
-      if (ws.dirty) {
-        const discard = await ui.confirm({
-          title: 'Discard unsaved changes?',
-          message: `"${ws.draft?.name}" has unsaved changes.`,
-          confirmLabel: 'Discard',
-          danger: true,
-        });
-        if (!discard) return false;
-      }
-      ws.open(r);
-    }
+    ws.open(r);
     reveal(r);
     ui.view = 'requests';
     return true;

@@ -33,6 +33,8 @@ async function reloadVariables() {
 
 export const useRunner = defineStore('runner', () => {
   const sendingOp = ref('');
+  /** Request id of the send in progress, so only its tab shows "Sending…". */
+  const sendingRequestId = ref('');
   const collectionRun = ref<CollectionRun | null>(null);
   let unsubscribe: (() => void) | null = null;
 
@@ -69,6 +71,7 @@ export const useRunner = defineStore('runner', () => {
       if (!proceed) return;
       const opId = uid();
       sendingOp.value = opId;
+      sendingRequestId.value = req.id;
       const result = await api.sendRequest(opId, req, env.selectedId, confirmed);
       ws.setResult(req.id, result);
       if (hasScripts(req) || hasScripts(ws.currentCollection)) await reloadVariables();
@@ -76,6 +79,7 @@ export const useRunner = defineStore('runner', () => {
       ui.error(e);
     } finally {
       sendingOp.value = '';
+      sendingRequestId.value = '';
     }
   }
 
@@ -142,6 +146,7 @@ export const useRunner = defineStore('runner', () => {
 
   return {
     sendingOp,
+    sendingRequestId,
     collectionRun,
     send,
     cancelSend,

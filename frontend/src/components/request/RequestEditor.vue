@@ -213,12 +213,24 @@ const httpTabs = computed<TabItem<Tab>[]>(() => [
         aria-label="URL"
         @paste="!socket && onUrlPaste($event)"
       />
-      <BaseButton v-if="runner.sendingOp" variant="danger" @click="runner.cancelSend()">Cancel</BaseButton>
+      <BaseButton
+        v-if="runner.sendingOp && runner.sendingRequestId === req.id"
+        variant="danger"
+        @click="runner.cancelSend()"
+        >Cancel</BaseButton
+      >
       <BaseButton
         v-else
         type="submit"
         variant="primary"
-        :title="socket ? 'Connect, run the test steps and record the result (Ctrl+Enter)' : 'Send (Ctrl+Enter)'"
+        :disabled="!!runner.sendingOp"
+        :title="
+          runner.sendingOp
+            ? 'Another tab is sending a request; wait for it or cancel it there'
+            : socket
+              ? 'Connect, run the test steps and record the result (Ctrl+Enter)'
+              : 'Send (Ctrl+Enter)'
+        "
         >{{ socket ? 'Run test' : 'Send' }}</BaseButton
       >
       <BaseButton :disabled="!ws.dirty" title="Save (Ctrl+S)" @click="save">Save</BaseButton>

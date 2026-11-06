@@ -5,6 +5,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import EmptyState from '@/components/base/EmptyState.vue';
 import TabBar from '@/components/base/TabBar.vue';
 import RequestEditor from '@/components/request/RequestEditor.vue';
+import RequestTabs from '@/components/request/RequestTabs.vue';
 import ResponseViewer from '@/components/response/ResponseViewer.vue';
 import SocketConsole from '@/components/socket/SocketConsole.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
@@ -67,10 +68,11 @@ async function quickStart() {
     </template>
   </EmptyState>
   <div v-else class="split">
+    <RequestTabs />
     <RequestEditor class="top" />
     <div class="bottom">
       <TabBar v-if="socket" v-model="socketTab" class="socket-tabs" :tabs="socketTabs" />
-      <EmptyState v-if="runner.sendingOp">
+      <EmptyState v-if="runner.sendingOp && runner.sendingRequestId === ws.draft.id">
         <p>
           {{ socket ? 'Running the test…' : 'Sending…' }}
           <BaseButton small @click="runner.cancelSend()">Cancel (Esc)</BaseButton>
