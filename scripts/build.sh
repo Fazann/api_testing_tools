@@ -213,6 +213,9 @@ for t in "${TARGETS[@]}"; do
   [[ -n "$out" && -e "build/bin/$out" ]] || die "$t: build output not found in build/bin"
   if [[ $PACKAGE -eq 1 ]]; then
     package "$os" "$arch" "build/bin/$out"
+    # The versioned copy in release/ is the output; drop wails' unversioned
+    # intermediate so there is only one file to pick up.
+    [[ "$os" == darwin ]] || rm -f "build/bin/$out"
     if [[ "$os" == windows && $NSIS -eq 1 ]]; then
       for inst in build/bin/*installer*.exe; do
         [[ -e "$inst" ]] || continue
