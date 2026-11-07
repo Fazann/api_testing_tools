@@ -65,6 +65,7 @@ The **Tests** tab of a socket request holds **steps**, run in order on one conne
 | **Send** | Sends a message (event, body, acknowledgement). Fails if the connection is closed. |
 | **Expect** | Waits up to *Within (ms)* for a received message that matches: the **event** (Socket.IO; empty = any), whether it is an **acknowledgement**, and every **check**. Without checks any message matches. |
 | **Wait** | Pauses, for servers that need time between messages. |
+| **Start heartbeat**, **Stop heartbeat**, **Expect disconnect** | Repeat a message on an interval, and check that the server drops a silent client. See [Heartbeats](#heartbeats-testing-online-and-offline-presence). |
 
 Checks are the familiar ones applied to the message body: JSON path, body text, valid JSON, required fields and
 aggregates (count/sum/min/max). Status, header and response-time checks do not apply. Expected values are JSON and may
@@ -81,6 +82,49 @@ connection can be opened.
 The result shows one line per step (with the reason an expect step failed, including why the closest message did not
 match), the handshake headers, and every message in the **Messages** tab. A test **fails** when a step fails and is an
 **error** when the connection cannot be opened.
+
+## Heartbeats: testing online and offline presence
+
+Chat and presence systems usually decide whether a user is online from a **heartbeat**: the client sends a small
+message (`{"type": "ping"}`, a `heartbeat` event, …) every few seconds, and the server marks the user offline, or
+drops the connection, when the heartbeats stop. A heartbeat is sent from the app's backend on a timer, so its rhythm
+stays steady while the window is in the background or minimized.
+
+This is the application's own heartbeat. Socket.IO's built-in Engine.IO ping/pong keeps running underneath as
+always.
+
+### In the console
+
+Write the heartbeat message in the composer (or pick a saved message), set **Send every** (seconds, 0.1 to 600) and
+press **Start heartbeat**. The message is sent at once and then on every interval. Heartbeat messages are marked ♥ in
+the log, and **Hide heartbeats** keeps them out of the way. The bar shows how many were sent. **Stop heartbeat** stops
+it; disconnecting, or the server closing the connection, stops it too. Changing the composer does not change a running
+heartbeat: stop and start it again. `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$uuid}}` are filled in again for
+every heartbeat.
+
+### In tests
+
+| Step | Does |
+| --- | --- |
+| **Start heartbeat** | Sends its message now and then every *Interval (ms)*, in the background, while the next steps run. A second start replaces the running heartbeat. |
+| **Stop heartbeat** | Stops the heartbeat and reports how many messages it sent. |
+| **Expect disconnect** | Waits up to *Within (ms)* for the server to close the connection. It passes when the server closes it, with the close code, and fails when the connection is still open. |
+
+A heartbeat still running at the end of the test is stopped before disconnecting. If sending a heartbeat fails (the
+connection closed), the heartbeat stops and the transcript says why. Heartbeat messages appear in the result's
+**Messages** with ♥.
+
+Example: *a user who stops sending heartbeats goes offline within 30 s*
+
+1. **Start heartbeat** `{"type": "ping"}`, every 5,000 ms.
+2. **Expect** a message with `type` = `"presence"` and `status` = `"online"`, within 6,000 ms.
+3. **Wait** 10,000 ms. The server keeps you online while heartbeats arrive.
+4. **Stop heartbeat**.
+5. **Expect disconnect** within 35,000 ms, or **Expect** `status` = `"offline"` if the server announces it instead of
+   closing.
+
+Set the request **timeout** (Options) higher than the whole test, here at least 60 s. It bounds the test from
+connecting to the last step.
 
 ## Limits and what is not supported
 

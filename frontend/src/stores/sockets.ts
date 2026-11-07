@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { reactive } from 'vue';
 
 import { api, onSocketEvent } from '@/services/api';
-import type { Request, SocketFrame, SocketMessage, SocketSession } from '@/types';
+import type { HeartbeatStatus, Request, SocketFrame, SocketMessage, SocketSession } from '@/types';
 import { clone, uid } from '@/utils/object';
 
 import { useEnvironments } from './environments';
@@ -21,6 +21,8 @@ export interface SocketConsole {
   frames: SocketFrame[];
   session: SocketSession | null;
   error: string;
+  /** The running (or last) heartbeat; null before one was started. */
+  heartbeat: HeartbeatStatus | null;
 }
 
 /** Console sessions, keyed by request (the draft's ID, or '' for an unsaved request). */
@@ -29,7 +31,9 @@ export const useSockets = defineStore('sockets', () => {
   let unsubscribe: (() => void) | null = null;
 
   function consoleFor(key: string): SocketConsole {
-    if (!consoles[key]) consoles[key] = { sessionId: '', status: 'idle', frames: [], session: null, error: '' };
+    if (!consoles[key]) {
+      consoles[key] = { sessionId: '', status: 'idle', frames: [], session: null, error: '', heartbeat: null };
+    }
     return consoles[key];
   }
 
@@ -48,9 +52,11 @@ export const useSockets = defineStore('sockets', () => {
       const c = Object.values(consoles).find((x) => x.sessionId === e.sessionId);
       if (!c) return;
       if (e.frame) push(c, e.frame);
+      if (e.heartbeat) c.heartbeat = e.heartbeat;
       if (e.closed) {
         c.status = 'closed';
         c.error = e.error ?? '';
+        if (c.heartbeat) c.heartbeat = { ...c.heartbeat, running: false };
       }
     });
   }
@@ -81,6 +87,7 @@ export const useSockets = defineStore('sockets', () => {
       c.sessionId = uid();
       c.status = 'connecting';
       c.error = '';
+      c.heartbeat = null;
       const session = await api.connectSocket(c.sessionId, draft, envs.selectedId, confirmed);
       c.session = session;
       c.status = 'open';
@@ -124,10 +131,33 @@ export const useSockets = defineStore('sockets', () => {
     }
   }
 
+  /** Starts sending `m` every `intervalMs` from the backend; heartbeats arrive as events. */
+  async function startHeartbeat(key: string, m: SocketMessage, intervalMs: number): Promise<boolean> {
+    const c = consoles[key];
+    if (!c || c.status !== 'open') return false;
+    try {
+      c.heartbeat = await api.startSocketHeartbeat(c.sessionId, clone(m), intervalMs);
+      return true;
+    } catch (e) {
+      useUi().error(e);
+      return false;
+    }
+  }
+
+  async function stopHeartbeat(key: string) {
+    const c = consoles[key];
+    if (!c?.heartbeat?.running) return;
+    try {
+      c.heartbeat = await api.stopSocketHeartbeat(c.sessionId);
+    } catch (e) {
+      useUi().error(e);
+    }
+  }
+
   function clear(key: string) {
     const c = consoles[key];
     if (c) c.frames = [];
   }
 
-  return { consoles, consoleFor, connect, cancelConnect, disconnect, send, clear };
+  return { consoles, consoleFor, connect, cancelConnect, disconnect, send, startHeartbeat, stopHeartbeat, clear };
 });

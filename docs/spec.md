@@ -331,12 +331,19 @@ Real-time APIs regress like HTTP ones: a renamed event, a changed payload or a b
 - Connecting runs the same preflight checks as Send and the pre-request scripts (keeping the variables they set). In a
   protected environment the user confirms first, because console messages may change data.
 - Console traffic is not stored in history.
+- **Heartbeat** (presence testing): send the composer's message now and then every 0.1–600 s from the backend, so
+  the rhythm holds while the window is in the background; heartbeat messages are marked ♥ and can be hidden in the
+  log; stopped by the user, by disconnecting, or when a send fails. Built-in variables are filled in per heartbeat.
 
 #### Tests
 
 - A socket request's test is an ordered list of steps on one connection: **send** a message, **expect** a received
   message (optional Socket.IO event, acknowledgement or event, and checks on the body using the existing JSON path,
   body, valid-JSON, required-fields and aggregate checks) within a timeout, or **wait**.
+- **Start heartbeat** (message + interval 100 ms–600 s) repeats a message in the background while later steps run;
+  **stop heartbeat** stops it and reports the count; **expect disconnect** passes when the server closes the
+  connection within a timeout (with the close code) and stops the remaining steps. A heartbeat still running at the
+  end of the test is stopped and noted in the transcript. Guide: [sockets.md](sockets.md#heartbeats-testing-online-and-offline-presence).
 - Expect steps match any not-yet-matched message received since connecting, so replies may arrive in any order; each
   message satisfies at most one expect step. A failed expect reports how many candidates there were and why the
   closest one failed.

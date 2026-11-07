@@ -3,6 +3,7 @@ package sockettest
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -228,4 +229,56 @@ func (s *SocketIO) handle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// Presence is a WebSocket server that behaves like a chat backend tracking
+// online users: it answers every text message with {"type":"pong","seen":n}
+// and closes the connection with 4001 "offline" when no message arrives for
+// Idle.
+type Presence struct {
+	*httptest.Server
+	Idle time.Duration
+	mu   sync.Mutex
+	at   []time.Time
+	data []string
+}
+
+// Received returns the arrival time and text of every message so far.
+func (p *Presence) Received() ([]time.Time, []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]time.Time{}, p.at...), append([]string{}, p.data...)
+}
+
+// URL returns the ws:// URL of the server.
+func (p *Presence) URL() string { return "ws" + strings.TrimPrefix(p.Server.URL, "http") + "/presence" }
+
+func NewPresence(t testing.TB, idle time.Duration) *Presence {
+	p := &Presence{Idle: idle}
+	p.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		for n := 1; ; n++ {
+			_ = c.SetReadDeadline(time.Now().Add(p.Idle))
+			_, data, err := c.ReadMessage()
+			if err != nil {
+				var ne interface{ Timeout() bool }
+				if errors.As(err, &ne) && ne.Timeout() {
+					_ = c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "offline"), time.Now().Add(time.Second))
+				}
+				return
+			}
+			p.mu.Lock()
+			p.at = append(p.at, time.Now())
+			p.data = append(p.data, string(data))
+			p.mu.Unlock()
+			reply, _ := json.Marshal(map[string]any{"type": "pong", "seen": n})
+			_ = c.WriteMessage(websocket.TextMessage, reply)
+		}
+	}))
+	t.Cleanup(p.Close)
+	return p
 }

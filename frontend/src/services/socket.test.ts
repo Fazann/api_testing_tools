@@ -77,3 +77,20 @@ describe('display helpers', () => {
     expect(stepSummary('socketio', newSocketStep('socketio', 'wait'))).toBe('Wait 500 ms');
   });
 });
+
+describe('heartbeat steps', () => {
+  it('have defaults, summaries and count as sending', async () => {
+    const { newSocketStep, stepSummary, sendsMessages, newSocketConfig } = await import('./socket');
+    const start = newSocketStep('socketio', 'heartbeat_start');
+    start.message.event = 'heartbeat';
+    expect(start.intervalMs).toBe(5000);
+    expect(stepSummary('socketio', start)).toBe('Start heartbeat heartbeat every 5000 ms');
+    expect(stepSummary('websocket', newSocketStep('websocket', 'heartbeat_stop'))).toBe('Stop heartbeat');
+    expect(stepSummary('websocket', newSocketStep('websocket', 'expect_close'))).toBe(
+      'Expect disconnect within 5000 ms',
+    );
+    const cfg = newSocketConfig('socketio');
+    cfg.steps.push(start);
+    expect(sendsMessages(cfg)).toBe(true);
+  });
+});

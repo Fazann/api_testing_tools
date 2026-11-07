@@ -6,7 +6,15 @@ import CheckboxField from '@/components/base/CheckboxField.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import TextField from '@/components/base/TextField.vue';
 import AssertionEditor from '@/components/request/AssertionEditor.vue';
-import { MAX_WAIT_MS, newSocketStep, SOCKET_ASSERTION_KINDS, STEP_KINDS, stepSummary } from '@/services/socket';
+import {
+  MAX_HEARTBEAT_MS,
+  MAX_WAIT_MS,
+  MIN_HEARTBEAT_MS,
+  newSocketStep,
+  SOCKET_ASSERTION_KINDS,
+  STEP_KINDS,
+  stepSummary,
+} from '@/services/socket';
 import type { RequestKind, SocketConfig, SocketStepKind } from '@/types';
 import { clone, uid } from '@/utils/object';
 
@@ -43,7 +51,9 @@ function move(i: number, d: number) {
     <CalloutBox v-if="socket.steps.length === 0" tone="info">
       No test steps yet. A socket test connects, then runs its steps in order: <strong>send</strong> a message,
       <strong>expect</strong> a reply that passes some checks within a time limit, or <strong>wait</strong>. Replies may
-      arrive in any order; each received message satisfies at most one expect step.
+      arrive in any order; each received message satisfies at most one expect step. For presence (online/offline) tests,
+      <strong>start a heartbeat</strong> that repeats a message in the background, stop it, and
+      <strong>expect the disconnect</strong>.
     </CalloutBox>
     <div v-for="(s, i) in socket.steps" :key="s.id" class="step" :class="[s.kind, { off: !s.enabled }]">
       <div class="row head">
@@ -60,6 +70,37 @@ function move(i: number, d: number) {
         <BaseButton variant="ghost" :aria-label="`Remove step ${i + 1}`" @click="remove(i)">✕</BaseButton>
       </div>
       <SocketMessageFields v-if="s.kind === 'send'" v-model="s.message" :kind="kind" :id-prefix="`step-${s.id}`" />
+      <template v-else-if="s.kind === 'heartbeat_start'">
+        <SocketMessageFields v-model="s.message" :kind="kind" :id-prefix="`step-${s.id}`" />
+        <div class="row">
+          <TextField
+            v-model.number="s.intervalMs"
+            class="small timeout"
+            label="Interval (ms)"
+            type="number"
+            :min="MIN_HEARTBEAT_MS"
+            :max="MAX_HEARTBEAT_MS"
+          />
+          <p class="muted small">
+            Sent now, then on every interval in the background while the next steps run, until a Stop heartbeat step or
+            the end of the test.
+          </p>
+        </div>
+      </template>
+      <p v-else-if="s.kind === 'heartbeat_stop'" class="muted small">
+        Stops the heartbeat, for example to check that the server then marks the user offline.
+      </p>
+      <div v-else-if="s.kind === 'expect_close'" class="row">
+        <TextField
+          v-model="s.timeoutMs"
+          class="small timeout"
+          label="Within (ms)"
+          type="number"
+          min="1"
+          :max="MAX_WAIT_MS"
+        />
+        <p class="muted small">Passes when the server closes the connection in time; later steps do not run.</p>
+      </div>
       <template v-else-if="s.kind === 'expect'">
         <div class="row">
           <BaseInput
@@ -129,8 +170,13 @@ function move(i: number, d: number) {
 .step.send {
   border-left-color: var(--accent);
 }
-.step.expect {
+.step.expect,
+.step.expect_close {
   border-left-color: var(--pass);
+}
+.step.heartbeat_start,
+.step.heartbeat_stop {
+  border-left-color: var(--fail);
 }
 .step.off {
   opacity: 0.6;

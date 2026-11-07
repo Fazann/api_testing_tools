@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"api-test-kits/internal/domain"
@@ -25,6 +26,18 @@ type SocketEvent struct {
 	Closed    bool   `json:"closed,omitempty"`
 	CloseCode int    `json:"closeCode,omitempty"`
 	Error     string `json:"error,omitempty"`
+	// Heartbeat is the console heartbeat's state, sent when it starts, after
+	// every heartbeat and when it stops.
+	Heartbeat *HeartbeatStatus `json:"heartbeat,omitempty"`
+}
+
+// HeartbeatStatus describes the console heartbeat of a session.
+type HeartbeatStatus struct {
+	Running    bool `json:"running"`
+	IntervalMs int  `json:"intervalMs"`
+	Sent       int  `json:"sent"`
+	// Error says why the heartbeat stopped by itself, already redacted.
+	Error string `json:"error,omitempty"`
 }
 
 // SocketSession describes a console connection that has just opened.
@@ -47,6 +60,10 @@ type socketSession struct {
 	red   *redact.Redactor
 	env   *domain.Environment
 	start time.Time
+	emit  func(SocketEvent)
+
+	beatMu sync.Mutex
+	beat   *runner.Heartbeat
 }
 
 // ConnectSocket opens a console connection for a WebSocket or Socket.IO
@@ -117,7 +134,7 @@ func (s *Service) ConnectSocket(ctx context.Context, sessionID string, req domai
 		return SocketSession{}, errors.New(red.String(err.Error()))
 	}
 
-	sess := &socketSession{kind: req.Kind, conn: conn, red: red, env: resolved, start: time.Now()}
+	sess := &socketSession{kind: req.Kind, conn: conn, red: red, env: resolved, start: time.Now(), emit: emit}
 	s.mu.Lock()
 	s.sockets[sessionID] = sess
 	s.mu.Unlock()
@@ -138,6 +155,7 @@ func (s *Service) pumpSocket(id string, sess *socketSession, emit func(SocketEve
 		f := runner.Frame(m, sess.red, sess.start)
 		emit(SocketEvent{SessionID: id, Frame: &f})
 	}
+	sess.stopHeartbeat()
 	code, reason, err := sess.conn.Result()
 	ev := SocketEvent{SessionID: id, Closed: true, CloseCode: code}
 	text := "closed"
@@ -157,30 +175,133 @@ func (s *Service) pumpSocket(id string, sess *socketSession, emit func(SocketEve
 	emit(ev)
 }
 
-// SendSocketMessage resolves variables in m and sends it on an open console
-// session. It returns the transcript frame of what was sent.
-func (s *Service) SendSocketMessage(sessionID string, m domain.SocketMessage) (domain.SocketFrame, error) {
+func (s *Service) session(id string) (*socketSession, error) {
 	s.mu.Lock()
-	sess := s.sockets[sessionID]
+	sess := s.sockets[id]
 	s.mu.Unlock()
 	if sess == nil {
-		return domain.SocketFrame{}, errors.New("the connection is closed; connect again")
+		return nil, errors.New("the connection is closed; connect again")
 	}
+	return sess, nil
+}
+
+// checkMessage validates a console message for the session's protocol.
+func (sess *socketSession) checkMessage(m domain.SocketMessage) (domain.SocketMessage, error) {
 	cfg := domain.SocketConfig{Messages: []domain.SocketMessage{m}}
 	probe := domain.Request{Name: "message", Kind: sess.kind, URLTemplate: "ws://x", Socket: &cfg}
 	probe.Normalize()
 	if err := probe.Validate(); err != nil {
+		return m, err
+	}
+	return probe.Socket.Messages[0], nil
+}
+
+// resolve fills in the message's variables; built-ins such as {{$timestamp}}
+// get a new value every time.
+func (sess *socketSession) resolve(m domain.SocketMessage) (domain.SocketMessage, error) {
+	res := environments.NewResolver(sess.env)
+	resolved := runner.ResolveSocketMessage(m, res)
+	if missing := res.Missing(); len(missing) > 0 {
+		return resolved, &runner.MissingVariablesError{Names: missing}
+	}
+	return resolved, nil
+}
+
+// SendSocketMessage resolves variables in m and sends it on an open console
+// session. It returns the transcript frame of what was sent.
+func (s *Service) SendSocketMessage(sessionID string, m domain.SocketMessage) (domain.SocketFrame, error) {
+	sess, err := s.session(sessionID)
+	if err != nil {
 		return domain.SocketFrame{}, err
 	}
-	res := environments.NewResolver(sess.env)
-	resolved := runner.ResolveSocketMessage(probe.Socket.Messages[0], res)
-	if missing := res.Missing(); len(missing) > 0 {
-		return domain.SocketFrame{}, &runner.MissingVariablesError{Names: missing}
+	m, err = sess.checkMessage(m)
+	if err != nil {
+		return domain.SocketFrame{}, err
+	}
+	resolved, err := sess.resolve(m)
+	if err != nil {
+		return domain.SocketFrame{}, err
 	}
 	if err := sess.conn.Send(runner.Outgoing(resolved)); err != nil {
 		return domain.SocketFrame{}, errors.New(sess.red.String(err.Error()))
 	}
 	return runner.SentFrame(resolved, sess.red, time.Since(sess.start)), nil
+}
+
+// StartSocketHeartbeat sends m on the session now and then every intervalMs
+// from the backend, so the rhythm holds while the window is in the
+// background. Each heartbeat is reported as a sent frame marked Heartbeat
+// through the session's events; a running heartbeat is replaced.
+func (s *Service) StartSocketHeartbeat(sessionID string, m domain.SocketMessage, intervalMs int) (HeartbeatStatus, error) {
+	sess, err := s.session(sessionID)
+	if err != nil {
+		return HeartbeatStatus{}, err
+	}
+	if err := domain.ValidateHeartbeatInterval(intervalMs); err != nil {
+		return HeartbeatStatus{}, err
+	}
+	if m, err = sess.checkMessage(m); err != nil {
+		return HeartbeatStatus{}, err
+	}
+	if _, err := sess.resolve(m); err != nil {
+		return HeartbeatStatus{}, err // report missing variables now, not after the first tick
+	}
+	sess.stopHeartbeat()
+
+	sess.beatMu.Lock()
+	defer sess.beatMu.Unlock()
+	beat := runner.StartHeartbeat(sess.conn, time.Duration(intervalMs)*time.Millisecond,
+		func() (domain.SocketMessage, error) { return sess.resolve(m) },
+		func(sent domain.SocketMessage, n int) {
+			f := runner.SentFrame(sent, sess.red, time.Since(sess.start))
+			f.Heartbeat = true
+			sess.emit(SocketEvent{SessionID: sessionID, Frame: &f,
+				Heartbeat: &HeartbeatStatus{Running: true, IntervalMs: intervalMs, Sent: n}})
+		})
+	sess.beat = beat
+	go func() {
+		// Report the end, whether stopped by the user or by a failed send.
+		<-beat.Done()
+		n, err := beat.Status()
+		st := HeartbeatStatus{IntervalMs: intervalMs, Sent: n}
+		ev := SocketEvent{SessionID: sessionID, Heartbeat: &st}
+		text := fmt.Sprintf("heartbeat stopped after %d message(s)", n)
+		if err != nil {
+			st.Error = sess.red.String(err.Error())
+			text += ": " + st.Error
+		}
+		ev.Frame = &domain.SocketFrame{Direction: domain.FrameSystem, Data: text, AtMs: time.Since(sess.start).Milliseconds()}
+		sess.emit(ev)
+	}()
+	return HeartbeatStatus{Running: true, IntervalMs: intervalMs}, nil
+}
+
+// StopSocketHeartbeat stops the session's heartbeat; it reports how many
+// heartbeats were sent. Stopping when none runs is not an error.
+func (s *Service) StopSocketHeartbeat(sessionID string) HeartbeatStatus {
+	s.mu.Lock()
+	sess := s.sockets[sessionID]
+	s.mu.Unlock()
+	if sess == nil {
+		return HeartbeatStatus{}
+	}
+	return sess.stopHeartbeat()
+}
+
+func (sess *socketSession) stopHeartbeat() HeartbeatStatus {
+	sess.beatMu.Lock()
+	beat := sess.beat
+	sess.beat = nil
+	sess.beatMu.Unlock()
+	if beat == nil {
+		return HeartbeatStatus{}
+	}
+	n, err := beat.Stop()
+	st := HeartbeatStatus{IntervalMs: int(beat.Interval().Milliseconds()), Sent: n}
+	if err != nil {
+		st.Error = sess.red.String(err.Error())
+	}
+	return st
 }
 
 // DisconnectSocket closes a console session; it reports whether one was open.
@@ -192,6 +313,7 @@ func (s *Service) DisconnectSocket(sessionID string) bool {
 	if sess == nil {
 		return false
 	}
+	sess.stopHeartbeat()
 	sess.conn.Close()
 	return true
 }
@@ -203,6 +325,7 @@ func (s *Service) CloseSockets() {
 	s.sockets = map[string]*socketSession{}
 	s.mu.Unlock()
 	for _, sess := range all {
+		sess.stopHeartbeat()
 		sess.conn.Close()
 	}
 }

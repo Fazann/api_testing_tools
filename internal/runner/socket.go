@@ -12,6 +12,7 @@ import (
 
 	"api-test-kits/internal/assertions"
 	"api-test-kits/internal/domain"
+	"api-test-kits/internal/environments"
 	"api-test-kits/internal/httpclient"
 	"api-test-kits/internal/redact"
 	"api-test-kits/internal/socket"
@@ -142,7 +143,7 @@ func (s *socketRun) match(step domain.SocketStep) (*received, int, string) {
 }
 
 // runSocket connects, runs the enabled test steps in order and fills result.
-func (r *Runner) runSocket(ctx context.Context, req domain.Request, p *Prepared, result *domain.RunResult) {
+func (r *Runner) runSocket(ctx context.Context, req domain.Request, env *domain.Environment, p *Prepared, result *domain.RunResult) {
 	red := p.Redactor
 	d, ok := r.client.(socket.Dialer)
 	if !ok {
@@ -180,6 +181,20 @@ func (r *Runner) runSocket(ctx context.Context, req domain.Request, p *Prepared,
 
 	results := []domain.AssertionResult{}
 	stopped := "" // set when the remaining steps cannot run
+	var beat *Heartbeat
+	// stopBeat stops the running heartbeat and describes what it did.
+	stopBeat := func() string {
+		if beat == nil {
+			return ""
+		}
+		n, err := beat.Stop()
+		beat = nil
+		msg := fmt.Sprintf("%d heartbeat(s) sent", n)
+		if err != nil {
+			msg += red.String("; stopped early: " + err.Error())
+		}
+		return msg
+	}
 	for i, step := range p.Socket.Steps {
 		if !step.Enabled {
 			continue
@@ -207,6 +222,47 @@ func (r *Runner) runSocket(ctx context.Context, req domain.Request, p *Prepared,
 			}
 		case step.Kind == domain.StepExpect:
 			run.expect(tctx, step, &res)
+		case step.Kind == domain.StepHeartbeatStart:
+			if prev := stopBeat(); prev != "" {
+				run.system("heartbeat replaced: " + prev)
+			}
+			// Re-resolve the template for every message, so {{$timestamp}} and {{$uuid}} change.
+			template := req.Socket.Steps[i].Message
+			first := true
+			beat = StartHeartbeat(conn, time.Duration(step.IntervalMs)*time.Millisecond, func() (domain.SocketMessage, error) {
+				if first {
+					first = false
+					return step.Message, nil
+				}
+				return ResolveSocketMessage(template, environments.NewResolver(env)), nil
+			}, func(m domain.SocketMessage, _ int) {
+				f := SentFrame(m, red, time.Since(run.start))
+				f.Heartbeat = true
+				run.addFrame(f)
+			})
+			// The first message goes out at once; report whether it could be sent.
+			if err := beat.First(); err != nil {
+				res.Message = red.String("could not send: " + err.Error())
+				beat = nil
+				if errors.Is(err, socket.ErrClosed) {
+					stopped = "the connection closed"
+				}
+			} else {
+				res.Passed = true
+				res.Actual = fmt.Sprintf("every %d ms", step.IntervalMs)
+			}
+		case step.Kind == domain.StepHeartbeatStop:
+			res.Passed = true
+			if msg := stopBeat(); msg != "" {
+				res.Actual = msg
+			} else {
+				res.Message = "no heartbeat was running"
+			}
+		case step.Kind == domain.StepExpectClose:
+			run.expectClose(tctx, step, &res)
+			if res.Passed {
+				stopped = "the server closed the connection"
+			}
 		}
 		if !res.Passed && stopped == "" {
 			switch {
@@ -219,6 +275,9 @@ func (r *Runner) runSocket(ctx context.Context, req domain.Request, p *Prepared,
 		results = append(results, res)
 	}
 
+	if msg := stopBeat(); msg != "" {
+		run.system("heartbeat stopped at the end of the test: " + msg)
+	}
 	conn.Close()
 	<-run.collected
 	code, reason, cerr := conn.Result()
@@ -284,6 +343,30 @@ func (s *socketRun) expect(ctx context.Context, step domain.SocketStep, res *dom
 	}
 }
 
+// expectClose waits for the server to close the connection.
+func (s *socketRun) expectClose(ctx context.Context, step domain.SocketStep, res *domain.AssertionResult) {
+	res.Expected = fmt.Sprintf("the server closes the connection within %d ms", step.TimeoutMs)
+	timer := time.NewTimer(time.Duration(step.TimeoutMs) * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-s.collected:
+		res.Passed = true
+		code, reason, err := s.conn.Result()
+		switch {
+		case code != 0:
+			res.Actual = s.red.String(fmt.Sprintf("closed (%d %s)", code, reason))
+		case err != nil:
+			res.Actual = s.red.String("closed: " + err.Error())
+		default:
+			res.Actual = "closed"
+		}
+	case <-timer.C:
+		res.Message = fmt.Sprintf("the connection was still open after %d ms", step.TimeoutMs)
+	case <-ctx.Done():
+		res.Message = "interrupted"
+	}
+}
+
 func stepLabel(i int, s domain.SocketStep) string {
 	if strings.TrimSpace(s.Description) != "" {
 		return s.Description
@@ -297,6 +380,16 @@ func stepLabel(i int, s domain.SocketStep) string {
 		return n + "send " + clipText(s.Message.Body, 40)
 	case domain.StepWait:
 		return fmt.Sprintf("%swait %d ms", n, s.TimeoutMs)
+	case domain.StepHeartbeatStart:
+		what := clipText(s.Message.Body, 40)
+		if s.Message.Event != "" {
+			what = s.Message.Event
+		}
+		return fmt.Sprintf("%sstart heartbeat %s every %d ms", n, what, s.IntervalMs)
+	case domain.StepHeartbeatStop:
+		return n + "stop heartbeat"
+	case domain.StepExpectClose:
+		return fmt.Sprintf("%sexpect disconnect within %d ms", n, s.TimeoutMs)
 	}
 	return n + "expect " + expectSummary(s)
 }

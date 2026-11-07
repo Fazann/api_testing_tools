@@ -15,6 +15,9 @@ import { uid } from '@/utils/object';
 export const DEFAULT_SOCKETIO_PATH = '/socket.io/';
 export const DEFAULT_EXPECT_TIMEOUT_MS = 5000;
 export const MAX_WAIT_MS = 60000;
+export const MIN_HEARTBEAT_MS = 100;
+export const MAX_HEARTBEAT_MS = 600000;
+export const DEFAULT_HEARTBEAT_MS = 5000;
 
 /** Checks that apply to a message body; status, headers and response time do not. */
 export const SOCKET_ASSERTION_KINDS: readonly AssertionKind[] = [
@@ -29,6 +32,9 @@ export const STEP_KINDS: { value: SocketStepKind; label: string }[] = [
   { value: 'send', label: 'Send' },
   { value: 'expect', label: 'Expect' },
   { value: 'wait', label: 'Wait' },
+  { value: 'heartbeat_start', label: 'Start heartbeat' },
+  { value: 'heartbeat_stop', label: 'Stop heartbeat' },
+  { value: 'expect_close', label: 'Expect disconnect' },
 ];
 
 /** Event names the Socket.IO client and server use themselves. */
@@ -61,6 +67,7 @@ export function newSocketStep(kind: RequestKind, stepKind: SocketStepKind): Sock
     event: '',
     assertions: [],
     timeoutMs: stepKind === 'wait' ? 500 : DEFAULT_EXPECT_TIMEOUT_MS,
+    ...(stepKind === 'heartbeat_start' ? { intervalMs: DEFAULT_HEARTBEAT_MS } : {}),
   };
 }
 
@@ -86,7 +93,7 @@ export function requestBadge(r: Pick<Request, 'kind' | 'method'>): string {
 
 /** A socket test may change server state when it sends anything. */
 export function sendsMessages(cfg: SocketConfig | undefined): boolean {
-  return !!cfg?.steps.some((s) => s.enabled && s.kind === 'send');
+  return !!cfg?.steps.some((s) => s.enabled && (s.kind === 'send' || s.kind === 'heartbeat_start'));
 }
 
 /** Problem with a message before sending, or '' when it can be sent. */
@@ -124,6 +131,14 @@ export function stepSummary(kind: RequestKind, s: SocketStep): string {
       return kind === 'socketio' ? `Send ${s.message.event || '(no event)'}` : `Send ${clip(s.message.body, 40)}`;
     case 'wait':
       return `Wait ${s.timeoutMs} ms`;
+    case 'heartbeat_start': {
+      const what = kind === 'socketio' ? s.message.event || '(no event)' : clip(s.message.body, 30);
+      return `Start heartbeat ${what} every ${s.intervalMs ?? DEFAULT_HEARTBEAT_MS} ms`;
+    }
+    case 'heartbeat_stop':
+      return 'Stop heartbeat';
+    case 'expect_close':
+      return `Expect disconnect within ${s.timeoutMs} ms`;
     default: {
       const what = s.expectAck ? 'acknowledgement' : 'message';
       const checks = s.assertions.filter((a) => a.enabled).length;

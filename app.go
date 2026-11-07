@@ -155,6 +155,16 @@ func (a *App) SendSocketMessage(sessionID string, m domain.SocketMessage) (domai
 
 func (a *App) DisconnectSocket(sessionID string) bool { return a.svc.DisconnectSocket(sessionID) }
 
+// StartSocketHeartbeat sends m now and then every intervalMs on an open
+// console session; heartbeats arrive as "socket:event" events.
+func (a *App) StartSocketHeartbeat(sessionID string, m domain.SocketMessage, intervalMs int) (service.HeartbeatStatus, error) {
+	return a.svc.StartSocketHeartbeat(sessionID, m, intervalMs)
+}
+
+func (a *App) StopSocketHeartbeat(sessionID string) service.HeartbeatStatus {
+	return a.svc.StopSocketHeartbeat(sessionID)
+}
+
 // ---- security tests ----
 
 func (a *App) GetRaceTest(requestID string) (*domain.RaceTest, error) {

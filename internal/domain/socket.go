@@ -37,6 +37,10 @@ const (
 	MaxSocketWaitMs       = 60_000
 	MaxSocketEventLength  = 200
 	MaxSocketSubprotocols = 10
+	// Heartbeat intervals, for the console and for heartbeat steps.
+	MinHeartbeatIntervalMs     = 100
+	MaxHeartbeatIntervalMs     = 600_000
+	DefaultHeartbeatIntervalMs = 5_000
 )
 
 // SocketBodyType says how a message body is sent: JSON is parsed and sent as a
@@ -74,6 +78,15 @@ const (
 	StepExpect SocketStepKind = "expect"
 	// StepWait pauses for TimeoutMs.
 	StepWait SocketStepKind = "wait"
+	// StepHeartbeatStart sends Message now and then every IntervalMs in the
+	// background while the following steps run, until StepHeartbeatStop or
+	// the end of the test. It models a chat client's presence heartbeat.
+	StepHeartbeatStart SocketStepKind = "heartbeat_start"
+	// StepHeartbeatStop stops the running heartbeat.
+	StepHeartbeatStop SocketStepKind = "heartbeat_stop"
+	// StepExpectClose waits up to TimeoutMs for the server to close the
+	// connection, e.g. after heartbeats stopped.
+	StepExpectClose SocketStepKind = "expect_close"
 )
 
 // SocketStep is one step of a socket request's test.
@@ -82,8 +95,10 @@ type SocketStep struct {
 	Kind        SocketStepKind `json:"kind"`
 	Description string         `json:"description,omitempty"`
 	Enabled     bool           `json:"enabled"`
-	// Message is sent by StepSend.
+	// Message is sent by StepSend and repeated by StepHeartbeatStart.
 	Message SocketMessage `json:"message"`
+	// IntervalMs is the time between heartbeats of StepHeartbeatStart.
+	IntervalMs int `json:"intervalMs,omitempty"`
 	// Event filters StepExpect to one Socket.IO event ("" matches any message).
 	Event string `json:"event,omitempty"`
 	// ExpectAck makes StepExpect wait for the server's acknowledgement of a
@@ -92,7 +107,7 @@ type SocketStep struct {
 	// Assertions are evaluated against a received message's body (json_path,
 	// body, valid_json, required_fields, aggregate).
 	Assertions []Assertion `json:"assertions"`
-	// TimeoutMs is how long StepExpect waits, or how long StepWait pauses.
+	// TimeoutMs is how long StepExpect and StepExpectClose wait, or how long StepWait pauses.
 	TimeoutMs int `json:"timeoutMs"`
 }
 
@@ -143,8 +158,11 @@ func (c *SocketConfig) normalize(kind RequestKind) {
 		if s.Assertions == nil {
 			s.Assertions = []Assertion{}
 		}
-		if s.Kind == StepExpect && s.TimeoutMs <= 0 {
+		if (s.Kind == StepExpect || s.Kind == StepExpectClose) && s.TimeoutMs <= 0 {
 			s.TimeoutMs = DefaultExpectTimeout
+		}
+		if s.Kind == StepHeartbeatStart && s.IntervalMs <= 0 {
+			s.IntervalMs = DefaultHeartbeatIntervalMs
 		}
 	}
 }
@@ -238,8 +256,26 @@ func (s *SocketStep) validate(kind RequestKind) error {
 		if s.TimeoutMs < 1 || s.TimeoutMs > MaxSocketWaitMs {
 			return fmt.Errorf("wait must be between 1 and %d ms", MaxSocketWaitMs)
 		}
+	case StepHeartbeatStart:
+		if err := ValidateHeartbeatInterval(s.IntervalMs); err != nil {
+			return err
+		}
+		return s.Message.validate(kind)
+	case StepHeartbeatStop:
+	case StepExpectClose:
+		if s.TimeoutMs < 1 || s.TimeoutMs > MaxSocketWaitMs {
+			return fmt.Errorf("expect disconnect timeout must be between 1 and %d ms", MaxSocketWaitMs)
+		}
 	default:
 		return fmt.Errorf("unknown step kind %q", s.Kind)
+	}
+	return nil
+}
+
+// ValidateHeartbeatInterval checks a heartbeat interval in milliseconds.
+func ValidateHeartbeatInterval(ms int) error {
+	if ms < MinHeartbeatIntervalMs || ms > MaxHeartbeatIntervalMs {
+		return fmt.Errorf("heartbeat interval must be between %d ms and %d s", MinHeartbeatIntervalMs, MaxHeartbeatIntervalMs/1000)
 	}
 	return nil
 }
@@ -260,7 +296,7 @@ func (c *SocketConfig) SendsMessages() bool {
 		return false
 	}
 	for _, s := range c.Steps {
-		if s.Enabled && s.Kind == StepSend {
+		if s.Enabled && (s.Kind == StepSend || s.Kind == StepHeartbeatStart) {
 			return true
 		}
 	}
@@ -287,6 +323,8 @@ type SocketFrame struct {
 	Binary bool   `json:"binary,omitempty"`
 	// Ack marks a Socket.IO acknowledgement of a sent event.
 	Ack bool `json:"ack,omitempty"`
+	// Heartbeat marks a message sent by a heartbeat.
+	Heartbeat bool `json:"heartbeat,omitempty"`
 	// AtMs is the time since the connection opened.
 	AtMs int64 `json:"atMs"`
 	// Truncated is set when Data was cut at the history size limit.

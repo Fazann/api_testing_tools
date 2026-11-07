@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import { messageProblem, newSocketMessage } from '@/services/socket';
 import { useSockets } from '@/stores/sockets';
@@ -33,6 +34,28 @@ const saved = computed(() => props.request.socket?.messages ?? []);
 const savedOptions = computed(() => saved.value.map((m) => ({ value: m.id, label: m.name || m.event || m.body })));
 const canSend = computed(() => c.value.status === 'open' && !messageProblem(props.request.kind, composer.value));
 const STATUS_LABEL = { idle: 'Not connected', connecting: 'Connecting…', open: 'Connected', closed: 'Disconnected' };
+
+// Heartbeat: the composer's message, sent by the backend every N seconds (presence / keep-alive testing).
+const MIN_INTERVAL_S = 0.1;
+const MAX_INTERVAL_S = 600;
+const intervalSeconds = ref(5);
+const beat = computed(() => c.value.heartbeat);
+const beating = computed(() => !!beat.value?.running && c.value.status === 'open');
+const intervalValid = computed(
+  () => intervalSeconds.value >= MIN_INTERVAL_S && intervalSeconds.value <= MAX_INTERVAL_S,
+);
+const beatStatus = computed(() => {
+  const b = beat.value;
+  if (!b) return '';
+  const every = `every ${+(b.intervalMs / 1000).toFixed(3)} s`;
+  if (b.running) return `♥ ${b.sent} sent, ${every}`;
+  return `Stopped after ${b.sent} heartbeat${b.sent === 1 ? '' : 's'}${b.error ? `: ${b.error}` : ''}`;
+});
+
+async function startHeartbeat() {
+  if (!canSend.value || !intervalValid.value) return;
+  await sockets.startHeartbeat(key.value, composer.value, Math.round(intervalSeconds.value * 1000));
+}
 
 function load(id: string | undefined) {
   const m = saved.value.find((x) => x.id === id);
@@ -92,6 +115,36 @@ async function saveMessage() {
             >.</span
           >
         </div>
+        <div class="row heartbeat" role="group" aria-label="Heartbeat">
+          <span class="small">Send every</span>
+          <BaseInput
+            v-model.number="intervalSeconds"
+            class="interval"
+            type="number"
+            :min="MIN_INTERVAL_S"
+            :max="MAX_INTERVAL_S"
+            step="0.1"
+            aria-label="Heartbeat interval in seconds"
+            :disabled="beating"
+          />
+          <span class="small">s</span>
+          <BaseButton v-if="beating" small variant="danger" @click="sockets.stopHeartbeat(key)"
+            >Stop heartbeat</BaseButton
+          >
+          <BaseButton
+            v-else
+            small
+            :disabled="!canSend || !intervalValid"
+            :title="
+              intervalValid
+                ? 'Send this message now and then on every interval, e.g. a presence heartbeat'
+                : `The interval must be between ${MIN_INTERVAL_S} and ${MAX_INTERVAL_S} seconds`
+            "
+            @click="startHeartbeat"
+            >Start heartbeat</BaseButton
+          >
+          <span v-if="beatStatus" class="small" :class="beating ? 'beat' : 'muted'">{{ beatStatus }}</span>
+        </div>
       </div>
       <SocketFrameList
         class="log"
@@ -146,5 +199,17 @@ async function saveMessage() {
 }
 .log {
   min-width: 0;
+}
+.heartbeat {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.interval {
+  width: 80px;
+}
+.beat {
+  color: var(--fail);
 }
 </style>

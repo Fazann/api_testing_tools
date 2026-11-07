@@ -14,6 +14,7 @@ import type {
   EnvComparison,
   Environment,
   Folder,
+  HeartbeatStatus,
   ImportResult,
   MatrixReport,
   PerformanceCheck,
@@ -182,6 +183,9 @@ export const api = {
 
   connectSocket: (sessionId: string, r: Request, envId: string, confirmed: boolean) =>
     call<SocketSession>('ConnectSocket', sessionId, r, envId, confirmed),
+  startSocketHeartbeat: (sessionId: string, m: SocketMessage, intervalMs: number) =>
+    call<HeartbeatStatus>('StartSocketHeartbeat', sessionId, m, intervalMs),
+  stopSocketHeartbeat: (sessionId: string) => call<HeartbeatStatus>('StopSocketHeartbeat', sessionId),
   sendSocketMessage: (sessionId: string, m: SocketMessage) => call<SocketFrame>('SendSocketMessage', sessionId, m),
   disconnectSocket: (sessionId: string) => call<boolean>('DisconnectSocket', sessionId),
 };

@@ -307,7 +307,7 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 	if req.Kind.IsSocket() {
 		// Socket tests have steps instead of a response: no post-response
 		// scripts, assertions or baseline.
-		r.runSocket(ctx, req, prepared, &result)
+		r.runSocket(ctx, req, env, prepared, &result)
 		return finish(red)
 	}
 

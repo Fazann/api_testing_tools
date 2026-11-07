@@ -14,6 +14,8 @@ const props = defineProps<{ frames: readonly SocketFrame[]; kind: RequestKind; e
 type Direction = SocketFrame['direction'] | 'all';
 const direction = ref<Direction>('all');
 const query = ref('');
+const hideHeartbeats = ref(false);
+const heartbeats = computed(() => props.frames.filter((f) => f.heartbeat).length);
 const expanded = ref<number | null>(null);
 
 const indexed = computed(() => props.frames.map((frame, index) => ({ frame, index })));
@@ -27,6 +29,7 @@ const visible = computed(() => {
   return indexed.value.filter(
     ({ frame: f }) =>
       (direction.value === 'all' || f.direction === direction.value) &&
+      !(hideHeartbeats.value && f.heartbeat) &&
       (!q || f.data.toLowerCase().includes(q) || (f.event ?? '').toLowerCase().includes(q)),
   );
 });
@@ -60,6 +63,9 @@ function toggle(index: number) {
         @click="direction = f.id"
         >{{ f.label }}</FilterChip
       >
+      <FilterChip v-if="heartbeats" :active="hideHeartbeats" @click="hideHeartbeats = !hideHeartbeats"
+        >Hide heartbeats ({{ heartbeats }})</FilterChip
+      >
       <BaseInput v-model="query" class="grow" placeholder="Search messages…" aria-label="Search messages" />
     </div>
     <DataTable
@@ -74,6 +80,7 @@ function toggle(index: number) {
       <template #cell-at="{ row }">{{ formatDuration(row.frame.atMs) }}</template>
       <template #cell-direction="{ row }">
         <span :class="row.frame.direction" :title="row.frame.direction">{{ ARROW[row.frame.direction] }}</span>
+        <span v-if="row.frame.heartbeat" class="beat" title="Heartbeat">♥</span>
       </template>
       <template #cell-event="{ row }">
         {{ row.frame.event }}<span v-if="row.frame.ack" class="muted small"> (ack)</span>
@@ -102,8 +109,12 @@ function toggle(index: number) {
   width: 70px;
   white-space: nowrap;
 }
+.beat {
+  color: var(--fail);
+  margin-left: 2px;
+}
 .frames :deep(.dir) {
-  width: 24px;
+  width: 36px;
   text-align: center;
 }
 .frames :deep(.event) {

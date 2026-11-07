@@ -179,6 +179,12 @@ func (e *events) emit(ev service.SocketEvent) {
 	}
 }
 
+func (e *events) snapshot() []service.SocketEvent {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]service.SocketEvent{}, e.list...)
+}
+
 // waitFor waits until an event satisfies ok.
 func (e *events) waitFor(t *testing.T, ok func(service.SocketEvent) bool) service.SocketEvent {
 	t.Helper()

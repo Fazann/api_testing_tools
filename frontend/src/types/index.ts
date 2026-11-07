@@ -82,7 +82,7 @@ export interface SocketMessage {
   ack?: boolean;
 }
 
-export type SocketStepKind = 'send' | 'expect' | 'wait';
+export type SocketStepKind = 'send' | 'expect' | 'wait' | 'heartbeat_start' | 'heartbeat_stop' | 'expect_close';
 
 export interface SocketStep {
   id: string;
@@ -90,13 +90,15 @@ export interface SocketStep {
   description?: string;
   enabled: boolean;
   message: SocketMessage;
+  /** Start heartbeat: milliseconds between messages. */
+  intervalMs?: number;
   /** Expect: only this Socket.IO event ('' = any message). */
   event?: string;
   /** Expect: the acknowledgement of a sent event instead of an event. */
   expectAck?: boolean;
   /** Expect: checks on the message body. */
   assertions: Assertion[];
-  /** How long an expect step waits, or how long a wait step pauses. */
+  /** How long an expect or expect-disconnect step waits, or how long a wait step pauses. */
   timeoutMs: number;
 }
 
@@ -118,6 +120,8 @@ export interface SocketFrame {
   data: string;
   binary?: boolean;
   ack?: boolean;
+  /** Sent by a heartbeat. */
+  heartbeat?: boolean;
   /** Milliseconds since the connection opened. */
   atMs: number;
   truncated?: boolean;
@@ -151,6 +155,16 @@ export interface SocketEvent {
   frame?: SocketFrame;
   closed?: boolean;
   closeCode?: number;
+  error?: string;
+  /** The console heartbeat's state: on start, after every heartbeat, and when it stops. */
+  heartbeat?: HeartbeatStatus;
+}
+
+export interface HeartbeatStatus {
+  running: boolean;
+  intervalMs: number;
+  sent: number;
+  /** Why it stopped by itself (e.g. the connection closed). */
   error?: string;
 }
 
