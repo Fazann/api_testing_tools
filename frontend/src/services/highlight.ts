@@ -19,7 +19,9 @@ export type TokenKind =
   | 'variable'
   | 'property'
   | 'type'
-  | 'regex';
+  | 'regex'
+  /** A {{variable}} placeholder in a request body. */
+  | 'template';
 
 export interface Token {
   text: string;
@@ -38,10 +40,30 @@ function push(out: Token[], text: string, kind: TokenKind) {
 
 // ---- JSON ----
 
-const JSON_TOKEN = /("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],:])|(\s+)/y;
+const JSON_TOKEN =
+  /("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|(\{\{[^{}\n]*\}\})|([{}[\],:])|(\s+)/y;
+const TEMPLATE = /\{\{[^{}\n]*\}\}/g;
+
+/** Pushes a string token, splitting out {{variable}} placeholders when templates are on. */
+function pushString(out: Token[], text: string, kind: TokenKind, templates: boolean) {
+  if (!templates) return push(out, text, kind);
+  let last = 0;
+  for (const m of text.matchAll(TEMPLATE)) {
+    push(out, text.slice(last, m.index), kind);
+    push(out, m[0], 'template');
+    last = m.index + m[0].length;
+  }
+  push(out, text.slice(last), kind);
+}
+
+export interface JsonHighlightOptions {
+  /** Mark {{variable}} placeholders (request bodies), also inside strings. */
+  templates?: boolean;
+}
 
 /** Tokenizes JSON text; a string followed by ':' is a key. Unknown characters are kept as plain text. */
-export function highlightJson(text: string): Token[] {
+export function highlightJson(text: string, options: JsonHighlightOptions = {}): Token[] {
+  const templates = options.templates ?? false;
   const out: Token[] = [];
   let i = 0;
   while (i < text.length) {
@@ -52,13 +74,20 @@ export function highlightJson(text: string): Token[] {
       i++;
       continue;
     }
-    const [all, str, num, lit, punct] = m;
+    const [all, str, num, lit, tpl, punct] = m;
+    if (tpl !== undefined && !templates) {
+      // Not a placeholder here: tokenize it like any other text, one character at a time.
+      push(out, '{', 'punct');
+      i++;
+      continue;
+    }
     if (str !== undefined) {
       let j = i + all.length;
       while (j < text.length && /\s/.test(text[j])) j++;
-      push(out, all, text[j] === ':' ? 'key' : 'string');
+      pushString(out, all, text[j] === ':' ? 'key' : 'string', templates);
     } else if (num !== undefined) push(out, all, 'number');
     else if (lit !== undefined) push(out, all, 'literal');
+    else if (tpl !== undefined) push(out, all, 'template');
     else if (punct !== undefined) push(out, all, 'punct');
     else push(out, all, '');
     i += all.length;

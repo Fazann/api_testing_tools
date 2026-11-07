@@ -5,6 +5,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
 import CheckboxField from '@/components/base/CheckboxField.vue';
+import CodeEditor from '@/components/base/CodeEditor.vue';
 import RadioGroup from '@/components/base/RadioGroup.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import TabBar, { type Tab as TabItem } from '@/components/base/TabBar.vue';
@@ -254,14 +255,22 @@ const httpTabs = computed<TabItem<Tab>[]>(() => [
         <CalloutBox v-if="!bodyAllowed && req.bodyType !== 'none'" small>
           {{ req.method }} requests are sent without a body.
         </CalloutBox>
+        <CodeEditor
+          v-if="req.bodyType === 'json'"
+          v-model="req.body"
+          language="json"
+          theme="app"
+          label="Request body"
+          :min-lines="12"
+          placeholder='{"amount": 10}'
+        />
         <BaseInput
-          v-if="req.bodyType !== 'none'"
+          v-else-if="req.bodyType !== 'none'"
           multiline
           v-model="req.body"
           rows="12"
           spellcheck="false"
           aria-label="Request body"
-          :placeholder="req.bodyType === 'json' ? '{&quot;amount&quot;: 10}' : ''"
         />
         <p v-if="jsonError" class="fail small">Invalid JSON: {{ jsonError }}</p>
       </div>

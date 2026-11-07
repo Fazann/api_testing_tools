@@ -4,9 +4,9 @@ import { nextTick } from 'vue';
 
 import CodeEditor from './CodeEditor.vue';
 
-function setup(value: string) {
+function setup(value: string, extra: Record<string, unknown> = {}) {
   const wrapper = mount(CodeEditor, {
-    props: { modelValue: value, 'onUpdate:modelValue': (v: string) => wrapper.setProps({ modelValue: v }) },
+    props: { modelValue: value, 'onUpdate:modelValue': (v: string) => wrapper.setProps({ modelValue: v }), ...extra },
     attachTo: document.body,
   });
   return wrapper;
@@ -31,5 +31,17 @@ describe('CodeEditor', () => {
     el.setSelectionRange(el.value.length, el.value.length);
     await ta.trigger('keydown', { key: 'Tab' });
     expect(w.props('modelValue')).toBe('if (x) {\n    ');
+  });
+
+  it('highlights a JSON request body in the app theme, with {{variables}}', () => {
+    const w = setup('{\n  "amount": {{amount}},\n  "to": "acc_{{id}}"\n}', { language: 'json', theme: 'app' });
+    expect(w.classes()).toContain('theme-app');
+    expect(w.find('.highlight .tk-key').text()).toBe('"amount"');
+    expect(w.findAll('.highlight .tk-template').map((t) => t.text())).toEqual(['{{amount}}', '{{id}}']);
+    expect(w.findAll('.highlight .tk-string').map((t) => t.text())).toEqual(['"acc_', '"']);
+  });
+
+  it('keeps the Dark+ theme by default', () => {
+    expect(setup('x').classes()).not.toContain('theme-app');
   });
 });

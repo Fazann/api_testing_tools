@@ -27,6 +27,8 @@
   --json-number: #098658;
   --json-literal: #0000ff;
   --json-punct: #3b3b3b;
+  /* {{variable}} placeholders in request bodies. */
+  --json-template: #af00db;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,6 +53,7 @@
     --json-number: #b5cea8;
     --json-literal: #569cd6;
     --json-punct: #d4d4d4;
+    --json-template: #c586c0;
     color-scheme: dark;
   }
 }

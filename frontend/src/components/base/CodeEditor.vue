@@ -10,8 +10,18 @@ import { HIGHLIGHT_LIMIT, highlightJs, highlightJson, type Token } from '@/servi
  */
 const code = defineModel<string>({ required: true });
 const props = withDefaults(
-  defineProps<{ language?: 'javascript' | 'json'; placeholder?: string; label?: string; minLines?: number }>(),
-  { language: 'javascript', placeholder: '', label: 'Code', minLines: 14 },
+  defineProps<{
+    language?: 'javascript' | 'json';
+    placeholder?: string;
+    label?: string;
+    minLines?: number;
+    /**
+     * 'dark' is VS Code Dark+ (scripts); 'app' follows the app's light or dark
+     * theme with the response viewer's JSON colours (request bodies).
+     */
+    theme?: 'dark' | 'app';
+  }>(),
+  { language: 'javascript', placeholder: '', label: 'Code', minLines: 14, theme: 'dark' },
 );
 
 const input = ref<HTMLTextAreaElement | null>(null);
@@ -21,7 +31,7 @@ const caretLine = ref(1);
 
 const tokens = computed<Token[]>(() => {
   if (code.value.length > HIGHLIGHT_LIMIT) return [{ text: code.value, kind: '' }];
-  return props.language === 'json' ? highlightJson(code.value) : highlightJs(code.value);
+  return props.language === 'json' ? highlightJson(code.value, { templates: true }) : highlightJs(code.value);
 });
 const shift = computed(() => ({ transform: `translate(${-scrollLeft.value}px, ${-scrollTop.value}px)` }));
 /** A final newline so an empty last line still has height. */
@@ -72,7 +82,7 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="code-editor" :style="{ height }">
+  <div class="code-editor" :class="{ 'theme-app': theme === 'app' }" :style="{ height }">
     <div class="gutter" aria-hidden="true">
       <div :style="{ transform: `translateY(${-scrollTop}px)` }">
         <div v-for="n in lineCount" :key="n" :class="{ current: n === caretLine }">{{ n }}</div>
@@ -124,6 +134,8 @@ function onKeydown(e: KeyboardEvent) {
   --ce-function: #dcdcaa;
   --ce-variable: #9cdcfe;
   --ce-type: #4ec9b0;
+  --ce-key: var(--ce-variable);
+  --ce-template: #c586c0;
   display: flex;
   min-height: 120px;
   resize: vertical;
@@ -135,6 +147,23 @@ function onKeydown(e: KeyboardEvent) {
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.5;
+}
+.code-editor.theme-app {
+  --ce-bg: var(--bg);
+  --ce-fg: var(--fg);
+  --ce-border: var(--line);
+  --ce-focus: var(--accent);
+  --ce-gutter: var(--fg-muted);
+  --ce-gutter-line: var(--line);
+  --ce-gutter-current: var(--fg);
+  --ce-caret: var(--fg);
+  --ce-selection: var(--focus);
+  --ce-placeholder: var(--fg-muted);
+  --ce-key: var(--json-key);
+  --ce-string: var(--json-string);
+  --ce-number: var(--json-number);
+  --ce-keyword: var(--json-literal);
+  --ce-template: var(--json-template);
 }
 .code-editor:focus-within {
   border-color: var(--ce-focus);
@@ -224,14 +253,23 @@ textarea::placeholder {
   color: var(--ce-function);
 }
 .tk-variable,
-.tk-property,
-.tk-key {
+.tk-property {
   color: var(--ce-variable);
+}
+.tk-key {
+  color: var(--ce-key);
+}
+.tk-template {
+  color: var(--ce-template);
+  font-style: italic;
 }
 .tk-type {
   color: var(--ce-type);
 }
 .tk-punct {
   color: var(--ce-fg);
+}
+.theme-app .tk-literal {
+  font-weight: 600;
 }
 </style>

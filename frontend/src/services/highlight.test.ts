@@ -27,6 +27,22 @@ describe('highlightJson', () => {
   });
 });
 
+describe('highlightJson templates', () => {
+  it('marks {{variables}} only when asked, keeping every character', () => {
+    const src = '{"a": {{n}}, "b": "x{{v}}y", "c": "{{}}"}';
+    const on = highlightJson(src, { templates: true });
+    expect(on.map((t) => t.text).join('')).toBe(src);
+    expect(on.filter((t) => t.kind === 'template').map((t) => t.text)).toEqual(['{{n}}', '{{v}}', '{{}}']);
+    expect(kindOf(on, '"a"')).toBe('key');
+    expect(kindOf(on, '"x')).toBe('string');
+
+    const off = highlightJson(src);
+    expect(off.map((t) => t.text).join('')).toBe(src);
+    expect(off.some((t) => t.kind === 'template')).toBe(false);
+    expect(kindOf(off, '"x{{v}}y"')).toBe('string');
+  });
+});
+
 describe('highlightJs', () => {
   it('classifies like VS Code Dark+', () => {
     const t = highlightJs(
