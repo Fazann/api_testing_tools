@@ -2,30 +2,20 @@
 import { nextTick, ref, watch } from 'vue';
 
 import MethodBadge from '@/components/base/MethodBadge.vue';
+import { useCloseTab } from '@/composables/useCloseTab';
 import { requestBadge } from '@/services/socket';
 import { useRunner } from '@/stores/runner';
-import { useUi } from '@/stores/ui';
 import { useWorkspace, type OpenTab } from '@/stores/workspace';
 
 // One tab per open request. Opening or creating a request appends a tab and
-// keeps the others; every tab can be closed (middle-click works too).
+// keeps the others; every tab can be closed (middle-click and Ctrl+W work too).
+// Open tabs are restored on the next start (see restoreTabs in the workspace store).
 const ws = useWorkspace();
-const ui = useUi();
 const runner = useRunner();
 const strip = ref<HTMLElement | null>(null);
 
-async function close(t: OpenTab) {
-  if (ws.tabIsDirty(t.key)) {
-    const discard = await ui.confirm({
-      title: 'Close without saving?',
-      message: `"${t.draft.name}" has unsaved changes. Closing the tab discards them.`,
-      confirmLabel: 'Discard and close',
-      danger: true,
-    });
-    if (!discard) return;
-  }
-  ws.closeTab(t.key);
-}
+const closeTab = useCloseTab();
+const close = (t: OpenTab) => closeTab(t.key);
 
 function collectionName(t: OpenTab) {
   return ws.collections.find((c) => c.id === t.draft.collectionId)?.name ?? '';
@@ -72,7 +62,7 @@ watch(
         type="button"
         class="rtab-close"
         :aria-label="`Close ${t.draft.name}`"
-        title="Close tab"
+        title="Close tab (Ctrl+W)"
         @click="close(t)"
       >
         ×

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { api } from '@/services/api';
 import { newRequest } from '@/services/model';
@@ -14,6 +14,25 @@ export interface OpenTab {
 }
 
 let nextTabKey = 1;
+
+/** Where the open tabs are remembered between starts (this machine only). */
+export const TABS_STORAGE_KEY = 'arg.openTabs';
+
+/** The remembered tabs: saved requests only, without unsaved edits (which may hold secrets). */
+interface SavedTabs {
+  tabs: { id: string; collectionId: string }[];
+  /** Request id of the active tab. */
+  active: string;
+}
+
+function readSavedTabs(): SavedTabs | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) ?? 'null') as SavedTabs | null;
+    return v && Array.isArray(v.tabs) ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 export const useWorkspace = defineStore('workspace', () => {
   const collections = ref<Collection[]>([]);
@@ -36,6 +55,49 @@ export const useWorkspace = defineStore('workspace', () => {
   const currentCollection = computed(() =>
     draft.value ? (collections.value.find((c) => c.id === draft.value!.collectionId) ?? null) : null,
   );
+
+  // Remember the open tabs once the ones from the last session are back, so
+  // an early empty state cannot overwrite them.
+  let tabsRestored = false;
+  watch(
+    () => JSON.stringify({ tabs: tabs.value.map((t) => t.draft.id), active: draft.value?.id ?? '' }),
+    () => {
+      if (!tabsRestored) return;
+      const saved: SavedTabs = {
+        tabs: tabs.value.filter((t) => t.draft.id).map((t) => ({ id: t.draft.id, collectionId: t.draft.collectionId })),
+        active: draft.value?.id ?? '',
+      };
+      try {
+        localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(saved));
+      } catch {
+        /* storage may be unavailable; restoring tabs is a convenience only */
+      }
+    },
+  );
+
+  /**
+   * Reopens the tabs of the last session, in order, with their saved state.
+   * Requests or collections deleted since are skipped. Call after load().
+   */
+  async function restoreTabs() {
+    try {
+      const saved = readSavedTabs();
+      if (!saved) return;
+      const known = new Set(collections.value.map((c) => c.id));
+      const ids = [...new Set(saved.tabs.map((t) => t.collectionId))].filter((id) => known.has(id));
+      await Promise.all(ids.map((id) => (trees.value[id] ? null : loadTree(id).catch(() => null))));
+      let activeKeyToRestore = '';
+      for (const t of saved.tabs) {
+        const r = trees.value[t.collectionId]?.requests.find((x) => x.id === t.id);
+        if (!r || tabs.value.some((x) => x.draft.id === r.id)) continue;
+        open(r);
+        if (r.id === saved.active) activeKeyToRestore = activeKey.value;
+      }
+      if (activeKeyToRestore) activeKey.value = activeKeyToRestore;
+    } finally {
+      tabsRestored = true;
+    }
+  }
 
   async function load() {
     collections.value = await api.listCollections();
@@ -260,6 +322,7 @@ export const useWorkspace = defineStore('workspace', () => {
     renameFolder,
     deleteFolder,
     open,
+    restoreTabs,
     activate,
     closeTab,
     tabIsDirty,

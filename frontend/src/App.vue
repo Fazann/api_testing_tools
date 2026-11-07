@@ -7,6 +7,7 @@ import AppDialog from '@/components/layout/AppDialog.vue';
 import AppToasts from '@/components/layout/AppToasts.vue';
 import TopBar from '@/components/layout/TopBar.vue';
 import UpdateBanner from '@/components/layout/UpdateBanner.vue';
+import { useCloseTab } from '@/composables/useCloseTab';
 import { api, BackendUnavailableError } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useRunner } from '@/stores/runner';
@@ -25,11 +26,13 @@ const envs = useEnvironments();
 const runner = useRunner();
 const updates = useUpdates();
 const backendMissing = ref(false);
+const closeTab = useCloseTab();
 
 onMounted(async () => {
   try {
     await api.appInfo();
     await Promise.all([ws.load(), envs.load()]);
+    await ws.restoreTabs();
     // Background update check; never blocks startup or shows errors.
     api
       .getSettings()
@@ -51,6 +54,10 @@ function onKey(e: KeyboardEvent) {
     ws.saveDraft()
       .then(() => ui.toast('Saved', 'success'))
       .catch(ui.error);
+  } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w' && ui.view === 'requests') {
+    // Ctrl+W closes the active request tab, not the window. Inside a dialog it does nothing.
+    e.preventDefault();
+    if (ws.activeKey && !(e.target as Element | null)?.closest?.('.backdrop')) void closeTab(ws.activeKey);
   } else if (mod && e.key === 'Enter' && ws.draft && ui.view === 'requests') {
     e.preventDefault();
     runner.send();

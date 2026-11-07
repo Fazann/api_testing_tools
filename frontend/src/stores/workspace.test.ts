@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newRequest } from '@/services/model';
 import type { Request } from '@/types';
 
-import { useWorkspace } from './workspace';
+import { TABS_STORAGE_KEY, useWorkspace } from './workspace';
 
 const req = (id: string, name = id, collectionId = 'c1'): Request => ({ ...newRequest(collectionId, ''), id, name });
 
@@ -122,5 +122,96 @@ describe('workspace request tabs', () => {
     expect(ws.tabs.map((t) => t.draft.id)).toEqual(['b', 'x']);
     await ws.deleteCollection('c2');
     expect(ws.tabs.map((t) => t.draft.id)).toEqual(['b']);
+  });
+});
+
+describe('workspace tab restore', () => {
+  const tree = {
+    collection: {
+      id: 'c1',
+      name: 'Shop',
+      description: '',
+      requiredVariables: [],
+      variables: [],
+      auth: { type: 'none' },
+    },
+    folders: [],
+    requests: [req('a', 'List'), req('b', 'Create'), req('c', 'Delete')],
+  };
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    window.go = {
+      main: {
+        App: {
+          ListCollections: async () => [tree.collection],
+          GetCollectionTree: async () => structuredClone(tree),
+        } as never,
+      },
+    };
+  });
+  afterEach(() => {
+    delete window.go;
+    localStorage.clear();
+  });
+
+  it('remembers saved tabs and the active one, not drafts or edits', async () => {
+    const ws = useWorkspace();
+    await ws.load();
+    await ws.restoreTabs();
+    ws.open(req('a', 'List'));
+    ws.open(req('b', 'Create'));
+    ws.open({ ...newRequest('c1', ''), id: '', name: 'Unsaved draft' });
+    ws.activate(ws.tabs[1].key);
+    ws.draft!.url = 'http://edited?token=secret';
+    await Promise.resolve();
+    const saved = localStorage.getItem(TABS_STORAGE_KEY)!;
+    expect(JSON.parse(saved)).toEqual({
+      tabs: [
+        { id: 'a', collectionId: 'c1' },
+        { id: 'b', collectionId: 'c1' },
+      ],
+      active: 'b',
+    });
+    expect(saved).not.toContain('secret');
+  });
+
+  it('reopens the tabs in order with their saved state and skips deleted requests', async () => {
+    localStorage.setItem(
+      TABS_STORAGE_KEY,
+      JSON.stringify({
+        tabs: [
+          { id: 'c', collectionId: 'c1' },
+          { id: 'gone', collectionId: 'c1' },
+          { id: 'a', collectionId: 'c1' },
+          { id: 'x', collectionId: 'deleted-collection' },
+        ],
+        active: 'c',
+      }),
+    );
+    const ws = useWorkspace();
+    await ws.load();
+    await ws.restoreTabs();
+    expect(ws.tabs.map((t) => t.draft.id)).toEqual(['c', 'a']);
+    expect(ws.draft?.id).toBe('c');
+    expect(ws.dirty).toBe(false);
+  });
+
+  it('does not overwrite the remembered tabs before they are restored', async () => {
+    const saved = JSON.stringify({ tabs: [{ id: 'a', collectionId: 'c1' }], active: 'a' });
+    localStorage.setItem(TABS_STORAGE_KEY, saved);
+    const ws = useWorkspace();
+    ws.open(req('b'));
+    ws.closeTab(ws.tabs[0].key);
+    await Promise.resolve();
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).toBe(saved);
+  });
+
+  it('ignores unreadable stored data', async () => {
+    localStorage.setItem(TABS_STORAGE_KEY, '{not json');
+    const ws = useWorkspace();
+    await ws.load();
+    await ws.restoreTabs();
+    expect(ws.tabs).toHaveLength(0);
   });
 });

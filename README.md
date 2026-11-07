@@ -35,7 +35,8 @@ See [docs/collections.md](docs/collections.md), [docs/architecture.md](docs/arch
 2. Optional: **Environments → ＋** — create `Staging` etc. Its variables override collection variables of the same
    name, so the same collection runs against each environment.
 3. Add a request such as `GET {{base_url}}/health`, and add tests in the **Tests** tab.
-4. Pick the environment in the top bar and press **Send** (`Ctrl+Enter`). Save with `Ctrl+S`.
+4. Pick the environment in the top bar and press **Send** (`Ctrl+Enter`). Save with `Ctrl+S`; close the tab with
+   `Ctrl+W`. Open tabs come back the next time you start the app (saved versions; unsaved edits are not kept).
 5. When the response is correct, choose **Approve as baseline…** and mark dynamic fields as ignored.
 6. After a code, config or database change, press **▶** on the collection. Failures and baseline diffs are listed in the **Run** view; export an HTML or JSON report from there or from **History**.
 
