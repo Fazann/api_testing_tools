@@ -92,6 +92,11 @@ describe('SocketConsole', () => {
     await flushPromises();
     const sent = calls.find((c) => c.name === 'SendSocketMessage')!;
     expect(sent.args[1]).toMatchObject({ event: 'echo', body: '{"n":1}', bodyType: 'json' });
+    // JSON bodies are highlighted, and Ctrl+Enter in the editor sends.
+    expect(wrapper.find('.code-editor .tk-key').text()).toBe('"n"');
+    await wrapper.find('textarea[aria-label="Message body"]').trigger('keydown', { key: 'Enter', ctrlKey: true });
+    await flushPromises();
+    expect(calls.filter((c) => c.name === 'SendSocketMessage')).toHaveLength(2);
 
     const sessionId = sockets.consoles.q1.sessionId;
     emit({ sessionId, frame: { direction: 'received', event: 'echo', data: '{"n":1}', atMs: 9 } });

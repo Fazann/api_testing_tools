@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import CheckboxField from '@/components/base/CheckboxField.vue';
+import CodeEditor from '@/components/base/CodeEditor.vue';
 import RadioGroup from '@/components/base/RadioGroup.vue';
 import { messageProblem } from '@/services/socket';
 import type { RequestKind, SocketBodyType, SocketMessage } from '@/types';
@@ -51,14 +52,26 @@ function format() {
       <span class="spacer" />
       <BaseButton v-if="message.bodyType === 'json'" variant="ghost" small @click="format">Format JSON</BaseButton>
     </div>
+    <CodeEditor
+      v-if="message.bodyType === 'json'"
+      v-model="message.body"
+      language="json"
+      theme="app"
+      label="Message body"
+      :min-lines="rows ?? 4"
+      placeholder='{"type": "ping"}'
+      @keydown.ctrl.enter.prevent="emit('submit')"
+      @keydown.meta.enter.prevent="emit('submit')"
+    />
     <BaseInput
+      v-else
       v-model="message.body"
       multiline
       class="mono"
       :rows="rows ?? 4"
       spellcheck="false"
       aria-label="Message body"
-      :placeholder="message.bodyType === 'json' ? '{&quot;type&quot;: &quot;ping&quot;}' : 'Message text'"
+      placeholder="Message text"
       @keydown.ctrl.enter.prevent="emit('submit')"
       @keydown.meta.enter.prevent="emit('submit')"
     />
