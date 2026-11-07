@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import EmptyState from '@/components/base/EmptyState.vue';
 import RunSummary from '@/components/run/RunSummary.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';
 

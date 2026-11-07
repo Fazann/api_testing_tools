@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { reactive } from 'vue';
 
-import { api, onSocketEvent } from '@/services/api';
+import { api, onSocketEvent } from '@/api';
 import type { HeartbeatStatus, Request, SocketFrame, SocketMessage, SocketSession } from '@/types';
 import { clone, uid } from '@/utils/object';
 

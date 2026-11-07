@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
-import { api, onRunProgress } from '@/services/api';
+import { api, onRunProgress } from '@/api';
 import type { Run, RunResult, Warning } from '@/types';
 import { clone, uid } from '@/utils/object';
 

@@ -142,7 +142,7 @@ fi
 
 # ---- desktop builds ----
 
-LDFLAGS="-s -w -X $MODULE/internal/service.Version=$VERSION -X $MODULE/internal/updater.FeedURL=$FEED"
+LDFLAGS="-s -w -X $MODULE/internal/service.Version=$VERSION -X $MODULE/internal/updater.FeedURL=$FEED -X $MODULE/internal/backend.BaseURL=${BACKEND_URL:-}"
 [[ -n "$FEED" ]] && info "In-app updates from $FEED" || info "No update feed: in-app updates disabled"
 mkdir -p "$RELEASE_DIR"
 ARTIFACTS=()

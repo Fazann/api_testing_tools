@@ -485,6 +485,20 @@ export interface UpdateProgress {
   total: number;
 }
 
+/** The remote backend server, as Go sees it (internal/backend). */
+export interface BackendStatus {
+  /** live: the real server; mock: in-process mock data until the server exists; off: neither. */
+  mode: 'live' | 'mock' | 'off';
+  configured: boolean;
+  baseUrl: string;
+  reachable: boolean;
+  /** The server failed recently; calls fail fast or use cached data until it is retried. */
+  offline: boolean;
+  /** Health-check round trip; 0 when not reachable. */
+  latencyMs: number;
+  error?: string;
+}
+
 export interface AppInfo {
   name: string;
   version: string;

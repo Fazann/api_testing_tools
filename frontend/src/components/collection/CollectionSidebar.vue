@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import EmptyState from '@/components/base/EmptyState.vue';
 import MenuButton from '@/components/base/MenuButton.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
+import { api, onCompareProgress } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
@@ -12,7 +13,6 @@ import SelectField from '@/components/base/SelectField.vue';
 import StatTile from '@/components/base/StatTile.vue';
 import DiffTable from '@/components/response/DiffTable.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api, onCompareProgress } from '@/services/api';
 import { isSocket } from '@/services/socket';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';

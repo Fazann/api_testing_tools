@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import CheckboxField from '@/components/base/CheckboxField.vue';
@@ -8,7 +9,6 @@ import EmptyState from '@/components/base/EmptyState.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import TextField from '@/components/base/TextField.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { isSocket } from '@/services/socket';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';

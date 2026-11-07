@@ -10,6 +10,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"api-test-kits/internal/backend"
 	"api-test-kits/internal/collectionio"
 	"api-test-kits/internal/compare"
 	"api-test-kits/internal/contract"
@@ -23,12 +24,15 @@ import (
 // App exposes the service to the frontend through Wails bindings. It only
 // adds desktop concerns: native file dialogs and progress events.
 type App struct {
-	ctx context.Context
-	svc *service.Service
-	upd *updates
+	ctx     context.Context
+	svc     *service.Service
+	upd     *updates
+	backend *backend.Client
 }
 
-func NewApp(svc *service.Service) *App { return &App{svc: svc, upd: newUpdates()} }
+func NewApp(svc *service.Service, remote *backend.Client) *App {
+	return &App{svc: svc, upd: newUpdates(), backend: remote}
+}
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
 

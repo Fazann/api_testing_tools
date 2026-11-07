@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import { api } from '@/api';
 import DataTable from '@/components/base/DataTable.vue';
 import MethodBadge from '@/components/base/MethodBadge.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { sparkPath } from '@/services/responseTimes';
 import { useEnvironments } from '@/stores/environments';
 import type { CollectionTree, Request, ResponseTimeRow } from '@/types';

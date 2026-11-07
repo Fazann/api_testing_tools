@@ -43,7 +43,7 @@ function setup(protectedEnv = false) {
     },
   };
   window.runtime = {
-    EventsOn: (name: string, cb: Handler) => {
+    EventsOnMultiple: (name: string, cb: Handler) => {
       (handlers[name] ??= []).push(cb);
       return () => {};
     },

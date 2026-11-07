@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
 import MethodBadge from '@/components/base/MethodBadge.vue';
@@ -8,7 +9,6 @@ import StatusBadge from '@/components/base/StatusBadge.vue';
 import TabBar, { type Tab as TabItem } from '@/components/base/TabBar.vue';
 import SocketFrameList from '@/components/socket/SocketFrameList.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { HIGHLIGHT_LIMIT, highlightJson } from '@/services/highlight';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';

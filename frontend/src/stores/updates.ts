@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import { api, errorMessage, onUpdateProgress } from '@/services/api';
+import { api, errorMessage, onUpdateProgress } from '@/api';
 import type { UpdateInfo, UpdateProgress } from '@/types';
 
 /** In-place app updates: check the feed, download, install and restart. */

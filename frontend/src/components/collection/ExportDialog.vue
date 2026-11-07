@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
 import CheckboxField from '@/components/base/CheckboxField.vue';
 import ModalFrame from '@/components/base/ModalFrame.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
 import type { Collection, SecretFinding } from '@/types';

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
-import { api } from '@/services/api';
 import { useUpdates } from '@/stores/updates';
 
 const updates = useUpdates();

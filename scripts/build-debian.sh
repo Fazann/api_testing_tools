@@ -61,6 +61,7 @@ if [[ -z "${IN_CONTAINER:-}" ]]; then
     -e GOCACHE=/src/.cache/go-build \
     -e GOMODCACHE=/src/.cache/go-mod \
     -e npm_config_cache=/src/.cache/npm \
+    -e BACKEND_URL="${BACKEND_URL:-}" \
     -v "$ROOT:/src" \
     "$IMAGE" scripts/build-debian.sh --in-container -v "$DEB_VERSION" --feed "$FEED"
   exit 0
@@ -78,7 +79,7 @@ info "Building frontend"
 info "Building binary"
 wails build -s -m -trimpath -tags webkit2_41 \
   -platform "linux/$ARCH" -o "$OUT" \
-  -ldflags "-s -w -X $MODULE/internal/service.Version=$DEB_VERSION -X $MODULE/internal/updater.FeedURL=$FEED -X $MODULE/internal/updater.Package=deb"
+  -ldflags "-s -w -X $MODULE/internal/service.Version=$DEB_VERSION -X $MODULE/internal/updater.FeedURL=$FEED -X $MODULE/internal/updater.Package=deb -X $MODULE/internal/backend.BaseURL=${BACKEND_URL:-}"
 BIN="build/bin/$OUT"
 [[ -x "$BIN" ]] || die "build output $BIN not found"
 

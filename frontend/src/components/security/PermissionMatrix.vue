@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
+import { api, onMatrixProgress } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
@@ -9,7 +10,6 @@ import DataTable from '@/components/base/DataTable.vue';
 import MethodBadge from '@/components/base/MethodBadge.vue';
 import VariableTable from '@/components/variables/VariableTable.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api, onMatrixProgress } from '@/services/api';
 import { isSocket } from '@/services/socket';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';

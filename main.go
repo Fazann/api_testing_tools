@@ -40,7 +40,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("start service: %v", err)
 	}
-	app := NewApp(svc)
+	remote, err := newBackendClient()
+	if err != nil {
+		// The app works without its backend; BackendStatus shows the problem in the UI.
+		log.Printf("backend disabled: %v", err)
+	}
+	app := NewApp(svc, remote)
 
 	err = wails.Run(&options.App{
 		Title:     service.AppName,

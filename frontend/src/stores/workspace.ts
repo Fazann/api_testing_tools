@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 
-import { api } from '@/services/api';
+import { api } from '@/api';
 import { newRequest } from '@/services/model';
 import type { Collection, CollectionTree, Request, RunResult } from '@/types';
 import { clone } from '@/utils/object';

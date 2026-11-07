@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
-import { errorMessage } from '@/services/api';
+import { errorMessage } from '@/api';
 
 export type View = 'requests' | 'run' | 'history' | 'environments' | 'settings';
 

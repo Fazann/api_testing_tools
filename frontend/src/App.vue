@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
+import { api, BackendUnavailableError } from '@/api';
 import EmptyState from '@/components/base/EmptyState.vue';
 import CollectionSidebar from '@/components/collection/CollectionSidebar.vue';
 import AppDialog from '@/components/layout/AppDialog.vue';
@@ -8,7 +9,6 @@ import AppToasts from '@/components/layout/AppToasts.vue';
 import TopBar from '@/components/layout/TopBar.vue';
 import UpdateBanner from '@/components/layout/UpdateBanner.vue';
 import { useCloseTab } from '@/composables/useCloseTab';
-import { api, BackendUnavailableError } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useRunner } from '@/stores/runner';
 import { useUi } from '@/stores/ui';

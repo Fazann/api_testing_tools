@@ -13,8 +13,11 @@ WAILS    ?= $(shell command -v wails 2>/dev/null || echo $(shell $(GO) env GOPAT
 REPO        ?= Fazann/api_testing_tools
 UPDATE_URL  ?= https://github.com/$(REPO)/releases/latest/download/latest.json
 RELEASE_PAGE_URL ?= https://github.com/$(REPO)/releases/tag/v{version}
+# Remote backend the app talks to (internal/backend). Empty until the backend
+# exists; API_TEST_KITS_BACKEND_URL overrides it at run time.
+BACKEND_URL ?=
 # NOTES (release notes, may span lines) reaches scripts/bump-version.sh through the environment.
-export UPDATE_URL RELEASE_PAGE_URL NOTES
+export UPDATE_URL RELEASE_PAGE_URL NOTES BACKEND_URL
 HOST_OS  := $(shell $(GO) env GOHOSTOS)
 HOST_ARCH := $(shell $(GO) env GOHOSTARCH)
 
@@ -24,7 +27,8 @@ ifeq ($(HOST_OS),linux)
 endif
 TAGS_FLAG := $(if $(TAGS),-tags $(TAGS),)
 LDFLAGS   := -s -w -X $(MODULE)/internal/service.Version=$(VERSION)
-DESKTOP_LDFLAGS := $(LDFLAGS) -X $(MODULE)/internal/updater.FeedURL=$(UPDATE_URL)
+DESKTOP_LDFLAGS := $(LDFLAGS) -X $(MODULE)/internal/updater.FeedURL=$(UPDATE_URL) \
+                   -X $(MODULE)/internal/backend.BaseURL=$(BACKEND_URL)
 
 ifeq ($(HOST_OS),windows)
   BIN := build/bin/$(APP).exe

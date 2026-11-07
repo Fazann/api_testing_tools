@@ -4,8 +4,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    // `@/…` imports resolve from src/ (root-relative, so no Node path helpers are needed).
-    alias: { '@/': '/src/' },
+    // `@/…` imports resolve from src/ and `@wails/…` from the generated Wails bindings
+    // (root-relative, so no Node path helpers are needed).
+    alias: { '@/': '/src/', '@wails/': '/wailsjs/' },
   },
   build: {
     // The desktop webview loads assets locally; keep output simple.

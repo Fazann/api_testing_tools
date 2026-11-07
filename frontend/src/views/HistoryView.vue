@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import EmptyState from '@/components/base/EmptyState.vue';
 import SelectableList from '@/components/base/SelectableList.vue';
@@ -9,7 +10,6 @@ import StatusBadge from '@/components/base/StatusBadge.vue';
 import TextField from '@/components/base/TextField.vue';
 import RunSummary from '@/components/run/RunSummary.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
 import type { Run } from '@/types';

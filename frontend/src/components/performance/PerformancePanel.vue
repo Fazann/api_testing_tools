@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import { api } from '@/api';
 import BaseButton from '@/components/base/BaseButton.vue';
 import DataTable from '@/components/base/DataTable.vue';
 import RadioGroup from '@/components/base/RadioGroup.vue';
 import StatTile from '@/components/base/StatTile.vue';
 import TextField from '@/components/base/TextField.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { api } from '@/services/api';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
