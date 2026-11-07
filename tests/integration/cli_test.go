@@ -31,8 +31,6 @@ func runCLI(t *testing.T, environ []string, args ...string) cliResult {
 	return cliResult{code, out.String(), errOut.String()}
 }
 
-const fixtureFile = "../fixtures/wallet-demo.collection.json"
-
 func baseURL(f *fixture) string {
 	for _, v := range f.env.Variables {
 		if v.Key == "base_url" {
@@ -48,7 +46,7 @@ func TestCLIRunsCollectionFileAndWritesReports(t *testing.T) {
 	junit := filepath.Join(dir, "out", "junit.xml")
 	html := filepath.Join(dir, "report.html")
 	res := runCLI(t, []string{"APIGUARD_VAR_token=" + testToken, "PATH=/usr/bin"},
-		"run", fixtureFile, "--var", "base_url="+baseURL(f), "--junit", junit, "--report", html)
+		"run", fixtureFile(t), "--var", "base_url="+baseURL(f), "--junit", junit, "--report", html)
 	if res.code != cli.ExitPassed {
 		t.Fatalf("exit %d\nstdout:\n%s\nstderr:\n%s", res.code, res.stdout, res.stderr)
 	}
@@ -87,7 +85,7 @@ func TestCLIRunsCollectionFileAndWritesReports(t *testing.T) {
 func TestCLIMissingSecretIsASetupError(t *testing.T) {
 	f := setup(t)
 	// The fixture lists token as a required variable, so the run does not start.
-	res := runCLI(t, nil, "run", fixtureFile, "--var", "base_url="+baseURL(f))
+	res := runCLI(t, nil, "run", fixtureFile(t), "--var", "base_url="+baseURL(f))
 	if res.code != cli.ExitUsage || !strings.Contains(res.stderr, "required variables are missing or empty: token") {
 		t.Fatalf("expected a setup error, exit %d\n%s", res.code, res.stderr)
 	}
@@ -98,7 +96,7 @@ func TestCLIMissingSecretIsASetupError(t *testing.T) {
 
 func TestCLIFailsOnAssertions(t *testing.T) {
 	f := setup(t)
-	res := runCLI(t, []string{"APIGUARD_VAR_token=wrong-token"}, "run", fixtureFile, "--var", "base_url="+baseURL(f),
+	res := runCLI(t, []string{"APIGUARD_VAR_token=wrong-token"}, "run", fixtureFile(t), "--var", "base_url="+baseURL(f),
 		"--folder", "Wallet")
 	if res.code != cli.ExitFailed {
 		t.Fatalf("with a wrong token the wallet tests should fail, exit %d\n%s\n%s", res.code, res.stdout, res.stderr)
@@ -203,7 +201,7 @@ func TestCLIProtectedEnvironmentNeedsConfirmation(t *testing.T) {
 func TestCLIUsageErrors(t *testing.T) {
 	setup(t)
 	two := filepath.Join(t.TempDir(), "two.json")
-	data, _ := os.ReadFile(fixtureFile)
+	data, _ := os.ReadFile(fixtureFile(t))
 	data = bytes.Replace(data, []byte(`"environments": [`), []byte(`"environments": [{"name": "Other", "variables": []},`), 1)
 	os.WriteFile(two, data, 0o600)
 	cases := []struct {
@@ -212,11 +210,11 @@ func TestCLIUsageErrors(t *testing.T) {
 	}{
 		{[]string{"run"}, "give a collection file"},
 		{[]string{"run", "missing.json"}, "no such file"},
-		{[]string{"run", fixtureFile, "--report", "r.txt"}, "cannot tell the report format"},
-		{[]string{"run", fixtureFile, "--folder", "Nope"}, `folders: "Authorization"`},
+		{[]string{"run", fixtureFile(t), "--report", "r.txt"}, "cannot tell the report format"},
+		{[]string{"run", fixtureFile(t), "--folder", "Nope"}, `folders: "Authorization"`},
 		{[]string{"run", two}, `choose one with --env: "Other", "Local (demo)"`},
-		{[]string{"run", fixtureFile, "--var", "no-equals"}, "expected KEY=VALUE"},
-		{[]string{"run", fixtureFile, "--concurrency", "20"}, "between 1 and 8"},
+		{[]string{"run", fixtureFile(t), "--var", "no-equals"}, "expected KEY=VALUE"},
+		{[]string{"run", fixtureFile(t), "--concurrency", "20"}, "between 1 and 8"},
 		{[]string{"frobnicate"}, "unknown command"},
 	}
 	for _, c := range cases {

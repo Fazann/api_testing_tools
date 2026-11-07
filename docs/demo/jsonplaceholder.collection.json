@@ -1,0 +1,199 @@
+{
+  "format": "api-test-kits.collection",
+  "version": 1,
+  "exportedAt": "2026-11-07T00:00:00Z",
+  "collection": {
+    "id": "jsonplaceholder-demo",
+    "name": "JSONPlaceholder demo",
+    "description": "Demo requests and checks against the free JSONPlaceholder fake REST API (https://jsonplaceholder.typicode.com). Writes are faked by the server, so nothing is really changed.",
+    "requiredVariables": ["base_url"],
+    "variables": [
+      { "key": "base_url", "value": "https://jsonplaceholder.typicode.com", "secret": false, "enabled": true },
+      { "key": "post_id", "value": "1", "secret": false, "enabled": true }
+    ],
+    "auth": { "type": "none" }
+  },
+  "folders": [
+    { "id": "f-posts", "parentId": "", "name": "Posts" },
+    { "id": "f-users", "parentId": "", "name": "Users" },
+    { "id": "f-errors", "parentId": "", "name": "Errors" }
+  ],
+  "requests": [
+    {
+      "id": "r-list-posts",
+      "parentId": "f-posts",
+      "name": "List posts",
+      "method": "GET",
+      "url": "{{base_url}}/posts",
+      "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "header", "path": "Content-Type", "operator": "contains", "expected": "application/json", "enabled": true },
+        { "kind": "valid_json", "operator": "", "enabled": true },
+        { "kind": "response_time", "operator": "lt", "expected": 5000, "enabled": true },
+        { "kind": "aggregate", "function": "count", "path": "$", "operator": "eq", "expected": 100, "enabled": true },
+        { "kind": "json_path", "path": "[*].id", "operator": "type", "expected": "integer", "enabled": true },
+        { "kind": "json_path", "path": "[*].title", "operator": "type", "expected": "string", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-get-post",
+      "parentId": "f-posts",
+      "name": "Get one post",
+      "method": "GET",
+      "url": "{{base_url}}/posts/{{post_id}}",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "required_fields", "operator": "", "expected": ["id", "userId", "title", "body"], "enabled": true },
+        { "kind": "json_path", "path": "id", "operator": "eq", "expected": 1, "enabled": true },
+        { "kind": "json_path", "path": "userId", "operator": "gt", "expected": 0, "enabled": true }
+      ]
+    },
+    {
+      "id": "r-filter-posts",
+      "parentId": "f-posts",
+      "name": "Filter posts by user",
+      "method": "GET",
+      "url": "{{base_url}}/posts",
+      "query": [{ "key": "userId", "value": "1", "enabled": true }],
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "aggregate", "function": "count", "path": "$", "operator": "eq", "expected": 10, "enabled": true },
+        { "kind": "json_path", "path": "[*].userId", "operator": "eq", "expected": 1, "enabled": true }
+      ]
+    },
+    {
+      "id": "r-post-comments",
+      "parentId": "f-posts",
+      "name": "Comments of a post",
+      "method": "GET",
+      "url": "{{base_url}}/posts/{{post_id}}/comments",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "aggregate", "function": "count", "path": "$", "operator": "gt", "expected": 0, "enabled": true },
+        { "kind": "json_path", "path": "[*].postId", "operator": "eq", "expected": 1, "enabled": true },
+        { "kind": "json_path", "path": "[*].email", "operator": "matches", "expected": "^[^@\\s]+@[^@\\s]+$", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-create-post",
+      "parentId": "f-posts",
+      "name": "Create a post",
+      "method": "POST",
+      "url": "{{base_url}}/posts",
+      "headers": [{ "key": "Content-Type", "value": "application/json; charset=UTF-8", "enabled": true }],
+      "body": "{\n  \"title\": \"Hello from API test kits\",\n  \"body\": \"Demo post\",\n  \"userId\": 1\n}",
+      "bodyType": "json",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": false,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 201, "enabled": true },
+        { "kind": "json_path", "path": "id", "operator": "type", "expected": "integer", "enabled": true },
+        { "kind": "json_path", "path": "title", "operator": "eq", "expected": "Hello from API test kits", "enabled": true },
+        { "kind": "json_path", "path": "userId", "operator": "eq", "expected": 1, "enabled": true }
+      ]
+    },
+    {
+      "id": "r-update-post",
+      "parentId": "f-posts",
+      "name": "Update a post",
+      "method": "PUT",
+      "url": "{{base_url}}/posts/{{post_id}}",
+      "headers": [{ "key": "Content-Type", "value": "application/json; charset=UTF-8", "enabled": true }],
+      "body": "{\n  \"id\": 1,\n  \"title\": \"Updated title\",\n  \"body\": \"Updated body\",\n  \"userId\": 1\n}",
+      "bodyType": "json",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": false,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "json_path", "path": "title", "operator": "eq", "expected": "Updated title", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-delete-post",
+      "parentId": "f-posts",
+      "name": "Delete a post",
+      "method": "DELETE",
+      "url": "{{base_url}}/posts/{{post_id}}",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": false,
+      "assertions": [{ "kind": "status", "operator": "eq", "expected": 200, "enabled": true }]
+    },
+    {
+      "id": "r-list-users",
+      "parentId": "f-users",
+      "name": "List users",
+      "method": "GET",
+      "url": "{{base_url}}/users",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "aggregate", "function": "count", "path": "$", "operator": "eq", "expected": 10, "enabled": true },
+        { "kind": "json_path", "path": "[*].email", "operator": "contains", "expected": "@", "enabled": true },
+        { "kind": "json_path", "path": "[*].address.geo", "operator": "type", "expected": "object", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-user-todos",
+      "parentId": "f-users",
+      "name": "Todos of a user",
+      "method": "GET",
+      "url": "{{base_url}}/users/1/todos",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 200, "enabled": true },
+        { "kind": "json_path", "path": "[*].userId", "operator": "eq", "expected": 1, "enabled": true },
+        { "kind": "json_path", "path": "[*].completed", "operator": "type", "expected": "boolean", "enabled": true }
+      ]
+    },
+    {
+      "id": "r-not-found",
+      "parentId": "f-errors",
+      "name": "Unknown post returns 404",
+      "method": "GET",
+      "url": "{{base_url}}/posts/999999",
+      "bodyType": "none",
+      "auth": { "type": "inherit" },
+      "timeoutMs": 10000,
+      "followRedirects": true,
+      "assertions": [
+        { "kind": "status", "operator": "eq", "expected": 404, "enabled": true },
+        { "kind": "json_path", "path": "id", "operator": "not_exists", "enabled": true }
+      ]
+    }
+  ],
+  "environments": [
+    {
+      "name": "JSONPlaceholder",
+      "protected": false,
+      "variables": [{ "key": "base_url", "value": "https://jsonplaceholder.typicode.com", "secret": false, "enabled": true }]
+    }
+  ],
+  "secretsIncluded": false
+}

@@ -1,3 +1,15 @@
+package integration
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// walletCollection is the collection the integration tests import and run
+// against the mock wallet API (see newMockAPI). It is kept inline so the
+// tests need no fixture file.
+const walletCollection = `
 {
   "format": "api-test-kits.collection",
   "version": 1,
@@ -133,4 +145,16 @@
     }
   ],
   "secretsIncluded": false
+}
+`
+
+// fixtureFile writes walletCollection to a temporary file for CLI runs and
+// returns its path.
+func fixtureFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "wallet.collection.json")
+	if err := os.WriteFile(path, []byte(walletCollection), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

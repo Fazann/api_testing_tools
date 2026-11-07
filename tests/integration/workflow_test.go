@@ -44,11 +44,7 @@ func setup(t *testing.T) *fixture {
 	api, srv := newMockAPI()
 	t.Cleanup(srv.Close)
 
-	data, err := os.ReadFile("../fixtures/wallet-demo.collection.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	imp, err := svc.ImportCollection(ctx, data, "")
+	imp, err := svc.ImportCollection(ctx, []byte(walletCollection), "")
 	if err != nil {
 		t.Fatalf("import demo collection: %v", err)
 	}

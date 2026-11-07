@@ -1,204 +1,281 @@
 # API test kits
 
-A free, local-first desktop app for testing HTTP APIs, checking business rules, and catching regressions by comparing responses with an approved baseline. No account, no cloud, no telemetry.
+A free desktop app for testing HTTP APIs and catching regressions.
 
-- **Requests** — GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS, headers, query, JSON/text bodies, Bearer/Basic/API-key auth (set once per collection and inherited, or overridden per request), timeouts, redirect control, cancellation, response size limit.
-- **Collections** — create, rename, duplicate, export and delete from the sidebar's **⋯** menu. **Rename** changes only the name, so variables, auth, scripts and baselines are untouched. See [docs/collections.md](docs/collections.md).
-- **Endpoints summary** — a collection's **⋯ → Endpoints summary…** lists every request with its method, URL, folder, test count and last result; filter by method or API version (`/v1/`, `/api/v2.1/` or an `api-version` / `version` query parameter, with collection variables such as `{{base_url}}` filled in), or search, and click a row to open that request.
-- **Environments** — `{{variables}}` everywhere, secret variables (masked, redacted, not exported), protected environments that require confirmation for destructive requests, required variables per collection.
-- **Assertions** — status, headers, JSON fields (`eq`, `≠`, `>`, `≥`, `<`, `≤`, contains, regex, type), response time, valid JSON, required fields, body text, and aggregates (`count`/`sum`/`min`/`max`) with tolerance — e.g. “item amounts sum to `total` within 0.005”.
-- **Regression comparison** — approve a baseline per request and environment (whole body, selected fields, or **structure only**), ignore dynamic fields (`meta.request_id`, `items[*].updated_at`, `**.timestamp`), numeric tolerance, order-independent diff of added / removed / changed / type-changed fields, and comparison with the previous run.
-- **Release sign-off report** — a collection's **⋯ → Sign-off report…** summarises one environment for QA hand-off and audits: a *Ready / Not ready* verdict with its reasons, the newest run and its failures, regressions, race tests and the permission matrix, slower requests, every baseline with who approved it, and coverage gaps, ending with signature lines. Preview it in the app, save one self-contained HTML file, or print it to PDF. Built from stored results; nothing is sent. See [docs/signoff-report.md](docs/signoff-report.md).
-- **Rules across requests** — a collection's **⋯ → Rules…** checks business logic that spans several requests of one run, without scripts: *balance after = balance before − transfer amount*, *the created order's id appears in the order list*, *the list grew by one*. Rules run after every collection run and in the CLI, fail the run when they do not hold, and can be checked against the last run while you write them. See [docs/collection-rules.md](docs/collection-rules.md).
-- **Compare environments** — a collection's **⋯ → Compare environments…** runs it against two environments at the same time (Production vs Staging, old build vs new build) and lists only what differs: status codes, body fields, headers, errors and much slower responses. Fields that change on every call are detected and left out first, so no baseline is needed. See [docs/environment-comparison.md](docs/environment-comparison.md).
-- **Detect changing fields** — in **Approve as baseline…** or the **Baseline** tab, sends the request three times and suggests every field whose value changed (IDs, timestamps, tokens) as an ignored path. See [docs/changing-fields.md](docs/changing-fields.md).
-- **Schema regression** — a structure-only baseline records field names, JSON types, optional and nullable fields (merged across array items) and fails a run only when a field appears, disappears or changes type, so endpoints whose values change on every call need no ignore list. See [docs/schema-regression.md](docs/schema-regression.md).
-- **Response time trends & performance regression**: every send and run records each request's response time per environment. The **Performance** tab charts the last 100 responses with median and p95, and **⋯ → Response times…** compares every request in a collection. A response at least 1.5× the recent median and 100 ms slower is flagged as **slower than usual**. Each request can warn (default), fail, or turn the check off. See [docs/performance.md](docs/performance.md).
-- **Race-condition tests** — a request's **Race test** tab sends 2–50 copies at the same moment and checks what a correct server guarantees under concurrency: at most *n* successes (double spend, double redeem), unique IDs, no 5xx, and a before/after state check that catches lost updates. See [docs/race-test.md](docs/race-test.md).
-- **WebSocket and Socket.IO** — set a request's type to WebSocket or Socket.IO to explore a real-time API in a live console (connect, send events, watch messages) and turn it into a test of send / expect / wait steps that runs in collection runs, history, reports and the CLI. See [docs/sockets.md](docs/sockets.md).
-- **Permission matrix** — a collection's **⋯ → Permission matrix…** runs endpoints as every role (roles override variables such as `token`; one can send no credentials) and shows a grid of expected vs actual access, flagging broken access control and IDOR. Approve the observed grid once and later runs catch regressions. See [docs/permission-matrix.md](docs/permission-matrix.md).
-- **CLI for CI** — `api-test-kits-cli run wallet.collection.json --env Staging --junit junit.xml` runs a collection headlessly (pure Go, no GUI libraries), compares with the baselines included in the export, writes JUnit/HTML/JSON reports and exits non-zero on failure; secrets come from `APIGUARD_VAR_*` environment variables. `--collection NAME` runs straight from the app's database for scheduled local checks. See [docs/cli.md](docs/cli.md).
-- **History & reports** — SQLite history with filters by collection, request, status and date; self-contained HTML and JSON reports with secrets removed.
-- **Import/export** — documented, versioned JSON format; also imports **OpenAPI 3 / Swagger 2** (`swagger.json`, `openapi.yaml`) as a ready-to-run collection. Imports are treated as untrusted.
-- **cURL** — paste a cURL command (e.g. from the browser's *Copy as cURL*) into the URL bar or use **New request from cURL…** on a collection or folder; **Copy as code** turns any request into cURL, JavaScript (fetch, axios), Python (requests), Go, PHP, Java, C#, Dart, Swift, Objective-C, C++ (libcurl) or Rust (reqwest), with the same auth, query, headers, body, redirect and timeout settings the app uses. It can fill in variables (secrets stay as `{{name}}` unless you opt in); scripts are not included.
+- **Local-first** — no account, no cloud, no telemetry.
+- **Runs on** Linux, Windows and macOS, plus a headless CLI for CI.
 
-See [docs/collections.md](docs/collections.md), [docs/architecture.md](docs/architecture.md), [docs/security.md](docs/security.md), [docs/collection-format.md](docs/collection-format.md), [docs/schema-regression.md](docs/schema-regression.md), [docs/signoff-report.md](docs/signoff-report.md), [docs/collection-rules.md](docs/collection-rules.md), [docs/environment-comparison.md](docs/environment-comparison.md), [docs/changing-fields.md](docs/changing-fields.md), [docs/performance.md](docs/performance.md), [docs/security-tests.md](docs/security-tests.md) and [docs/cli.md](docs/cli.md).
+> Only test systems and accounts you are authorized to use. Never run destructive tests against real customer data.
+
+---
+
+## Contents
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Building](#building)
+- [Testing](#testing)
+- [Releasing](#releasing)
+- [Data and backups](#data-and-backups)
+- [Project layout](#project-layout)
+- [Documentation](#documentation)
+
+---
+
+## Features
+
+### Send requests
+
+| Feature | What it does |
+| --- | --- |
+| **Requests** | All HTTP methods, headers, query, JSON/text body, timeouts, redirects, cancel. |
+| **Auth** | Bearer, Basic or API key. Set it once on the collection, or override per request. |
+| **Collections** | Create, rename, duplicate, export and delete from the sidebar **⋯** menu. |
+| **Environments** | `{{variables}}` everywhere. Secrets are masked and never exported. |
+| **WebSocket / Socket.IO** | Live console, and send / expect / wait test steps. |
+| **cURL** | Paste a cURL command to create a request. **Copy as code** exports to cURL, JS, Python, Go, PHP, Java, C#, Dart, Swift, Rust and more. |
+| **Import** | Our JSON format, plus **OpenAPI 3 / Swagger 2**. |
+| **Scripts** | Pre-request and post-response JavaScript with a Postman-compatible `pm` API. |
+
+### Check results
+
+| Feature | What it does |
+| --- | --- |
+| **Assertions** | Status, headers, JSON fields, response time, regex, and sums/counts with tolerance. |
+| **Baselines** | Approve a good response, then flag any later change. Ignore dynamic fields like `**.timestamp`. |
+| **Schema regression** | Compare structure only (field names and types), not values. |
+| **Detect changing fields** | Sends the request 3 times and suggests fields to ignore (IDs, timestamps). |
+| **Rules across requests** | E.g. *balance after = balance before − amount*. No scripts needed. |
+| **Compare environments** | Run against two environments at once and show only what differs. |
+| **Performance** | Charts response times (median, p95) and flags requests that got slower. |
+| **Race tests** | Send 2–50 copies at once to catch double-spend and lost updates. |
+| **Permission matrix** | Run endpoints as every role and spot broken access control / IDOR. |
+
+### Share results
+
+| Feature | What it does |
+| --- | --- |
+| **History** | Every run is saved, with filters by collection, status and date. |
+| **Reports** | HTML and JSON reports, with secrets removed. |
+| **Sign-off report** | A *Ready / Not ready* summary for QA hand-off. Save as HTML or print to PDF. |
+| **Endpoints summary** | List every request in a collection, filter by method or API version. |
+| **CLI** | Run a collection in CI and get JUnit/HTML/JSON reports. See [docs/cli.md](docs/cli.md). |
+
+---
 
 ## Quick start
 
-1. **Requests → Create collection**. In its **⋯ → Settings & auth…**:
-   - under **Variables**, add `base_url` (e.g. `http://localhost:8080`) and a `token` marked **Secret**;
-   - under **Authorization**, choose **Bearer token** with `{{token}}`.
+1. **Create a collection.** Open **⋯ → Settings & auth…** and:
+   - add a `base_url` variable (e.g. `http://localhost:8080`)
+   - add a `token` variable and mark it **Secret**
+   - set **Authorization** to **Bearer token** with `{{token}}`
+2. **(Optional) Add environments** like `Staging`. Their variables override the collection's.
+3. **Add a request**, e.g. `GET {{base_url}}/health`, and add checks in the **Tests** tab.
+4. **Send** with `Ctrl+Enter`. Save with `Ctrl+S`.
+5. **Approve as baseline** once the response looks right.
+6. **Run the collection** with **▶** after each change. Failures and diffs show in the **Run** view.
 
-   Every request in the collection follows these: change the URL or token once and all requests use the new value.
-   New requests use **Inherit auth from collection**; tick **Use this auth for all requests** to switch existing ones.
-2. Optional: **Environments → ＋** — create `Staging` etc. Its variables override collection variables of the same
-   name, so the same collection runs against each environment.
-3. Add a request such as `GET {{base_url}}/health`, and add tests in the **Tests** tab.
-4. Pick the environment in the top bar and press **Send** (`Ctrl+Enter`). Save with `Ctrl+S`; close the tab with
-   `Ctrl+W`. Open tabs come back the next time you start the app (saved versions; unsaved edits are not kept).
-5. When the response is correct, choose **Approve as baseline…** and mark dynamic fields as ignored.
-6. After a code, config or database change, press **▶** on the collection. Failures and baseline diffs are listed in the **Run** view; export an HTML or JSON report from there or from **History**.
+### Try the demo
 
-A demo collection with wallet, report-total and authorization checks is in [`tests/fixtures/wallet-demo.collection.json`](tests/fixtures/wallet-demo.collection.json) (**Import** in the sidebar).
+**Import** [`docs/demo/jsonplaceholder.collection.json`](docs/demo/jsonplaceholder.collection.json), pick the
+**JSONPlaceholder** environment and press **▶**. It runs 10 requests with tests against the free
+[JSONPlaceholder](https://jsonplaceholder.typicode.com) fake API. No setup or token needed.
 
-> Only test systems and accounts you are authorized to use. Use dedicated test accounts and controlled data; never run destructive tests against real customer data.
+Or from the command line:
+
+```sh
+api-test-kits-cli run docs/demo/jsonplaceholder.collection.json --env JSONPlaceholder
+```
+
+### Keyboard shortcuts
+
+| Keys | Action |
+| --- | --- |
+| `Ctrl+Enter` | Send request |
+| `Ctrl+S` | Save |
+| `Ctrl+W` | Close tab |
+
+---
 
 ## Building
 
-Requirements: Go 1.26+, Node.js 20+, and the [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation):
+### Requirements
+
+- Go 1.26+
+- Node.js 20+
+- Wails v2 CLI:
+
+  ```sh
+  go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+  ```
+
+### Common commands
 
 ```sh
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+make deps     # install dependencies
+make dev      # run with hot reload
+make run      # build and start the app
+make build    # build → build/bin/api-test-kits
+make test     # run all tests
+make check    # lint, typecheck, format check and tests
+make help     # list every target
 ```
 
-### With make
+### Platform builds
 
 ```sh
-make help              # list all targets
-make deps              # install frontend dependencies, download Go modules
-make dev               # run with hot reload
-make run               # build for this machine and start the app
-make build             # build for this machine → build/bin/api-test-kits
-make test              # frontend + Go tests
-make check             # regression check: lint, typecheck, gofmt, go vet and all tests
-make hooks             # run that check on staged changes before every commit (skip: git commit --no-verify)
-make build-linux       # Linux binary for this architecture
-make build-debian      # .deb for Debian 12+/Ubuntu 22.04+ (built in a Debian 12 container, needs Docker)
-make build-windows     # Windows amd64 + arm64 → release/api-test-kits-<version>-windows-<arch>.exe (+ .zip)
-make build-cli         # headless CLI for CI → build/bin/api-test-kits-cli (pure Go)
-make release-cli       # CLI for Linux, Windows and macOS (amd64 + arm64) → release/
-make release           # bump the patch version (0.1.0 → 0.1.1 → …), tag, test, build every package → release/
+make build-linux     # Linux binary
+make build-debian    # .deb for Debian 12+ / Ubuntu 22.04+ (needs Docker)
+make build-windows   # Windows amd64 + arm64
+make build-darwin    # macOS .app (macOS host only)
+make build-cli       # headless CLI → build/bin/api-test-kits-cli
 ```
 
-`make release` bumps the version on every run, then calls [`scripts/build.sh`](scripts/build.sh), which can also be used directly:
+<details>
+<summary><b>Linux notes</b></summary>
+
+Install system packages first:
 
 ```sh
-scripts/build.sh --help
-scripts/build.sh -v 1.2.0 linux windows      # → release/api-test-kits-1.2.0-<os>-<arch>.{tar.gz,zip}
-scripts/build.sh --nsis windows/amd64        # plus an NSIS installer (needs makensis)
-```
-
-Each release also gets a `SHA256SUMS-<version>.txt`. The version is stamped into the binary (default: `git describe`).
-Linux builds use CGO with GTK/WebKitGTK, so they only target the host architecture; macOS builds need a macOS host.
-On Windows, run the script from Git Bash, or use the `wails build` commands below.
-
-### Linux
-
-```sh
-# Debian/Ubuntu 24.04+ (WebKitGTK 4.1)
+# Debian / Ubuntu 24.04+
 sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
-wails build -tags webkit2_41          # → build/bin/api-test-kits
+
+# Fedora
+sudo dnf install gtk3-devel webkit2gtk4.1-devel
 ```
 
-A binary built with `wails build` or `make build-linux` only runs on distributions with the same or a newer glibc than
-the build machine. To build one package for Debian 12+, Ubuntu 22.04+ and their derivatives (Mint, Pop!_OS, ...), use:
+- A plain Linux binary only runs on systems with the same or newer glibc.
+  For a package that works on Debian 12+ / Ubuntu 22.04+, use `make build-debian`, then:
 
-```sh
-make build-debian                     # → release/api-test-kits_<version>_<arch>.deb
-sudo apt install ./release/api-test-kits_*.deb
-api-test-kits                         # or open it from the app menu
-```
+  ```sh
+  sudo apt install ./release/api-test-kits_*.deb
+  ```
 
-This builds inside a Debian 12 container ([`build/linux/debian.Dockerfile`](build/linux/debian.Dockerfile)), so only
-Docker is needed on the host. The package declares its GTK/WebKitGTK dependencies, so `apt` installs them, and it adds
-a menu entry and icon.
+- On older systems with WebKitGTK 4.0, drop `-tags webkit2_41` when calling `wails` directly.
 
-On distributions that still ship WebKitGTK 4.0 (`libwebkit2gtk-4.0-dev`), omit `-tags webkit2_41`. Fedora: `sudo dnf install gtk3-devel webkit2gtk4.1-devel`.
+</details>
 
-### Windows
+<details>
+<summary><b>Windows notes</b></summary>
 
-Requires the WebView2 runtime (preinstalled on Windows 10/11).
+Needs the WebView2 runtime (already on Windows 10/11).
 
 ```powershell
-wails build                           # → build\bin\api-test-kits.exe
-wails build -nsis                     # optional installer (requires NSIS)
+wails build         # → build\bin\api-test-kits.exe
+wails build -nsis   # optional installer (needs NSIS)
 ```
 
-### Releasing updates (no reinstall for users)
+Run `scripts/*.sh` from Git Bash.
 
-Installed apps update themselves in place. On start (and from **Settings → Updates**) they read the update manifest
-`latest.json`, and when a newer version exists they show **Update and restart**. The app downloads the file that
-matches how it was installed and checks its SHA-256:
+</details>
 
-| Installed from           | How it updates                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `.deb`                   | installs the new `.deb` with `pkexec apt-get install` (asks for the password)     |
-| Windows installer (NSIS) | runs the new installer silently (UAC prompt), then reopens the app                |
-| Portable binary / `.zip` | replaces its own executable, then restarts                                        |
-| macOS / anything else    | opens the release page to download the new version                                |
+<details>
+<summary><b>App icon</b></summary>
 
-Your collections, environments and history live in the data folder, not the install folder, so they are kept and
-migrated automatically.
-
-To ship a fix or a new feature:
+Edit [`build/appicon.svg`](build/appicon.svg), update the matching geometry in `scripts/render-icon.py`, then run:
 
 ```sh
-make release-patch NOTES="Fix header parsing"   # 0.1.0 → 0.1.1: bump, commit, tag, build all, write latest.json
-make release-minor NOTES="Socket.IO support"    # 0.1.1 → 0.2.0 for new features (release-major for breaking ones)
-git push --follow-tags                          # the Release workflow publishes release/* to GitHub
+make icons
 ```
 
-Pushing the tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds every package and
-publishes it with `latest.json` as the newest GitHub release. Apps read the manifest from `UPDATE_URL` (default
-`https://github.com/Fazann/api_testing_tools/releases/latest/download/latest.json`), so **the repository, or wherever you
-host the files, must be publicly readable**. Override it with `make release-all UPDATE_URL=https://…/latest.json`. Builds
-with `UPDATE_URL=` (or `wails dev`) never check for updates.
+</details>
 
-### App icon
-
-The icon source is [`build/appicon.svg`](build/appicon.svg) (also the frontend favicon). After changing it, update the
-matching geometry in `scripts/render-icon.py` and run `python3 scripts/render-icon.py` to regenerate
-`build/appicon.png` (Linux window icon) and `build/windows/icon.ico` (embedded in the Windows executable).
-
-### Development
-
-```sh
-wails dev -tags webkit2_41            # hot-reloading app (omit the tag on Windows)
-```
+---
 
 ## Testing
 
 ```sh
-go test -race ./...                   # unit + integration tests (local mock HTTP server)
-cd frontend && npm ci && npm run lint && npm test && npm run build
+make test     # frontend + Go tests
+make check    # full regression check
+make hooks    # run the check before every commit (skip with --no-verify)
 ```
 
-`go test` compiles `main.go`, which embeds `frontend/dist`, so build the frontend once first. CI (`.github/workflows/ci.yml`) runs all of this on Linux and Windows, plus `govulncheck` and packaged desktop builds.
+> `go test` needs `frontend/dist`, so build the frontend once first (`make frontend`).
 
-## Scripts
+CI runs everything on Linux and Windows ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
-Requests and collections can have **pre-request** and **post-response** scripts in JavaScript with a
-Postman-compatible `pm` API — sign or encrypt requests (`CryptoJS`, `pm.crypto.rsaSign`/`rsaEncrypt`), write
-`pm.test` checks, and pass values such as tokens between requests with `pm.environment.set`. `lodash`, `moment`,
-`uuid` and `atob`/`btoa` are bundled. Scripts run in an isolated runtime with no file or network access. See
-[docs/collection-format.md#scripts](docs/collection-format.md#scripts) for the full API.
+---
+
+## Releasing
+
+Installed apps update themselves. Users never need to reinstall.
+
+```sh
+make release-patch NOTES="Fix header parsing"   # 0.1.0 → 0.1.1 (bug fixes)
+make release-minor NOTES="New feature"          # 0.1.1 → 0.2.0 (new features)
+make release-major NOTES="Breaking change"      # 0.2.0 → 1.0.0
+git push --follow-tags                          # publishes the GitHub release
+```
+
+Each command bumps the version, tags it, builds every package and writes `latest.json`.
+
+### How the app updates
+
+| Installed from | Update method |
+| --- | --- |
+| `.deb` | Installs the new `.deb` (asks for password) |
+| Windows installer | Runs the new installer silently |
+| Portable binary / `.zip` | Replaces itself and restarts |
+| macOS / other | Opens the download page |
+
+- Apps read `latest.json` from `UPDATE_URL` (default: this repo's latest GitHub release).
+- The repo or host **must be public**.
+- Build with `UPDATE_URL=` to turn updates off.
+
+---
 
 ## Data and backups
 
-Everything is stored in one SQLite file:
+All data is in one SQLite file:
 
-| OS      | Location                                            |
-| ------- | --------------------------------------------------- |
-| Linux   | `~/.config/api-test-kits/data.db`                   |
-| Windows | `%AppData%\api-test-kits\data.db`                   |
+| OS | Location |
+| --- | --- |
+| Linux | `~/.config/api-test-kits/data.db` |
+| macOS | `~/Library/Application Support/api-test-kits/data.db` |
+| Windows | `%AppData%\api-test-kits\data.db` |
 
-Set `APIGUARD_DATA_DIR` to use another directory (e.g. a portable install). To back up, close the app and copy `data.db`, or export collections. **Settings → Local data** shows the path and size, compacts the database, and can delete all local data. Data from older versions (`test-tool-kit/` or `api-regression-guard/`) is moved here automatically on first start. Uninstalling the app does not remove this folder; delete it manually to remove your data.
+- **Custom folder:** set `APIGUARD_DATA_DIR`.
+- **Backup:** close the app and copy `data.db`, or export your collections.
+- **Manage:** **Settings → Local data** shows size, compacts, or deletes all data.
+- **Uninstall** keeps this folder. Delete it by hand to remove your data.
 
-Secrets are stored unencrypted in this file with owner-only permissions — read [docs/security.md](docs/security.md).
+> Secrets are stored **unencrypted** (owner-only file permissions). See [docs/security.md](docs/security.md).
+
+---
 
 ## Project layout
 
 ```text
-main.go, app.go          Wails entry point and bindings
-internal/                engine (domain, httpclient, runner, assertions, regression, scripting,
-                         environments, redact, storage, reports, collectionio, service)
-frontend/                Vue 3 + TypeScript + Pinia UI
-tests/integration        end-to-end tests against a mock API
-tests/fixtures           demo collection
-docs/                    spec, architecture, security, collection format
+main.go, app.go      Wails entry point and bindings
+cmd/                 CLI entry point
+internal/            core engine (runner, assertions, regression, storage, reports…)
+frontend/            Vue 3 + TypeScript + Pinia UI
+scripts/             build, release and check scripts
+tests/integration/   end-to-end tests against a mock API
+tests/fixtures/      OpenAPI fixtures for tests
+docs/demo/           JSONPlaceholder demo collection
+docs/                guides and specs
 ```
 
-## Status
+---
 
-This implements the MVP (P0) from [docs/spec.md](docs/spec.md). OpenAPI import and request chaining through scripts (P1) are also done. Not yet done: other P1 items (CLI, scheduled runs, webhooks, OS-backed encrypted secrets) and packaged-app smoke tests on real Windows/Linux machines.
+## Documentation
+
+| Topic | Doc |
+| --- | --- |
+| Collections | [collections.md](docs/collections.md) |
+| Collection file format & scripts | [collection-format.md](docs/collection-format.md) |
+| Rules across requests | [collection-rules.md](docs/collection-rules.md) |
+| Schema regression | [schema-regression.md](docs/schema-regression.md) |
+| Detect changing fields | [changing-fields.md](docs/changing-fields.md) |
+| Compare environments | [environment-comparison.md](docs/environment-comparison.md) |
+| Performance | [performance.md](docs/performance.md) |
+| Race tests | [race-test.md](docs/race-test.md) |
+| Permission matrix | [permission-matrix.md](docs/permission-matrix.md) |
+| WebSocket / Socket.IO | [sockets.md](docs/sockets.md) |
+| Sign-off report | [signoff-report.md](docs/signoff-report.md) |
+| Security tests | [security-tests.md](docs/security-tests.md) |
+| CLI | [cli.md](docs/cli.md) |
+| Security | [security.md](docs/security.md) |
+| Architecture | [architecture.md](docs/architecture.md) |
+| Spec | [spec.md](docs/spec.md) |
