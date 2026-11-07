@@ -130,7 +130,7 @@ func TestSocketRequestsRunInCollectionsHistoryExportAndCLI(t *testing.T) {
 	if strings.Contains(res.stdout, socketToken) {
 		t.Fatal("CLI output leaked the token")
 	}
-	imp, err := f.svc.ImportCollection(ctx, data)
+	imp, err := f.svc.ImportCollection(ctx, data, "")
 	if err != nil {
 		t.Fatal(err)
 	}

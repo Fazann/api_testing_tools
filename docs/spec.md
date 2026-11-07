@@ -161,6 +161,13 @@ Do not promise that a desktop GUI process can run jobs while the computer is pow
 3. Check the rule against the last run while writing it, then save.
 4. Every collection run (and the CLI) evaluates the rules after the requests and fails when one does not hold.
 
+### Workflow L: Keep the API and its documentation in step
+
+1. Import the API's OpenAPI file, or attach it to an existing collection (**⋯ → API contract…**).
+2. Run the collection. Responses that drift from the spec fail with the field and the problem: wrong types, missing
+   required or undocumented fields, enum values, undocumented status codes or content types.
+3. Fix the API or update the spec and **Replace spec…**; the CLI runs the same check in CI.
+
 ### Workflow K: Sign off a release
 
 1. Run the collection (and its race tests and permission matrix) in the release environment.
@@ -413,6 +420,25 @@ A summary of one collection in one environment for QA hand-off and audits. Guide
   with their own run kinds (`race`, `matrix`); older `burst` runs are still recognised.
 - Output: one self-contained HTML file without scripts, with print styles; PDF through the system print dialog from an
   in-app preview. Values are redacted again with the current secrets; response bodies are not included.
+
+### OpenAPI contract check — implemented after the MVP
+
+Checks real responses against the OpenAPI spec attached to the collection. Guide: [openapi-contract.md](openapi-contract.md).
+
+- One spec per collection (OpenAPI 3.x or Swagger 2.0, JSON or YAML, ≤ 10 MB), stored as JSON; attached automatically
+  when an OpenAPI file is imported, or with **API contract… → Attach spec…**. Exported, imported and duplicated with
+  the collection, so the CLI checks it too. Options: on/off, allow undocumented fields.
+- Runs on Send and collection runs (not race tests, matrices or comparisons) for HTTP requests whose method and final
+  URL path match an operation: server path prefix, then suffix match; most fixed segments wins; host ignored.
+- Checks the status code (exact, `NXX`, `default`), required response headers, Content-Type, and the JSON body against
+  the schema: types, nullable, required, undocumented fields (unless allowed or `additionalProperties`), enum, const,
+  numeric and length limits, pattern, common formats, items, allOf/anyOf/oneOf/not and local `$ref`s. External `$ref`s
+  are not followed; truncated bodies are not checked.
+- Results are assertion results of kind `contract` (one passing result, or one per problem, ≤ 20) that fail the
+  request, count in history, reports, JUnit and the CLI exit code. Messages are redacted and quote values ≤ 40
+  characters only.
+- The **API contract** tab shows the spec, the options and coverage: which operation each request matches in the
+  selected environment, and operations without a request.
 
 ### P2 — Only after validating demand
 
@@ -782,6 +808,14 @@ Use SQLite migrations from the beginning.
 
 - `collection_id`: primary key, foreign key to `collections` (deleted with the collection)
 - `config_json`: text — roles with their variable overrides, ticked request IDs, expected access per cell
+- `updated_at`: timestamp
+
+### `collection_contracts`
+
+- `collection_id`: primary key, foreign key to `collections` (deleted with the collection)
+- `spec_json`: text — the OpenAPI or Swagger document as compact JSON
+- `source_name`: text — the file it was loaded from
+- `enabled`, `allow_undocumented`: integers (booleans)
 - `updated_at`: timestamp
 
 ### `environment_comparisons`

@@ -19,11 +19,12 @@ import { useWorkspace } from '@/stores/workspace';
 import type { Collection, Request } from '@/types';
 import { clone } from '@/utils/object';
 
+import CollectionContract from './CollectionContract.vue';
 import CollectionEndpoints from './CollectionEndpoints.vue';
 import CollectionRules from './CollectionRules.vue';
 import EnvironmentCompare from './EnvironmentCompare.vue';
 
-type Tab = 'endpoints' | 'times' | 'compare' | 'rules' | 'permissions' | 'settings';
+type Tab = 'endpoints' | 'contract' | 'times' | 'compare' | 'rules' | 'permissions' | 'settings';
 const props = defineProps<{ collection: Collection; initialTab?: Tab }>();
 const emit = defineEmits<{ close: [] }>();
 const ws = useWorkspace();
@@ -110,6 +111,7 @@ async function save() {
 
 const tabs = computed(() => [
   { id: 'endpoints' as const, label: 'Endpoints', count: tree.value?.requests.length },
+  { id: 'contract' as const, label: 'API contract' },
   { id: 'times' as const, label: 'Response times' },
   { id: 'compare' as const, label: 'Compare environments' },
   { id: 'rules' as const, label: 'Rules', count: tree.value?.collection.rules?.length || undefined },
@@ -129,6 +131,11 @@ const tabs = computed(() => [
 
     <template v-if="tab === 'endpoints'">
       <CollectionEndpoints v-if="tree" :tree="tree" @open="openEndpoint" />
+      <p v-else class="muted small">Loading…</p>
+    </template>
+
+    <template v-else-if="tab === 'contract'">
+      <CollectionContract v-if="tree" :tree="tree" @open="openEndpoint" />
       <p v-else class="muted small">Loading…</p>
     </template>
 

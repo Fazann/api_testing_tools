@@ -229,6 +229,9 @@ func (s *Store) DuplicateCollection(ctx context.Context, id, newName string) (do
 	if err := s.ImportTree(ctx, t); err != nil {
 		return domain.Collection{}, err
 	}
+	if err := s.copyContract(ctx, id, t.Collection.ID); err != nil {
+		return domain.Collection{}, err
+	}
 	return s.GetCollection(ctx, t.Collection.ID)
 }
 

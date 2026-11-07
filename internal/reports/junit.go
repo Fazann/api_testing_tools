@@ -122,6 +122,10 @@ func FailureDetails(res domain.RunResult) []string {
 			continue
 		}
 		label := a.Description
+		if a.Kind == domain.AssertContract && a.Path != "" {
+			// "GET /pets/{petId} → 200 price — expected number, got string"
+			label += " " + a.Path
+		}
 		if label == "" {
 			label = string(a.Kind)
 			if a.Path != "" {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"api-test-kits/internal/collectionio"
 	"api-test-kits/internal/compare"
+	"api-test-kits/internal/contract"
 	"api-test-kits/internal/domain"
 	"api-test-kits/internal/fsutil"
 	"api-test-kits/internal/security"
@@ -314,11 +316,57 @@ func (a *App) ImportCollection() (*service.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := a.svc.ImportCollection(a.ctx, data)
+	res, err := a.svc.ImportCollection(a.ctx, data, filepath.Base(path))
 	if err != nil {
 		return nil, err
 	}
 	return &res, nil
+}
+
+// ---- OpenAPI contract ----
+
+func (a *App) GetContract(collectionID string) (service.ContractInfo, error) {
+	return a.svc.GetContract(a.ctx, collectionID)
+}
+
+// AttachContract asks for an OpenAPI 3 / Swagger 2 file and attaches it to
+// the collection. Returns nil if cancelled.
+func (a *App) AttachContract(collectionID string) (*service.ContractInfo, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   "Attach OpenAPI / Swagger spec",
+		Filters: []runtime.FileFilter{{DisplayName: "OpenAPI or Swagger (*.json, *.yaml, *.yml)", Pattern: "*.json;*.yaml;*.yml"}},
+	})
+	if err != nil || path == "" {
+		return nil, err
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if st.Size() > contract.MaxSpecBytes {
+		return nil, fmt.Errorf("file is larger than %d MB", contract.MaxSpecBytes>>20)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := a.svc.AttachContract(a.ctx, collectionID, data, filepath.Base(path))
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+func (a *App) SetContractOptions(collectionID string, enabled, allowUndocumented bool) (service.ContractInfo, error) {
+	return a.svc.SetContractOptions(a.ctx, collectionID, enabled, allowUndocumented)
+}
+
+func (a *App) RemoveContract(collectionID string) error {
+	return a.svc.RemoveContract(a.ctx, collectionID)
+}
+
+func (a *App) GetContractCoverage(collectionID, envID string) (service.ContractCoverage, error) {
+	return a.svc.GetContractCoverage(a.ctx, collectionID, envID)
 }
 
 // ---- settings and data ----

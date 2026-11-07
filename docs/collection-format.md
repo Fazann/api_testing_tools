@@ -16,6 +16,7 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 | `environments`    | array     | Optional. `name`, `protected`, `variables`                     |
 | `secretsIncluded` | boolean   | `true` only if the user chose to export secret values          |
 | `baselines`       | array     | Optional. Approved baselines, when **Include baselines** was ticked; see [Baselines](#baselines) |
+| `contract`        | object    | Optional. The attached OpenAPI spec and its options; see [Contract](#contract) |
 
 IDs in a file only link folders and requests to each other. **Every ID is regenerated on import**, so importing can never overwrite existing data.
 
@@ -119,6 +120,23 @@ Local, Staging and Production. Secret collection variables are redacted like env
 are blanked on export unless secrets are explicitly included. Required variables are satisfied by either.
 
 - `{{name}}` references a collection or environment variable in the URL, headers, query, body, auth and assertion expected values. Built-ins: `{{$uuid}}`, `{{$timestamp}}` (Unix seconds), `{{$isoTimestamp}}`.
+
+### Contract
+
+`contract` is the collection's OpenAPI contract (guide: [openapi-contract.md](openapi-contract.md)), exported whenever
+one is attached. On import the spec must be an OpenAPI 3.x or Swagger 2.0 document of at most 10 MB, or the import
+fails.
+
+```json
+{
+  "spec": { "openapi": "3.0.3", "info": { "title": "Pets", "version": "1.0" }, "paths": { "…": {} } },
+  "sourceName": "pets.json",
+  "enabled": true,
+  "allowUndocumented": false
+}
+```
+
+Importing an OpenAPI or Swagger file directly creates the same contract, enabled, from the imported file.
 
 ### Collection rules
 

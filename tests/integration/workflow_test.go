@@ -48,7 +48,7 @@ func setup(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	imp, err := svc.ImportCollection(ctx, data)
+	imp, err := svc.ImportCollection(ctx, data, "")
 	if err != nil {
 		t.Fatalf("import demo collection: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestNoSecretsInHistoryOrReports(t *testing.T) {
 		t.Fatal("collection export leaked the token")
 	}
 	// The export can be imported again.
-	if _, err := f.svc.ImportCollection(ctx, exported); err != nil {
+	if _, err := f.svc.ImportCollection(ctx, exported, ""); err != nil {
 		t.Fatalf("re-import exported collection: %v", err)
 	}
 }
@@ -338,7 +338,7 @@ func TestOpenAPIImportRunsAgainstAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	imp, err := f.svc.ImportCollection(ctx, data)
+	imp, err := f.svc.ImportCollection(ctx, data, "")
 	if err != nil {
 		t.Fatalf("import OpenAPI: %v", err)
 	}

@@ -8,6 +8,8 @@ import type {
   Collection,
   CollectionTree,
   CompareReport,
+  ContractCoverage,
+  ContractInfo,
   DataInfo,
   EnvComparison,
   Environment,
@@ -124,6 +126,14 @@ export const api = {
   checkCollectionRules: (collectionId: string, rules: Rule[]) =>
     call<RulesCheck>('CheckCollectionRules', collectionId, rules),
 
+  getContract: (collectionId: string) => call<ContractInfo>('GetContract', collectionId),
+  /** Opens a file dialog; null when cancelled. */
+  attachContract: (collectionId: string) => call<ContractInfo | null>('AttachContract', collectionId),
+  setContractOptions: (collectionId: string, enabled: boolean, allowUndocumented: boolean) =>
+    call<ContractInfo>('SetContractOptions', collectionId, enabled, allowUndocumented),
+  removeContract: (collectionId: string) => call<void>('RemoveContract', collectionId),
+  getContractCoverage: (collectionId: string, envId: string) =>
+    call<ContractCoverage>('GetContractCoverage', collectionId, envId),
   getEnvComparison: (collectionId: string) => call<EnvComparison>('GetEnvComparison', collectionId),
   saveEnvComparison: (c: EnvComparison) => call<EnvComparison>('SaveEnvComparison', c),
   compareEnvironments: (opId: string, c: EnvComparison, confirmed: boolean) =>

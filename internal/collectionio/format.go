@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"api-test-kits/internal/contract"
 	"api-test-kits/internal/domain"
 	"api-test-kits/internal/redact"
 	"api-test-kits/internal/storage"
@@ -45,6 +46,18 @@ type Document struct {
 	// Baselines are optional approved baselines, so a regression check can run
 	// on another machine or in CI. Older builds ignore this field.
 	Baselines []Baseline `json:"baselines,omitempty"`
+	// Contract is the attached OpenAPI spec and its check options
+	// (docs/openapi-contract.md). Older builds ignore this field.
+	Contract *Contract `json:"contract,omitempty"`
+}
+
+// Contract is a collection's OpenAPI contract in an export.
+type Contract struct {
+	// Spec is the OpenAPI 3.x or Swagger 2.0 document as JSON.
+	Spec              json.RawMessage `json:"spec"`
+	SourceName        string          `json:"sourceName,omitempty"`
+	Enabled           bool            `json:"enabled"`
+	AllowUndocumented bool            `json:"allowUndocumented"`
 }
 
 // MaxBaselines bounds how many baselines one file may carry.
@@ -214,6 +227,9 @@ type Imported struct {
 	// Baselines point at the new request IDs. Their EnvironmentID is empty;
 	// Environment names the environment to attach them to.
 	Baselines []ImportedBaseline
+	// Contract is the OpenAPI contract to attach, already validated; its
+	// CollectionID is empty. Nil when there is none.
+	Contract *domain.Contract
 }
 
 // ImportedBaseline is a validated baseline waiting for its environment.
@@ -257,7 +273,15 @@ func Read(r io.Reader) (*Imported, error) {
 		if err != nil {
 			return nil, err
 		}
-		return validate(doc)
+		imp, err := validate(doc)
+		if err != nil {
+			return nil, err
+		}
+		// Keep the spec, so responses can be checked against it.
+		if spec, err := compactSpec(data); err == nil {
+			imp.Contract = &domain.Contract{Spec: spec, Enabled: true}
+		}
+		return imp, nil
 	case probe.Format != "":
 		return nil, fmt.Errorf("unrecognized file format %q (expected %q or an OpenAPI/Swagger document)", probe.Format, FormatName)
 	}
@@ -356,7 +380,16 @@ func validate(doc Document) (*Imported, error) {
 	if len(bproblems) > 0 {
 		return nil, &ValidationError{Problems: bproblems}
 	}
-	return &Imported{Tree: tree, Environments: envs, Baselines: baselines}, nil
+	imp := &Imported{Tree: tree, Environments: envs, Baselines: baselines}
+	if doc.Contract != nil {
+		spec, err := compactSpec(doc.Contract.Spec)
+		if err != nil {
+			return nil, fmt.Errorf("contract: %w", err)
+		}
+		imp.Contract = &domain.Contract{Spec: spec, SourceName: limit(singleLine(doc.Contract.SourceName), domain.MaxNameLength),
+			Enabled: doc.Contract.Enabled, AllowUndocumented: doc.Contract.AllowUndocumented}
+	}
+	return imp, nil
 }
 
 func validateBaselines(list []Baseline, newID map[string]string) ([]ImportedBaseline, []string) {
@@ -419,4 +452,34 @@ func limitName(s string) string {
 		s = string(r[:domain.MaxNameLength])
 	}
 	return s
+}
+
+// ReadSpec reads an OpenAPI 3.x or Swagger 2.0 document (JSON or YAML) to
+// attach as a collection's contract, and returns it as compact JSON.
+func ReadSpec(data []byte) (json.RawMessage, error) {
+	if len(data) > contract.MaxSpecBytes {
+		return nil, fmt.Errorf("the spec is larger than %d MB", contract.MaxSpecBytes>>20)
+	}
+	if looksLikeYAML(data) {
+		var err error
+		if data, err = yamlToJSON(data); err != nil {
+			return nil, fmt.Errorf("the file is not valid JSON or YAML: %w", err)
+		}
+	}
+	return compactSpec(data)
+}
+
+// compactSpec checks that data is a spec the contract check can use.
+func compactSpec(data []byte) (json.RawMessage, error) {
+	if _, err := contract.Parse(data); err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, data); err != nil {
+		return nil, err
+	}
+	if buf.Len() > contract.MaxSpecBytes {
+		return nil, fmt.Errorf("the spec is larger than %d MB", contract.MaxSpecBytes>>20)
+	}
+	return buf.Bytes(), nil
 }

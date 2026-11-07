@@ -258,8 +258,9 @@ export interface AssertionResult {
   /**
    * 'script' is a pm.test() result from a post-response script; its name is in description.
    * 'rule' is a collection rule (in the "Collection rules" result); its name is in description.
+   * 'contract' is an OpenAPI contract finding; the operation ("GET /pets/{petId} → 200") is in description.
    */
-  kind: AssertionKind | 'script' | 'socket_step' | 'rule';
+  kind: AssertionKind | 'script' | 'socket_step' | 'rule' | 'contract';
   path?: string;
   operator?: Operator;
   description?: string;
@@ -387,6 +388,42 @@ export interface ImportResult {
   baselines: number;
   /** Baselines whose environment exists neither in the file nor on this machine. */
   baselinesSkipped: number;
+  /** True when an OpenAPI contract was attached (OpenAPI imports, or exports that carry one). */
+  contract: boolean;
+}
+
+/** The OpenAPI spec attached to a collection (docs/openapi-contract.md). */
+export interface ContractInfo {
+  attached: boolean;
+  sourceName: string;
+  title: string;
+  version: string;
+  operations: number;
+  enabled: boolean;
+  allowUndocumented: boolean;
+  updatedAt: string;
+}
+
+export interface ContractCoverageRow {
+  requestId: string;
+  name: string;
+  method: string;
+  /** "GET /pets/{petId}", or '' when the request matches no operation. */
+  operation: string;
+  /** Why the request could not be matched, e.g. an undefined variable. */
+  problem?: string;
+}
+
+export interface ContractOperationRow {
+  operation: string;
+  summary: string;
+  /** How many requests match it. */
+  requests: number;
+}
+
+export interface ContractCoverage {
+  requests: ContractCoverageRow[];
+  operations: ContractOperationRow[];
 }
 
 export interface Settings {

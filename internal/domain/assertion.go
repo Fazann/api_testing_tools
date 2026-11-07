@@ -36,6 +36,9 @@ const (
 	// AssertRule is the outcome of one collection rule (see rules.go). It only
 	// appears in the "Collection rules" result of a collection run.
 	AssertRule AssertionKind = "rule"
+	// AssertContract is one finding of the OpenAPI contract check (see
+	// docs/openapi-contract.md). It only appears in results.
+	AssertContract AssertionKind = "contract"
 )
 
 type Operator string

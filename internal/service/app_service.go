@@ -42,6 +42,8 @@ type Service struct {
 	ops      map[string]context.CancelFunc
 	// sockets are the open console connections, by session ID.
 	sockets map[string]*socketSession
+	// specs caches parsed OpenAPI contracts by collection ID.
+	specs map[string]cachedSpec
 }
 
 // New creates a service backed by store.
@@ -486,6 +488,9 @@ func (s *Service) execute(ctx context.Context, opID string, reqs []domain.Reques
 		return domain.Run{}, err
 	}
 	scope := runScope(env, c)
+	if scope.Contract, err = s.contractChecker(ctx, c); err != nil {
+		return domain.Run{}, err
+	}
 	client, st := s.current()
 	items := make([]runner.Item, len(reqs))
 	for i, r := range reqs {
@@ -910,6 +915,12 @@ func (s *Service) ExportCollection(ctx context.Context, collectionID string, env
 		return nil, err
 	}
 	doc := collectionio.Export(tree, envs, includeSecrets, Version, time.Now())
+	if ct, err := s.store.GetContract(ctx, collectionID); err != nil {
+		return nil, err
+	} else if ct != nil {
+		doc.Contract = &collectionio.Contract{Spec: ct.Spec, SourceName: ct.SourceName, Enabled: ct.Enabled,
+			AllowUndocumented: ct.AllowUndocumented}
+	}
 	if includeBaselines {
 		list, err := s.store.ListCollectionBaselines(ctx, collectionID)
 		if err != nil {
@@ -937,13 +948,19 @@ type ImportResult struct {
 	// BaselinesSkipped counts baselines whose environment exists neither in
 	// the file nor on this machine.
 	BaselinesSkipped int `json:"baselinesSkipped"`
+	// Contract is true when an OpenAPI contract was attached.
+	Contract bool `json:"contract"`
 }
 
 // ImportCollection validates untrusted data and stores it with fresh IDs.
-func (s *Service) ImportCollection(ctx context.Context, data []byte) (ImportResult, error) {
+// sourceName is the file name, kept as the name of an attached OpenAPI spec.
+func (s *Service) ImportCollection(ctx context.Context, data []byte, sourceName string) (ImportResult, error) {
 	imp, err := collectionio.Read(bytes.NewReader(data))
 	if err != nil {
 		return ImportResult{}, err
+	}
+	if imp.Contract != nil && imp.Contract.SourceName == "" {
+		imp.Contract.SourceName = sourceName
 	}
 	return s.ImportParsed(ctx, imp)
 }
@@ -973,7 +990,15 @@ func (s *Service) ImportParsed(ctx context.Context, imp *collectionio.Imported) 
 		}
 		envByName[saved.Name] = saved.ID
 	}
-	res := ImportResult{Requests: len(imp.Tree.Requests), Folders: len(imp.Tree.Folders), Environments: len(imp.Environments)}
+	if imp.Contract != nil {
+		ct := *imp.Contract
+		ct.CollectionID = imp.Tree.Collection.ID
+		if _, err := s.store.SaveContract(ctx, ct); err != nil {
+			return ImportResult{}, fmt.Errorf("collection imported, but its OpenAPI contract failed: %w", err)
+		}
+	}
+	res := ImportResult{Requests: len(imp.Tree.Requests), Folders: len(imp.Tree.Folders), Environments: len(imp.Environments),
+		Contract: imp.Contract != nil}
 	for _, ib := range imp.Baselines {
 		b := ib.Baseline
 		if ib.Environment != "" {

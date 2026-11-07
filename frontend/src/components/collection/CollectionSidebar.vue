@@ -28,7 +28,7 @@ const signoff = ref<Collection | null>(null);
 const curlTarget = ref<Collection | null>(null);
 const editing = ref<{
   collection: Collection;
-  tab: 'endpoints' | 'times' | 'compare' | 'rules' | 'permissions' | 'settings';
+  tab: 'endpoints' | 'contract' | 'times' | 'compare' | 'rules' | 'permissions' | 'settings';
 } | null>(null);
 
 async function newCollection() {
@@ -46,6 +46,7 @@ async function importCollection() {
       `Imported "${res.collection.name}": ${res.requests} requests, ${res.folders} folders, ` +
         `${res.environments} environments` +
         (res.baselines ? `, ${res.baselines} baselines` : '') +
+        (res.contract ? '; responses will be checked against the OpenAPI spec' : '') +
         (res.baselinesSkipped
           ? ` (${res.baselinesSkipped} baselines skipped: their environment is not on this machine)`
           : ''),
@@ -62,6 +63,7 @@ function menu(c: Collection) {
     { label: 'New folder', action: () => newFolder(c) },
     { label: 'Run collection', action: () => runner.runCollection(c.id, '', c.name) },
     { label: 'Endpoints summary…', action: () => (editing.value = { collection: c, tab: 'endpoints' }) },
+    { label: 'API contract…', action: () => (editing.value = { collection: c, tab: 'contract' }) },
     { label: 'Response times…', action: () => (editing.value = { collection: c, tab: 'times' }) },
     { label: 'Compare environments…', action: () => (editing.value = { collection: c, tab: 'compare' }) },
     { label: 'Rules…', action: () => (editing.value = { collection: c, tab: 'rules' }) },

@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"api-test-kits/internal/assertions"
+	"api-test-kits/internal/contract"
 	"api-test-kits/internal/domain"
 	"api-test-kits/internal/environments"
 	"api-test-kits/internal/httpclient"
@@ -226,6 +227,9 @@ type Scope struct {
 	Vars               *scripting.Variables
 	PreRequestScript   string
 	PostResponseScript string
+	// Contract checks responses against the collection's OpenAPI spec; nil
+	// when none is attached or the check is off.
+	Contract *contract.Checker
 }
 
 // NewScope returns a scope over env (which may be nil) with no collection.
@@ -344,6 +348,13 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 		Duration:   resp.Duration,
 		Truncated:  resp.Truncated,
 	}, resolveAssertions(req.Assertions, env))
+	// The contract sees the full body; its messages are redacted below with the assertions'.
+	results = append(results, scope.Contract.Check(prepared.HTTP.Method, prepared.HTTP.URL, contract.Response{
+		StatusCode: resp.StatusCode,
+		Header:     resp.Header,
+		Body:       resp.Body,
+		Truncated:  resp.Truncated,
+	})...)
 	for i := range results {
 		results[i].Expected = red.String(results[i].Expected)
 		results[i].Actual = red.String(results[i].Actual)

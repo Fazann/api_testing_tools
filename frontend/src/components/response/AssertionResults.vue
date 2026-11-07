@@ -5,7 +5,12 @@ import type { AssertionResult } from '@/types';
 
 defineProps<{ results: AssertionResult[] }>();
 // Kinds that only appear in results, not in a request's saved assertions.
-const SPECIAL_KINDS: Record<string, string> = { script: 'Script test', socket_step: 'Socket step', rule: 'Rule' };
+const SPECIAL_KINDS: Record<string, string> = {
+  script: 'Script test',
+  socket_step: 'Socket step',
+  rule: 'Rule',
+  contract: 'Contract',
+};
 const COLUMNS = [
   { key: 'passed', label: 'Result' },
   { key: 'kind', label: 'Check' },
