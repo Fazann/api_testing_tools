@@ -259,3 +259,49 @@ func WithRoleVariables(env *Environment, role Role) *Environment {
 	out.Variables = vars
 	return &out
 }
+
+// RemapRequests returns the race test with its request references replaced
+// through ids (old ID → new ID). ok is false when a referenced request is
+// not in ids.
+func (t RaceTest) RemapRequests(ids map[string]string) (RaceTest, bool) {
+	id, ok := ids[t.RequestID]
+	if !ok {
+		return t, false
+	}
+	t.RequestID = id
+	if t.Check != nil {
+		c := *t.Check
+		if c.RequestID != "" {
+			if c.RequestID, ok = ids[c.RequestID]; !ok {
+				return t, false
+			}
+		}
+		t.Check = &c
+	}
+	return t, true
+}
+
+// RemapRequests returns the matrix for collectionID with request references
+// replaced through ids (old ID → new ID). Requests that are not in ids are
+// dropped, with their expectations; missing lists how many.
+func (m PermissionMatrix) RemapRequests(collectionID string, ids map[string]string) (out PermissionMatrix, missing int) {
+	out = PermissionMatrix{CollectionID: collectionID, Roles: m.Roles, RequestIDs: []string{},
+		Expected: map[string]map[string]Access{}}
+	for _, id := range m.RequestIDs {
+		if n, ok := ids[id]; ok {
+			out.RequestIDs = append(out.RequestIDs, n)
+		} else {
+			missing++
+		}
+	}
+	for id, cells := range m.Expected {
+		if n, ok := ids[id]; ok {
+			out.Expected[n] = cells
+		}
+	}
+	out.Normalize()
+	return out, missing
+}
+
+// IsEmpty reports whether the matrix has nothing worth keeping.
+func (m PermissionMatrix) IsEmpty() bool { return len(m.Roles) == 0 && len(m.RequestIDs) == 0 }

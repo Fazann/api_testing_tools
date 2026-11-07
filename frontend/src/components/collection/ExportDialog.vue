@@ -54,7 +54,8 @@ async function doExport() {
 <template>
   <ModalFrame :title="`Export “${collection.name}”`" @close="emit('close')">
     <p class="muted">
-      Exports use the documented JSON collection format (version 1) and can be imported on another machine.
+      Exports use the documented JSON collection format (version 1) and can be imported on another machine. They include
+      the requests and their tests, collection rules, race tests, the permission matrix and the OpenAPI contract.
     </p>
     <div class="field">
       <span>Include environments</span>

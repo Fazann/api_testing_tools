@@ -49,6 +49,12 @@ type Document struct {
 	// Contract is the attached OpenAPI spec and its check options
 	// (docs/openapi-contract.md). Older builds ignore this field.
 	Contract *Contract `json:"contract,omitempty"`
+	// RaceTests are the requests' saved race tests; requestId (and
+	// check.requestId) reference requests of this file. Older builds ignore it.
+	RaceTests []domain.RaceTest `json:"raceTests,omitempty"`
+	// PermissionMatrix is the collection's matrix; requestIds and the keys of
+	// expected reference requests of this file. Older builds ignore it.
+	PermissionMatrix *domain.PermissionMatrix `json:"permissionMatrix,omitempty"`
 }
 
 // Contract is a collection's OpenAPI contract in an export.
@@ -230,6 +236,11 @@ type Imported struct {
 	// Contract is the OpenAPI contract to attach, already validated; its
 	// CollectionID is empty. Nil when there is none.
 	Contract *domain.Contract
+	// RaceTests point at the new request IDs.
+	RaceTests []domain.RaceTest
+	// PermissionMatrix points at the new collection and request IDs; nil
+	// when the file has none.
+	PermissionMatrix *domain.PermissionMatrix
 }
 
 // ImportedBaseline is a validated baseline waiting for its environment.
@@ -381,6 +392,9 @@ func validate(doc Document) (*Imported, error) {
 		return nil, &ValidationError{Problems: bproblems}
 	}
 	imp := &Imported{Tree: tree, Environments: envs, Baselines: baselines}
+	if sproblems := imp.addSecurity(doc, newID); len(sproblems) > 0 {
+		return nil, &ValidationError{Problems: sproblems}
+	}
 	if doc.Contract != nil {
 		spec, err := compactSpec(doc.Contract.Spec)
 		if err != nil {
@@ -482,4 +496,100 @@ func compactSpec(data []byte) (json.RawMessage, error) {
 		return nil, fmt.Errorf("the spec is larger than %d MB", contract.MaxSpecBytes>>20)
 	}
 	return buf.Bytes(), nil
+}
+
+// MaxRaceTests bounds how many race tests one file may carry (one per request).
+const MaxRaceTests = MaxRequests
+
+// addSecurity validates the file's race tests and permission matrix against
+// the imported requests (newID maps file request IDs to new ones).
+func (imp *Imported) addSecurity(doc Document, newID map[string]string) []string {
+	var problems []string
+	kind := map[string]domain.RequestKind{}
+	for _, r := range imp.Tree.Requests {
+		kind[r.ID] = r.Kind
+	}
+	if len(doc.RaceTests) > MaxRaceTests {
+		return []string{fmt.Sprintf("too many race tests (%d, max %d)", len(doc.RaceTests), MaxRaceTests)}
+	}
+	seen := map[string]bool{}
+	for i, t := range doc.RaceTests {
+		label := fmt.Sprintf("race test %d", i+1)
+		nt, ok := t.RemapRequests(newID)
+		if !ok {
+			problems = append(problems, label+": references a request that is not in the file")
+			continue
+		}
+		if kind[nt.RequestID].IsSocket() || (nt.Check != nil && kind[nt.Check.RequestID].IsSocket()) {
+			problems = append(problems, label+": race tests cannot use socket requests")
+			continue
+		}
+		if seen[nt.RequestID] {
+			problems = append(problems, label+": a request has more than one race test")
+			continue
+		}
+		seen[nt.RequestID] = true
+		nt.UpdatedAt = time.Time{}
+		nt.Normalize()
+		if err := nt.Validate(); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
+			continue
+		}
+		imp.RaceTests = append(imp.RaceTests, nt)
+	}
+	if m := doc.PermissionMatrix; m != nil && !m.IsEmpty() {
+		nm, missing := m.RemapRequests(imp.Tree.Collection.ID, newID)
+		if missing > 0 {
+			problems = append(problems, fmt.Sprintf("permission matrix: %d request(s) are not in the file", missing))
+		}
+		for _, id := range nm.RequestIDs {
+			if kind[id].IsSocket() {
+				problems = append(problems, "permission matrix: socket requests cannot be in a matrix")
+				break
+			}
+		}
+		if err := nm.Validate(); err != nil {
+			problems = append(problems, fmt.Sprintf("permission matrix: %v", err))
+		}
+		imp.PermissionMatrix = &nm
+	}
+	return problems
+}
+
+// ExportSecurity adds race tests and the permission matrix to doc. Secret
+// role variable values are blanked unless secrets are included.
+func ExportSecurity(doc *Document, tests []domain.RaceTest, m *domain.PermissionMatrix) {
+	for _, t := range tests {
+		t.UpdatedAt = time.Time{}
+		doc.RaceTests = append(doc.RaceTests, t)
+	}
+	if m == nil || m.IsEmpty() {
+		return
+	}
+	out := *m
+	out.CollectionID, out.UpdatedAt = "", time.Time{}
+	out.Roles = make([]domain.Role, len(m.Roles))
+	for i, r := range m.Roles {
+		if !doc.SecretsIncluded {
+			r.Variables = stripSecretValues(r.Variables)
+		}
+		out.Roles[i] = r
+	}
+	doc.PermissionMatrix = &out
+}
+
+// ScanMatrixSecrets lists the secret role variables an export would contain.
+func ScanMatrixSecrets(m *domain.PermissionMatrix) []SecretFinding {
+	var out []SecretFinding
+	if m == nil {
+		return out
+	}
+	for _, r := range m.Roles {
+		for _, v := range r.Variables {
+			if v.Secret && v.Value != "" {
+				out = append(out, SecretFinding{Location: "permission matrix role " + r.Name, Detail: "secret variable " + v.Key})
+			}
+		}
+	}
+	return out
 }

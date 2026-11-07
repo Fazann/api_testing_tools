@@ -883,6 +883,11 @@ func (s *Service) ExportPreview(ctx context.Context, collectionID string, envIDs
 		return nil, err
 	}
 	f := collectionio.ScanSecrets(tree, envs)
+	m, err := s.store.GetPermissionMatrix(ctx, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	f = append(f, collectionio.ScanMatrixSecrets(&m)...)
 	if f == nil {
 		f = []collectionio.SecretFinding{}
 	}
@@ -915,6 +920,15 @@ func (s *Service) ExportCollection(ctx context.Context, collectionID string, env
 		return nil, err
 	}
 	doc := collectionio.Export(tree, envs, includeSecrets, Version, time.Now())
+	tests, err := s.store.ListCollectionRaceTests(ctx, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	matrix, err := s.store.GetPermissionMatrix(ctx, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	collectionio.ExportSecurity(&doc, tests, &matrix)
 	if ct, err := s.store.GetContract(ctx, collectionID); err != nil {
 		return nil, err
 	} else if ct != nil {
@@ -950,6 +964,9 @@ type ImportResult struct {
 	BaselinesSkipped int `json:"baselinesSkipped"`
 	// Contract is true when an OpenAPI contract was attached.
 	Contract bool `json:"contract"`
+	// RaceTests and PermissionMatrix count the imported security tests.
+	RaceTests        int  `json:"raceTests"`
+	PermissionMatrix bool `json:"permissionMatrix"`
 }
 
 // ImportCollection validates untrusted data and stores it with fresh IDs.
@@ -997,8 +1014,18 @@ func (s *Service) ImportParsed(ctx context.Context, imp *collectionio.Imported) 
 			return ImportResult{}, fmt.Errorf("collection imported, but its OpenAPI contract failed: %w", err)
 		}
 	}
+	for _, t := range imp.RaceTests {
+		if _, err := s.store.SaveRaceTest(ctx, t); err != nil {
+			return ImportResult{}, fmt.Errorf("collection imported, but a race test failed: %w", err)
+		}
+	}
+	if imp.PermissionMatrix != nil {
+		if _, err := s.store.SavePermissionMatrix(ctx, *imp.PermissionMatrix); err != nil {
+			return ImportResult{}, fmt.Errorf("collection imported, but its permission matrix failed: %w", err)
+		}
+	}
 	res := ImportResult{Requests: len(imp.Tree.Requests), Folders: len(imp.Tree.Folders), Environments: len(imp.Environments),
-		Contract: imp.Contract != nil}
+		Contract: imp.Contract != nil, RaceTests: len(imp.RaceTests), PermissionMatrix: imp.PermissionMatrix != nil}
 	for _, ib := range imp.Baselines {
 		b := ib.Baseline
 		if ib.Environment != "" {

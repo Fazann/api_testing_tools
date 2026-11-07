@@ -171,7 +171,7 @@ func (s *Store) Vacuum(ctx context.Context) error {
 // DeleteAllData removes every user record but keeps the schema.
 func (s *Store) DeleteAllData(ctx context.Context) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
-		for _, t := range []string{"run_results", "runs", "race_tests", "permission_matrices", "environment_comparisons", "baselines", "assertions", "requests", "folders", "collections", "environments", "settings"} {
+		for _, t := range []string{"run_results", "runs", "race_tests", "permission_matrices", "environment_comparisons", "collection_contracts", "baselines", "assertions", "requests", "folders", "collections", "environments", "settings"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+t); err != nil {
 				return err
 			}

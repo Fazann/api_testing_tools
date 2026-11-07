@@ -224,7 +224,7 @@ func (s *Store) DuplicateCollection(ctx context.Context, id, newName string) (do
 	if err != nil {
 		return domain.Collection{}, err
 	}
-	t = ReassignIDs(t)
+	t, ids := ReassignIDsMap(t)
 	t.Collection.Name = newName
 	if err := s.ImportTree(ctx, t); err != nil {
 		return domain.Collection{}, err
@@ -232,11 +232,20 @@ func (s *Store) DuplicateCollection(ctx context.Context, id, newName string) (do
 	if err := s.copyContract(ctx, id, t.Collection.ID); err != nil {
 		return domain.Collection{}, err
 	}
+	if err := s.copySecurity(ctx, id, t.Collection.ID, ids); err != nil {
+		return domain.Collection{}, err
+	}
 	return s.GetCollection(ctx, t.Collection.ID)
 }
 
 // ReassignIDs gives every entity in t a fresh ID while keeping relationships.
 func ReassignIDs(t domain.CollectionTree) domain.CollectionTree {
+	t, _ = ReassignIDsMap(t)
+	return t
+}
+
+// ReassignIDsMap is ReassignIDs that also returns the old → new request IDs.
+func ReassignIDsMap(t domain.CollectionTree) (domain.CollectionTree, map[string]string) {
 	t.Collection.ID = uuid.NewString()
 	folderIDs := map[string]string{}
 	for _, f := range t.Folders {
@@ -269,7 +278,7 @@ func ReassignIDs(t domain.CollectionTree) domain.CollectionTree {
 	t.Folders, t.Requests = folders, reqs
 	// Rules keep pointing at the same requests under their new IDs.
 	t.Collection.Rules = domain.RemapRuleRequests(t.Collection.Rules, requestIDs)
-	return t
+	return t, requestIDs
 }
 
 // orderFolders returns parents before children so foreign keys hold.

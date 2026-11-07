@@ -818,6 +818,9 @@ Use SQLite migrations from the beginning.
 - `enabled`, `allow_undocumented`: integers (booleans)
 - `updated_at`: timestamp
 
+Race tests and permission matrices are exported, imported and duplicated with their collection (`raceTests`,
+`permissionMatrix` in [collection-format.md](collection-format.md)); request references are remapped.
+
 ### `environment_comparisons`
 
 - `collection_id`: primary key, foreign key to `collections` (deleted with the collection)

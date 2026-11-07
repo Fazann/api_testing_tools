@@ -71,3 +71,48 @@ func (s *Store) SavePermissionMatrix(ctx context.Context, m domain.PermissionMat
 		m.CollectionID, mustJSON(m), ts(m.UpdatedAt))
 	return m, err
 }
+
+// ListCollectionRaceTests returns the saved race tests of a collection's requests.
+func (s *Store) ListCollectionRaceTests(ctx context.Context, collectionID string) ([]domain.RaceTest, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT t.request_id, t.config_json, t.updated_at FROM race_tests t
+		JOIN requests r ON r.id = t.request_id WHERE r.collection_id = ? ORDER BY r.sort_order, r.name`, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.RaceTest{}
+	for rows.Next() {
+		var id, cfg, updated string
+		if err := rows.Scan(&id, &cfg, &updated); err != nil {
+			return nil, err
+		}
+		var t domain.RaceTest
+		unmarshalLenient(cfg, &t)
+		t.RequestID, t.UpdatedAt = id, parseTS(updated)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// copySecurity copies the race tests and the permission matrix of one
+// collection to its duplicate; ids maps old request IDs to new ones.
+func (s *Store) copySecurity(ctx context.Context, fromID, toID string, ids map[string]string) error {
+	tests, err := s.ListCollectionRaceTests(ctx, fromID)
+	if err != nil {
+		return err
+	}
+	for _, t := range tests {
+		if nt, ok := t.RemapRequests(ids); ok {
+			if _, err := s.SaveRaceTest(ctx, nt); err != nil {
+				return err
+			}
+		}
+	}
+	m, err := s.GetPermissionMatrix(ctx, fromID)
+	if err != nil || m.IsEmpty() {
+		return err
+	}
+	nm, _ := m.RemapRequests(toID, ids)
+	_, err = s.SavePermissionMatrix(ctx, nm)
+	return err
+}

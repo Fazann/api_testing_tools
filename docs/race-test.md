@@ -185,8 +185,11 @@ deleted with the request:
 }
 ```
 
-`successOp` is `"lte"`, `"eq"`, `"gte"` or `""` (no limit). Race test settings are not yet part of collection
-export or duplication.
+`successOp` is `"lte"`, `"eq"`, `"gte"` or `""` (no limit).
+
+Race tests are part of the collection: they are exported (`raceTests` in the
+[collection format](collection-format.md#race-tests-and-permission-matrix)), imported and duplicated with it. The
+request and the state-check request keep pointing at the right requests when IDs are regenerated.
 
 ## Automated tests (for contributors)
 

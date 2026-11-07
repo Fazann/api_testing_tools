@@ -17,6 +17,8 @@ Collections are exported as a single UTF-8 JSON file. The format is versioned so
 | `secretsIncluded` | boolean   | `true` only if the user chose to export secret values          |
 | `baselines`       | array     | Optional. Approved baselines, when **Include baselines** was ticked; see [Baselines](#baselines) |
 | `contract`        | object    | Optional. The attached OpenAPI spec and its options; see [Contract](#contract) |
+| `raceTests`       | array     | Optional. Saved race tests; see [Race tests and permission matrix](#race-tests-and-permission-matrix) |
+| `permissionMatrix` | object   | Optional. The collection's permission matrix; same section     |
 
 IDs in a file only link folders and requests to each other. **Every ID is regenerated on import**, so importing can never overwrite existing data.
 
@@ -120,6 +122,33 @@ Local, Staging and Production. Secret collection variables are redacted like env
 are blanked on export unless secrets are explicitly included. Required variables are satisfied by either.
 
 - `{{name}}` references a collection or environment variable in the URL, headers, query, body, auth and assertion expected values. Built-ins: `{{$uuid}}`, `{{$timestamp}}` (Unix seconds), `{{$isoTimestamp}}`.
+
+### Race tests and permission matrix
+
+`raceTests` holds one entry per request that has a saved race test ([race-test.md](race-test.md)), and
+`permissionMatrix` the collection's matrix ([permission-matrix.md](permission-matrix.md)). Both reference requests by
+the `id`s of the same file and are remapped on import and duplication.
+
+```json
+"raceTests": [{
+  "requestId": "r-withdraw", "count": 10, "successOp": "lte", "successCount": 1, "uniquePath": "",
+  "allowServerErrors": false,
+  "check": { "requestId": "r-balance", "path": "data.balance", "deltaPerSuccess": -10, "tolerance": 0 }
+}],
+"permissionMatrix": {
+  "roles": [
+    { "id": "bob", "name": "Bob", "anonymous": false,
+      "variables": [{ "key": "token", "value": "{{bob_token}}", "secret": false, "enabled": true }] },
+    { "id": "anon", "name": "Anonymous", "anonymous": true, "variables": [] }
+  ],
+  "requestIds": ["r-balance"],
+  "expected": { "r-balance": { "bob": "deny", "anon": "deny" } }
+}
+```
+
+Secret role variable values are blank unless the export includes secrets. An import fails when a race test or the
+matrix references a request that is not in the file, uses a socket request, or breaks the limits of the race test
+or the matrix. Files without these fields (from older versions) import without them.
 
 ### Contract
 

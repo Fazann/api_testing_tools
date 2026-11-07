@@ -205,7 +205,12 @@ and deleted with the collection:
 ```
 
 Expectations are `"allow"` or `"deny"`; cells without an expectation are left out. Expectations for deleted roles
-are dropped on save. The matrix is not yet part of collection export or duplication.
+are dropped on save.
+
+The matrix is part of the collection: it is exported (`permissionMatrix` in the
+[collection format](collection-format.md#race-tests-and-permission-matrix)), imported and duplicated with it. Role
+variables marked **Secret** are listed in the export dialog and left blank unless you include secret values; prefer
+`{{references}}` such as `{{bob_token}}`, which are exported as they are.
 
 ## Automated tests (for contributors)
 

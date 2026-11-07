@@ -390,6 +390,9 @@ export interface ImportResult {
   baselinesSkipped: number;
   /** True when an OpenAPI contract was attached (OpenAPI imports, or exports that carry one). */
   contract: boolean;
+  /** Race tests and whether a permission matrix came with the file. */
+  raceTests: number;
+  permissionMatrix: boolean;
 }
 
 /** The OpenAPI spec attached to a collection (docs/openapi-contract.md). */

@@ -46,6 +46,8 @@ async function importCollection() {
       `Imported "${res.collection.name}": ${res.requests} requests, ${res.folders} folders, ` +
         `${res.environments} environments` +
         (res.baselines ? `, ${res.baselines} baselines` : '') +
+        (res.raceTests ? `, ${res.raceTests} race test${res.raceTests === 1 ? '' : 's'}` : '') +
+        (res.permissionMatrix ? ', a permission matrix' : '') +
         (res.contract ? '; responses will be checked against the OpenAPI spec' : '') +
         (res.baselinesSkipped
           ? ` (${res.baselinesSkipped} baselines skipped: their environment is not on this machine)`
