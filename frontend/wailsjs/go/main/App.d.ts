@@ -27,6 +27,8 @@ export function CheckForUpdate():Promise<updater.Info>;
 
 export function ChooseCACertFile():Promise<string>;
 
+export function ChooseUploadFile():Promise<string>;
+
 export function ClearHistory():Promise<number>;
 
 export function CompactDatabase():Promise<void>;

@@ -408,7 +408,7 @@ func (s *Store) DeleteFolder(ctx context.Context, id string) error {
 
 const requestColumns = `r.id, r.collection_id, IFNULL(r.parent_id, ''), r.name, r.method, r.url_template, r.headers_json, r.query_json,
 	r.body, r.body_type, r.auth_json, r.timeout_ms, r.follow_redirects, r.sort_order, r.pre_request_script, r.post_response_script,
-	r.created_at, r.updated_at, r.kind, IFNULL(r.socket_json, '')`
+	r.created_at, r.updated_at, r.kind, IFNULL(r.socket_json, ''), r.form_json, r.body_file`
 
 func (s *Store) listRequests(ctx context.Context, q querier, where string, args ...any) ([]domain.Request, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+requestColumns+` FROM requests r `+where+` ORDER BY r.sort_order, r.name COLLATE NOCASE`, args...)
@@ -419,16 +419,17 @@ func (s *Store) listRequests(ctx context.Context, q querier, where string, args 
 	idx := map[string]int{}
 	for rows.Next() {
 		var r domain.Request
-		var headers, query, auth, created, updated, socketJSON string
+		var headers, query, auth, created, updated, socketJSON, form string
 		var follow int
 		if err := rows.Scan(&r.ID, &r.CollectionID, &r.ParentID, &r.Name, &r.Method, &r.URLTemplate, &headers, &query,
 			&r.Body, &r.BodyType, &auth, &r.TimeoutMs, &follow, &r.SortOrder, &r.PreRequestScript, &r.PostResponseScript,
-			&created, &updated, &r.Kind, &socketJSON); err != nil {
+			&created, &updated, &r.Kind, &socketJSON, &form, &r.BodyFile); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		unmarshalLenient(headers, &r.Headers)
 		unmarshalLenient(query, &r.Query)
+		unmarshalLenient(form, &r.Form)
 		unmarshalLenient(auth, &r.Auth)
 		if socketJSON != "" {
 			r.Socket = &domain.SocketConfig{}
@@ -525,17 +526,19 @@ func writeRequest(ctx context.Context, tx *sql.Tx, r *domain.Request, now time.T
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO requests (id, collection_id, parent_id, name, method, url_template, headers_json, query_json, body, body_type,
 			auth_json, timeout_ms, follow_redirects, sort_order, pre_request_script, post_response_script, created_at, updated_at,
-			kind, socket_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			kind, socket_json, form_json, body_file)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET parent_id = excluded.parent_id, name = excluded.name, method = excluded.method,
 			url_template = excluded.url_template, headers_json = excluded.headers_json, query_json = excluded.query_json,
 			body = excluded.body, body_type = excluded.body_type, auth_json = excluded.auth_json, timeout_ms = excluded.timeout_ms,
 			follow_redirects = excluded.follow_redirects, sort_order = excluded.sort_order,
 			pre_request_script = excluded.pre_request_script, post_response_script = excluded.post_response_script,
-			updated_at = excluded.updated_at, kind = excluded.kind, socket_json = excluded.socket_json`,
+			updated_at = excluded.updated_at, kind = excluded.kind, socket_json = excluded.socket_json,
+			form_json = excluded.form_json, body_file = excluded.body_file`,
 		r.ID, r.CollectionID, nullable(r.ParentID), r.Name, r.Method, r.URLTemplate, mustJSON(r.Headers), mustJSON(r.Query),
 		r.Body, string(r.BodyType), mustJSON(r.Auth), r.TimeoutMs, boolInt(r.FollowRedirects), r.SortOrder,
-		r.PreRequestScript, r.PostResponseScript, ts(r.CreatedAt), ts(r.UpdatedAt), string(r.Kind), socketJSON(r.Socket))
+		r.PreRequestScript, r.PostResponseScript, ts(r.CreatedAt), ts(r.UpdatedAt), string(r.Kind), socketJSON(r.Socket),
+		mustJSON(r.Form), r.BodyFile)
 	if err != nil {
 		return err
 	}

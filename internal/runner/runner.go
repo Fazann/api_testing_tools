@@ -46,6 +46,10 @@ type Prepared struct {
 	// Socket is set for WebSocket and Socket.IO requests: their settings with
 	// every {{variable}} resolved. HTTP.URL and HTTP.Header are the handshake.
 	Socket *domain.SocketConfig
+	// BodyText is the body as text for history and scripts: the body itself,
+	// or for form-data and binary bodies a list of fields with files described
+	// by name, size and type. Not redacted.
+	BodyText string
 }
 
 // MissingVariablesError lists variables referenced but not defined.
@@ -94,13 +98,17 @@ func Prepare(req domain.Request, env *domain.Environment) (*Prepared, error) {
 		}
 	}
 	var body []byte
-	if req.BodyType != domain.BodyNone && req.Method != http.MethodGet && req.Method != http.MethodHead {
-		body = []byte(res.Resolve(req.Body))
-		if header.Get("Content-Type") == "" {
-			if req.BodyType == domain.BodyJSON {
-				header.Set("Content-Type", "application/json")
-			} else {
-				header.Set("Content-Type", "text/plain; charset=utf-8")
+	var bodyText string
+	if req.BodyType != domain.BodyNone && req.Method != http.MethodGet && req.Method != http.MethodHead && !req.Kind.IsSocket() {
+		built, err := buildBody(req, res)
+		if err != nil {
+			return nil, errors.New(red.String(err.Error()))
+		}
+		if built != nil {
+			body, bodyText = built.data, built.summary
+			// A multipart body only parses with the boundary it was written with.
+			if header.Get("Content-Type") == "" || req.BodyType == domain.BodyFormData {
+				header.Set("Content-Type", built.contentType)
 			}
 		}
 	}
@@ -173,8 +181,9 @@ func Prepare(req domain.Request, env *domain.Environment) (*Prepared, error) {
 		Method:  req.Kind.Badge(req.Method),
 		URL:     red.URL(finalURL),
 		Headers: red.HTTPHeader(header),
-		Body:    red.String(truncateString(string(body), 64<<10)),
+		Body:    red.String(truncateString(bodyText, 64<<10)),
 	}
+	p.BodyText = bodyText
 	return p, nil
 }
 
@@ -363,7 +372,7 @@ func (r *Runner) RunScoped(ctx context.Context, req domain.Request, scope *Scope
 
 	var scriptErr string
 	sent := scripting.Request{Method: prepared.HTTP.Method, URL: prepared.HTTP.URL, Headers: scripting.HeaderRows(prepared.HTTP.Header),
-		Query: []domain.KeyValue{}, Body: string(prepared.HTTP.Body), BodyType: req.BodyType}
+		Query: []domain.KeyValue{}, Body: prepared.BodyText, BodyType: req.BodyType}
 	scriptResp := &scripting.Response{Code: resp.StatusCode, Status: resp.Status, Header: resp.Header, Body: resp.Body,
 		DurationMs: resp.Duration.Milliseconds(), Size: resp.BodyBytes}
 	for _, s := range scripts(script{"collection post-response script", scope.PostResponseScript}, script{"post-response script", req.PostResponseScript}) {

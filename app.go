@@ -403,6 +403,12 @@ func (a *App) ChooseCACertFile() (string, error) {
 	})
 }
 
+// ChooseUploadFile lets the user pick a file for a form-data field or a binary
+// body; returns "" if cancelled.
+func (a *App) ChooseUploadFile() (string, error) {
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose a file to upload"})
+}
+
 // ---- helpers ----
 
 func (a *App) saveWithDialog(defaultName string, filter runtime.FileFilter, data []byte) (string, error) {

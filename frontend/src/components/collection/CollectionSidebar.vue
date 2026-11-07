@@ -51,8 +51,12 @@ async function importCollection() {
         (res.contract ? '; responses will be checked against the OpenAPI spec' : '') +
         (res.baselinesSkipped
           ? ` (${res.baselinesSkipped} baselines skipped: their environment is not on this machine)`
+          : '') +
+        (res.filesCleared
+          ? `. For safety, ${res.filesCleared} upload file path${res.filesCleared === 1 ? ' was' : 's were'} ` +
+            'removed; choose the files again in the Body tab'
           : ''),
-      'success',
+      res.filesCleared ? 'info' : 'success',
     );
     if (res.environments > 0) await envs.load();
   });

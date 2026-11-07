@@ -38,7 +38,35 @@ const (
 	BodyNone BodyType = "none"
 	BodyJSON BodyType = "json"
 	BodyText BodyType = "text"
+	// BodyFormData sends Form as multipart/form-data; its file fields upload files.
+	BodyFormData BodyType = "form-data"
+	// BodyURLEncoded sends the text fields of Form as application/x-www-form-urlencoded.
+	BodyURLEncoded BodyType = "urlencoded"
+	// BodyBinary sends the file at BodyFile as the whole body.
+	BodyBinary BodyType = "binary"
 )
+
+// FormFieldType says whether a form field sends text or a file.
+type FormFieldType string
+
+const (
+	FormText FormFieldType = "text"
+	FormFile FormFieldType = "file"
+)
+
+// FormField is a row of a form-data or URL-encoded body. A file field uploads
+// the file at File (an absolute path, may contain {{variables}}); Value is
+// not used for it.
+type FormField struct {
+	Key   string        `json:"key"`
+	Value string        `json:"value"`
+	Type  FormFieldType `json:"type"`
+	File  string        `json:"file,omitempty"`
+	// ContentType overrides the part's Content-Type (form-data only). Empty
+	// means guess it from the file name.
+	ContentType string `json:"contentType,omitempty"`
+	Enabled     bool   `json:"enabled"`
+}
 
 type AuthType string
 
@@ -66,6 +94,9 @@ const (
 	MaxBodyLength    = 5 << 20
 	MaxKeyValuePairs = 200
 	MaxScriptLength  = 100_000
+	// MaxUploadBytes caps the files one request uploads, in total.
+	MaxUploadBytes    = 100 << 20
+	MaxFilePathLength = 4_096
 )
 
 // KeyValue is a header or query parameter row.
@@ -124,13 +155,17 @@ type Request struct {
 	ParentID     string `json:"parentId"`
 	Name         string `json:"name"`
 	// Kind is KindHTTP when empty, so older exports keep working.
-	Kind            RequestKind `json:"kind"`
-	Method          string      `json:"method"`
-	URLTemplate     string      `json:"url"`
-	Headers         []KeyValue  `json:"headers"`
-	Query           []KeyValue  `json:"query"`
-	Body            string      `json:"body"`
-	BodyType        BodyType    `json:"bodyType"`
+	Kind        RequestKind `json:"kind"`
+	Method      string      `json:"method"`
+	URLTemplate string      `json:"url"`
+	Headers     []KeyValue  `json:"headers"`
+	Query       []KeyValue  `json:"query"`
+	Body        string      `json:"body"`
+	BodyType    BodyType    `json:"bodyType"`
+	// Form holds the fields of a form-data or URL-encoded body.
+	Form []FormField `json:"form"`
+	// BodyFile is the file a binary body sends (absolute path, may contain {{variables}}).
+	BodyFile        string      `json:"bodyFile,omitempty"`
 	Auth            Auth        `json:"auth"`
 	TimeoutMs       int         `json:"timeoutMs"`
 	FollowRedirects bool        `json:"followRedirects"`
@@ -182,6 +217,18 @@ func (r *Request) Normalize() {
 	if r.Query == nil {
 		r.Query = []KeyValue{}
 	}
+	if r.Form == nil {
+		r.Form = []FormField{}
+	}
+	for i := range r.Form {
+		if r.Form[i].Type == "" {
+			r.Form[i].Type = FormText
+		}
+		if r.Form[i].Type != FormFile {
+			r.Form[i].File, r.Form[i].ContentType = "", ""
+		}
+	}
+	r.BodyFile = strings.TrimSpace(r.BodyFile)
 	if r.Assertions == nil {
 		r.Assertions = []Assertion{}
 	}
@@ -215,12 +262,18 @@ func (r *Request) Validate() error {
 		return fmt.Errorf("request URL must be at most %d characters", MaxURLLength)
 	}
 	switch r.BodyType {
-	case BodyNone, BodyJSON, BodyText:
+	case BodyNone, BodyJSON, BodyText, BodyFormData, BodyURLEncoded, BodyBinary:
 	default:
 		return fmt.Errorf("unsupported body type %q", r.BodyType)
 	}
 	if len(r.Body) > MaxBodyLength {
 		return fmt.Errorf("request body must be at most %d bytes", MaxBodyLength)
+	}
+	if err := validateForm(r.Form); err != nil {
+		return err
+	}
+	if len(r.BodyFile) > MaxFilePathLength {
+		return fmt.Errorf("body file path must be at most %d characters", MaxFilePathLength)
 	}
 	if r.TimeoutMs < 0 || r.TimeoutMs > MaxTimeoutMs {
 		return fmt.Errorf("timeout must be between 1 and %d ms", MaxTimeoutMs)
@@ -262,6 +315,65 @@ func (a *Auth) Validate() error {
 		return fmt.Errorf("unsupported auth type %q", a.Type)
 	}
 	return nil
+}
+
+func validateForm(fields []FormField) error {
+	if len(fields) > MaxKeyValuePairs {
+		return fmt.Errorf("at most %d form fields are allowed", MaxKeyValuePairs)
+	}
+	for _, f := range fields {
+		switch f.Type {
+		case FormText, FormFile:
+		default:
+			return fmt.Errorf("form field %q: unsupported type %q", f.Key, f.Type)
+		}
+		if strings.TrimSpace(f.Key) == "" && f.Enabled && (f.Value != "" || f.File != "") {
+			return fmt.Errorf("form field name is required")
+		}
+		if len(f.Value) > MaxBodyLength {
+			return fmt.Errorf("form field %q must be at most %d bytes", f.Key, MaxBodyLength)
+		}
+		if len(f.File) > MaxFilePathLength {
+			return fmt.Errorf("form field %q: file path must be at most %d characters", f.Key, MaxFilePathLength)
+		}
+		if strings.ContainsAny(f.ContentType, "\r\n") {
+			return fmt.Errorf("form field %q: content type must not contain line breaks", f.Key)
+		}
+	}
+	return nil
+}
+
+// UploadsFiles reports whether sending the request reads files from disk.
+func (r *Request) UploadsFiles() bool {
+	switch r.BodyType {
+	case BodyBinary:
+		return r.BodyFile != ""
+	case BodyFormData:
+		for _, f := range r.Form {
+			if f.Enabled && f.Type == FormFile && f.File != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ClearFilePaths forgets every file the request uploads, so the user has to
+// choose them again, and returns how many were cleared. Imported collections
+// are untrusted: a path chosen by someone else could send any local file.
+func (r *Request) ClearFilePaths() int {
+	n := 0
+	if r.BodyFile != "" {
+		r.BodyFile = ""
+		n++
+	}
+	for i := range r.Form {
+		if r.Form[i].File != "" {
+			r.Form[i].File = ""
+			n++
+		}
+	}
+	return n
 }
 
 func validateScripts(pre, post string) error {

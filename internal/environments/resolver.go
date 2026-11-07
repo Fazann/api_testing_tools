@@ -121,6 +121,15 @@ func RequestReferences(req *domain.Request) []string {
 	}
 	add(req.URLTemplate)
 	add(req.Body)
+	add(req.BodyFile)
+	for _, f := range req.Form {
+		if f.Enabled {
+			add(f.Key)
+			add(f.Value)
+			add(f.File)
+			add(f.ContentType)
+		}
+	}
 	for _, kv := range append(append([]domain.KeyValue{}, req.Headers...), req.Query...) {
 		if kv.Enabled {
 			add(kv.Key)

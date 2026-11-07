@@ -112,8 +112,65 @@ describe('parseCurl', () => {
     const { warnings } = parseCurl(`curl -k -F file=@a.png --frobnicate https://x.io`);
     expect(warnings).toHaveLength(3);
     expect(warnings.join(' ')).toMatch(/insecure/);
-    expect(warnings.join(' ')).toMatch(/Multipart/);
+    expect(warnings.join(' ')).toMatch(/choose the files again/);
     expect(warnings.join(' ')).toMatch(/--frobnicate/);
+  });
+
+  it('reads -F and --form-string as a form-data body', () => {
+    const { request } = parseCurl(
+      `curl https://x.io/upload -H 'Content-Type: multipart/form-data' ` +
+        `-F 'avatar=@"/tmp/my photo.png";type=image/png' -F name=Ann --form-string 'note=@literal'`,
+    );
+    expect(request.method).toBe('POST');
+    expect(request.bodyType).toBe('form-data');
+    expect(request.headers).toEqual([]);
+    expect(request.form).toEqual([
+      { key: 'avatar', value: '', type: 'file', file: '/tmp/my photo.png', contentType: 'image/png', enabled: true },
+      { key: 'name', value: 'Ann', type: 'text', enabled: true },
+      { key: 'note', value: '@literal', type: 'text', enabled: true },
+    ]);
+  });
+
+  it('reads --data-binary @file and -T as a file body', () => {
+    const bin = parseCurl(`curl https://x.io --data-binary @/tmp/a.bin`).request;
+    expect(bin).toMatchObject({ method: 'POST', bodyType: 'binary', bodyFile: '/tmp/a.bin', body: '' });
+    const put = parseCurl(`curl -T /tmp/a.bin https://x.io/a.bin`).request;
+    expect(put).toMatchObject({ method: 'PUT', bodyType: 'binary', bodyFile: '/tmp/a.bin' });
+    // -d @file still keeps the old behavior (curl strips newlines there, so it is not a raw upload).
+    expect(parseCurl(`curl -d @a.json https://x.io`).request.bodyType).not.toBe('binary');
+  });
+
+  it('writes form-data, URL-encoded and file bodies', () => {
+    const base = {
+      method: 'POST' as const,
+      url: 'https://x.io',
+      headers: [{ key: 'Content-Type', value: 'multipart/form-data', enabled: true }],
+      query: [],
+      body: 'ignored',
+      auth: { type: 'none' as const },
+      timeoutMs: 30000,
+      followRedirects: false,
+    };
+    const form = [
+      { key: 'name', value: '@Ann', type: 'text' as const, enabled: true },
+      { key: 'avatar', value: '', type: 'file' as const, file: '/tmp/a "b".png', enabled: true },
+      { key: 'off', value: 'x', type: 'text' as const, enabled: false },
+    ];
+    expect(toCurl({ ...base, bodyType: 'form-data', form })).toBe(
+      [`curl https://x.io`, `  --form-string name=@Ann`, `  -F 'avatar=@"/tmp/a \\"b\\".png";type=image/png'`].join(
+        ' \\\n',
+      ),
+    );
+    expect(toCurl({ ...base, headers: [], bodyType: 'urlencoded', form })).toBe(
+      [`curl https://x.io`, `  -H 'Content-Type: application/x-www-form-urlencoded'`, `  --data-raw name=%40Ann`].join(
+        ' \\\n',
+      ),
+    );
+    expect(toCurl({ ...base, headers: [], method: 'PUT', bodyType: 'binary', bodyFile: '/tmp/a.pdf' })).toBe(
+      [`curl -X PUT`, `  https://x.io`, `  -H 'Content-Type: application/pdf'`, `  --data-binary @/tmp/a.pdf`].join(
+        ' \\\n',
+      ),
+    );
   });
 
   it('rejects non-curl input and missing URLs', () => {

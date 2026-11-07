@@ -621,6 +621,28 @@ export namespace domain {
 		    return a;
 		}
 	}
+	export class FormField {
+	    key: string;
+	    value: string;
+	    type: string;
+	    file?: string;
+	    contentType?: string;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormField(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.value = source["value"];
+	        this.type = source["type"];
+	        this.file = source["file"];
+	        this.contentType = source["contentType"];
+	        this.enabled = source["enabled"];
+	    }
+	}
 	export class KeyValue {
 	    key: string;
 	    value: string;
@@ -649,6 +671,8 @@ export namespace domain {
 	    query: KeyValue[];
 	    body: string;
 	    bodyType: string;
+	    form: FormField[];
+	    bodyFile?: string;
 	    auth: Auth;
 	    timeoutMs: number;
 	    followRedirects: boolean;
@@ -679,6 +703,8 @@ export namespace domain {
 	        this.query = this.convertValues(source["query"], KeyValue);
 	        this.body = source["body"];
 	        this.bodyType = source["bodyType"];
+	        this.form = this.convertValues(source["form"], FormField);
+	        this.bodyFile = source["bodyFile"];
 	        this.auth = this.convertValues(source["auth"], Auth);
 	        this.timeoutMs = source["timeoutMs"];
 	        this.followRedirects = source["followRedirects"];
@@ -890,6 +916,7 @@ export namespace domain {
 		    return a;
 		}
 	}
+	
 	
 	
 	export class PerformanceCheck {
@@ -2172,6 +2199,7 @@ export namespace service {
 	    contract: boolean;
 	    raceTests: number;
 	    permissionMatrix: boolean;
+	    filesCleared: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ImportResult(source);
@@ -2188,6 +2216,7 @@ export namespace service {
 	        this.contract = source["contract"];
 	        this.raceTests = source["raceTests"];
 	        this.permissionMatrix = source["permissionMatrix"];
+	        this.filesCleared = source["filesCleared"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

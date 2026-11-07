@@ -97,6 +97,7 @@ export enum Endpoint {
   CompactDatabase = 'CompactDatabase',
   DeleteAllData = 'DeleteAllData',
   ChooseCACertFile = 'ChooseCACertFile',
+  ChooseUploadFile = 'ChooseUploadFile',
 
   // Sockets
   ConnectSocket = 'ConnectSocket',

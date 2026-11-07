@@ -121,3 +121,76 @@ describe('generateCode', () => {
     );
   });
 });
+
+describe('file uploads', () => {
+  const upload = req({
+    method: 'POST',
+    url: 'https://x.io/upload',
+    headers: [{ key: 'Content-Type', value: 'multipart/form-data', enabled: true }],
+    bodyType: 'form-data',
+    form: [
+      { key: 'title', value: 'Holiday', type: 'text', enabled: true },
+      { key: 'photo', value: '', type: 'file', file: '/data/beach.png', enabled: true },
+      { key: 'doc', value: '', type: 'file', file: '/data/notes.bin', contentType: 'text/markdown', enabled: true },
+    ],
+    auth: { type: 'none' },
+  });
+  const binary = req({
+    method: 'PUT',
+    url: 'https://x.io/blob',
+    bodyType: 'binary',
+    bodyFile: '/data/archive.zip',
+    auth: { type: 'none' },
+  });
+
+  it('sends every form field and file in every language, with the library writing the boundary', () => {
+    for (const { value } of CODE_LANGUAGES) {
+      const code = generateCode(value, upload);
+      expect(code, value).toContain('Holiday');
+      expect(code, value).toContain('/data/beach.png');
+      expect(code, value).toContain('/data/notes.bin');
+      expect(code, value).toContain('text/markdown');
+      // The user's bare multipart Content-Type would lack the boundary; it is never sent as is.
+      expect(code, value).not.toMatch(/multipart\/form-data["']/);
+    }
+  });
+
+  it('uploads the file as the body for binary requests', () => {
+    for (const { value } of CODE_LANGUAGES) {
+      const code = generateCode(value, binary);
+      expect(code, value).toContain('/data/archive.zip');
+      expect(code, value).toContain('application/zip');
+      expect(code, value).not.toContain('{{');
+    }
+  });
+
+  it('uses each language’s multipart helper', () => {
+    expect(generateCode('fetch', upload)).toContain("import { openAsBlob } from 'node:fs';");
+    expect(generateCode('fetch', upload)).toContain('body: form,');
+    expect(generateCode('python', upload)).toContain('("title", (None, "Holiday")),');
+    expect(generateCode('python', upload)).toContain(
+      '("photo", ("beach.png", open("/data/beach.png", "rb"), "image/png")),',
+    );
+    expect(generateCode('go', upload)).toContain('req.Header.Set("Content-Type", writer.FormDataContentType())');
+    expect(generateCode('php', upload)).toContain("new CURLFile('/data/beach.png', 'image/png', 'beach.png')");
+    expect(generateCode('csharp', upload)).toContain('form.Add(file2, "doc", "notes.bin");');
+    expect(generateCode('dart', upload)).toContain('http.MultipartRequest(');
+    expect(generateCode('cpp', upload)).toContain('curl_mime_filedata(part, "/data/beach.png");');
+    expect(generateCode('rust', upload)).toContain('features = ["blocking", "multipart"]');
+    for (const lang of ['java', 'swift', 'objc'] as const) {
+      expect(generateCode(lang, upload), lang).toContain('multipart/form-data; boundary=');
+    }
+  });
+
+  it('encodes URL-encoded forms as the body text', () => {
+    const form = req({
+      method: 'POST',
+      url: 'https://x.io',
+      bodyType: 'urlencoded',
+      form: [{ key: 'q', value: 'a b&c', type: 'text', enabled: true }],
+      auth: { type: 'none' },
+    });
+    expect(generateCode('python', form)).toContain('data="q=a%20b%26c".encode("utf-8")');
+    expect(generateCode('python', form)).toContain('"Content-Type": "application/x-www-form-urlencoded"');
+  });
+});

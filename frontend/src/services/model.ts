@@ -1,8 +1,12 @@
-import type { Assertion, AssertionKind, KeyValue, Operator, Request } from '@/types';
+import type { Assertion, AssertionKind, FormField, KeyValue, Operator, Request } from '@/types';
 import { uid } from '@/utils/object';
 
 export function emptyRow(): KeyValue {
   return { key: '', value: '', enabled: true };
+}
+
+export function emptyFormField(type: FormField['type'] = 'text'): FormField {
+  return { key: '', value: '', type, enabled: true };
 }
 
 export function newRequest(collectionId: string, parentId = ''): Request {
@@ -18,6 +22,8 @@ export function newRequest(collectionId: string, parentId = ''): Request {
     query: [],
     body: '',
     bodyType: 'none',
+    form: [],
+    bodyFile: '',
     auth: { type: 'inherit' },
     timeoutMs: 30000,
     followRedirects: true,

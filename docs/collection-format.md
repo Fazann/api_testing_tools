@@ -45,10 +45,39 @@ IDs in a file only link folders and requests to each other. **Every ID is regene
 ```
 
 - `method`: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
-- `bodyType`: `none`, `json`, `text`
+- `bodyType`: `none`, `json`, `text`, `form-data`, `urlencoded` or `binary` (see [File uploads](#file-uploads))
 - `auth.type`: `none`; `bearer` (`token`); `basic` (`username`, `password`); `apikey` (`keyName`, `keyValue`, `keyIn`: `header` | `query`); `inherit` — use the collection's `auth`
 - `kind` (optional): `http` (default), `websocket` or `socketio`. Socket requests also have `socket` (below); their
   `method` is always `GET`.
+
+### File uploads
+
+`form-data` and `urlencoded` bodies use `form`; `binary` sends the file at `bodyFile` as the whole body.
+
+```json
+{
+  "method": "POST",
+  "url": "{{base_url}}/avatars",
+  "bodyType": "form-data",
+  "form": [
+    { "key": "title", "value": "Profile photo", "type": "text", "enabled": true },
+    { "key": "file", "value": "", "type": "file", "file": "files/avatar.png", "contentType": "image/png", "enabled": true }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `form[].type` | `text` (sends `value`) or `file` (uploads the file at `file`; `form-data` only) |
+| `form[].contentType` | The file part's `Content-Type`. Empty: guessed from the file name |
+| `bodyFile` | The file a `binary` body sends. Its `Content-Type` is guessed from the name unless a header sets one |
+
+- Paths may contain `{{variables}}`, e.g. `{{fixtures}}/avatar.png`. In the app they must be absolute.
+- The CLI reads relative paths from the collection file's folder, so a collection and its files can be checked in together.
+- `form-data` always sends its own `multipart/form-data; boundary=…` Content-Type; a `Content-Type` header is replaced.
+- At most 100 MB of files per request. History shows each file by name, size and type, never its content.
+- **Importing a collection into the app removes every file path** (the fields stay). A path in someone else's
+  collection could otherwise upload any file on your machine. Choose the files again in the **Body** tab.
 
 ### Socket requests
 
@@ -320,7 +349,7 @@ request may have one per environment.
 
 ## Import validation
 
-Imported files are untrusted. The importer rejects files larger than 20 MB, unknown `format` values, unsupported versions, more than 5,000 requests / 1,000 folders / 50 environments, and any request, assertion or environment that fails validation (bad methods, header names, regex patterns, variable names, …). All problems are reported together; nothing is written unless the whole file is valid. Requests pointing at unknown folders are moved to the top level.
+Imported files are untrusted. The importer rejects files larger than 20 MB, unknown `format` values, unsupported versions, more than 5,000 requests / 1,000 folders / 50 environments, and any request, assertion or environment that fails validation (bad methods, header names, regex patterns, variable names, …). All problems are reported together; nothing is written unless the whole file is valid. Requests pointing at unknown folders are moved to the top level. Upload file paths are removed (see [File uploads](#file-uploads)).
 
 ## OpenAPI / Swagger import
 

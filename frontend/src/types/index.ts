@@ -168,6 +168,19 @@ export interface HeartbeatStatus {
   error?: string;
 }
 
+export type BodyType = 'none' | 'json' | 'text' | 'form-data' | 'urlencoded' | 'binary';
+
+/** A row of a form-data or URL-encoded body. A file field uploads the file at `file`. */
+export interface FormField {
+  key: string;
+  value: string;
+  type: 'text' | 'file';
+  file?: string;
+  /** Overrides the part's Content-Type (form-data); empty means guess from the file name. */
+  contentType?: string;
+  enabled: boolean;
+}
+
 export interface Request {
   id: string;
   collectionId: string;
@@ -181,7 +194,11 @@ export interface Request {
   headers: KeyValue[];
   query: KeyValue[];
   body: string;
-  bodyType: 'none' | 'json' | 'text';
+  bodyType: BodyType;
+  /** Fields of a form-data or URL-encoded body. Absent in older data. */
+  form?: FormField[];
+  /** The file a binary body sends (absolute path, may contain {{variables}}). */
+  bodyFile?: string;
   auth: Auth;
   timeoutMs: number;
   followRedirects: boolean;
@@ -407,6 +424,8 @@ export interface ImportResult {
   /** Race tests and whether a permission matrix came with the file. */
   raceTests: number;
   permissionMatrix: boolean;
+  /** Upload file paths removed for safety; those requests need their files chosen again. */
+  filesCleared?: number;
 }
 
 /** The OpenAPI spec attached to a collection (docs/openapi-contract.md). */

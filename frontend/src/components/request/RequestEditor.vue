@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
@@ -31,6 +31,8 @@ import { isDestructive } from '@/utils/http';
 
 import AssertionEditor from './AssertionEditor.vue';
 import AuthEditor from './AuthEditor.vue';
+import FilePicker from './FilePicker.vue';
+import FormBodyEditor from './FormBodyEditor.vue';
 import KeyValueTable from './KeyValueTable.vue';
 import ScriptEditor from './ScriptEditor.vue';
 
@@ -102,6 +104,8 @@ function onUrlPaste(e: ClipboardEvent) {
       headers: request.headers,
       body: request.body,
       bodyType: request.bodyType,
+      form: request.form ?? [],
+      bodyFile: request.bodyFile ?? '',
       auth: request.auth,
       timeoutMs: request.timeoutMs,
     });
@@ -127,7 +131,23 @@ const BODY_TYPES: { value: Request['bodyType']; label: string }[] = [
   { value: 'none', label: 'No body' },
   { value: 'json', label: 'JSON' },
   { value: 'text', label: 'TEXT' },
+  { value: 'form-data', label: 'Form data' },
+  { value: 'urlencoded', label: 'URL-encoded' },
+  { value: 'binary', label: 'File' },
 ];
+const textBody = computed(() => req.value.bodyType === 'json' || req.value.bodyType === 'text');
+const formBody = computed(() => req.value.bodyType === 'form-data' || req.value.bodyType === 'urlencoded');
+// Requests saved before form bodies existed have no form rows yet.
+watch(
+  () => [req.value.id, req.value.bodyType],
+  () => {
+    if (formBody.value && !req.value.form) req.value.form = [];
+  },
+  { immediate: true },
+);
+const urlencodedFiles = computed(
+  () => req.value.bodyType === 'urlencoded' && (req.value.form ?? []).some((f) => f.enabled && f.type === 'file'),
+);
 
 // Tabs show a count only when there is something to count. Socket requests have no body, baseline,
 // response-time check or race test, but saved messages and test steps.
@@ -265,13 +285,34 @@ const httpTabs = computed<TabItem<Tab>[]>(() => [
           placeholder='{"amount": 10}'
         />
         <BaseInput
-          v-else-if="req.bodyType !== 'none'"
+          v-else-if="textBody"
           multiline
           v-model="req.body"
           rows="12"
           spellcheck="false"
           aria-label="Request body"
         />
+        <template v-else-if="formBody && req.form">
+          <FormBodyEditor :key="req.bodyType" :rows="req.form" :files="req.bodyType === 'form-data'" />
+          <p v-if="urlencodedFiles" class="fail small">
+            URL-encoded bodies can only send text. Switch to Form data to upload the file fields.
+          </p>
+          <p class="muted small">
+            <template v-if="req.bodyType === 'form-data'">
+              Sent as <code>multipart/form-data</code>; file fields upload the chosen file (up to 100 MB in total).
+            </template>
+            <template v-else>Sent as <code>application/x-www-form-urlencoded</code>.</template>
+            Names and values support <code v-pre>{{ variables }}</code
+            >.
+          </p>
+        </template>
+        <template v-else-if="req.bodyType === 'binary'">
+          <FilePicker v-model="req.bodyFile" label="body file" />
+          <p class="muted small">
+            Sends the file as the whole body (up to 100 MB). The Content-Type is guessed from the file name unless you
+            set one in Headers.
+          </p>
+        </template>
         <p v-if="jsonError" class="fail small">Invalid JSON: {{ jsonError }}</p>
       </div>
       <AuthEditor

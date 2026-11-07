@@ -4,7 +4,15 @@
  * prepareRequest (curl.ts), so auth, query parameters, Content-Type,
  * redirects and timeouts match what the app sends. Scripts are not included.
  */
-import { prepareRequest, toCurl, type CurlOptions, type GeneratorRequest, type PreparedRequest } from './curl';
+import {
+  hasBody,
+  prepareRequest,
+  toCurl,
+  type CurlOptions,
+  type FormPart,
+  type GeneratorRequest,
+  type PreparedRequest,
+} from './curl';
 
 export type CodeLanguage =
   | 'curl'
@@ -95,6 +103,33 @@ function basicHeader(p: PreparedRequest): [string, string][] {
 
 const timeoutSeconds = (p: PreparedRequest) => +(p.timeoutMs / 1000).toFixed(3);
 
+/** Boundary for languages without a multipart helper; the parts below never contain it. */
+const BOUNDARY = 'ApiTestKitsFormBoundary7MA4YWxkTrZu0gW';
+
+/** A segment of a hand-written multipart body: literal text, or the bytes of a file. */
+type Segment = { text: string } | { file: string };
+
+/** The multipart body of p as text and file segments, for languages that build it by hand. */
+function multipartSegments(form: FormPart[]): Segment[] {
+  const q = (s: string) => s.replace(/(["\\])/g, '\\$1').replace(/[\r\n]/g, ' ');
+  const out: Segment[] = [];
+  let text = '';
+  for (const f of form) {
+    text += `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${q(f.name)}"`;
+    if (f.file === undefined) {
+      text += `\r\n\r\n${f.value}\r\n`;
+      continue;
+    }
+    text += `; filename="${q(f.fileName)}"\r\nContent-Type: ${f.contentType}\r\n\r\n`;
+    out.push({ text }, { file: f.file });
+    text = '\r\n';
+  }
+  out.push({ text: text + `--${BOUNDARY}--\r\n` });
+  return out;
+}
+
+const MULTIPART_TYPE = `multipart/form-data; boundary=${BOUNDARY}`;
+
 // ---- JavaScript ----
 
 function jsHeaders(headers: [string, string][], pad: string): string {
@@ -109,14 +144,38 @@ function toFetch(p: PreparedRequest): string {
   const json = jsonBody(p);
   if (json) lines.push(`  body: JSON.stringify(${indent(JSON.stringify(json.value, null, 2), '  ')}),`);
   else if (p.body !== undefined) lines.push(`  body: ${str(p.body)},`);
+  else if (p.form) lines.push(`  body: form,`);
+  else if (p.file !== undefined) lines.push(`  body: await openAsBlob(${str(p.file)}),`);
   if (!p.followRedirects) lines.push(`  redirect: 'manual',`);
   lines.push(`  signal: AbortSignal.timeout(${p.timeoutMs}),`);
   return [
+    ...jsFormSetup(p),
     `const response = await fetch(${str(p.url)}, {`,
     ...lines,
     `});`,
     p.method === 'HEAD' ? `console.log(response.status);` : `console.log(response.status, await response.text());`,
   ].join('\n');
+}
+
+/** Node.js lines that build the FormData of a form-data body (files via fs.openAsBlob, Node 20+). */
+function jsFormSetup(p: PreparedRequest): string[] {
+  const usesFiles = p.file !== undefined || (p.form ?? []).some((f) => f.file !== undefined);
+  const out = usesFiles ? [`import { openAsBlob } from 'node:fs';`, ``] : [];
+  if (!p.form) return out;
+  out.push(`const form = new FormData();`);
+  let n = 0;
+  for (const f of p.form) {
+    if (f.file === undefined) out.push(`form.append(${str(f.name)}, ${str(f.value)});`);
+    else {
+      const v = `file${++n}`;
+      out.push(
+        `const ${v} = await openAsBlob(${str(f.file)}, { type: ${str(f.contentType)} });`,
+        `form.append(${str(f.name)}, ${v}, ${str(f.fileName)});`,
+      );
+    }
+  }
+  out.push(``);
+  return out;
 }
 
 function toAxios(p: PreparedRequest): string {
@@ -126,13 +185,15 @@ function toAxios(p: PreparedRequest): string {
   const json = jsonBody(p);
   if (json) lines.push(`  data: ${indent(JSON.stringify(json.value, null, 2), '  ')},`);
   else if (p.body !== undefined) lines.push(`  data: ${str(p.body)},`);
+  else if (p.form) lines.push(`  data: form,`);
+  else if (p.file !== undefined) lines.push(`  data: await openAsBlob(${str(p.file)}),`);
   if (!p.followRedirects) lines.push(`  maxRedirects: 0,`);
   lines.push(`  timeout: ${p.timeoutMs},`);
   // Like the app, report every status instead of throwing on 4xx/5xx.
   lines.push(`  validateStatus: () => true,`);
   return [
     `import axios from 'axios';`,
-    ``,
+    ...(p.form || p.file !== undefined ? jsFormSetup(p) : [``]),
     `const response = await axios({`,
     ...lines,
     `});`,
@@ -175,6 +236,22 @@ function toPython(p: PreparedRequest): string {
     args.push(`    json=payload,`);
   } else if (p.body !== undefined) {
     args.push(`    data=${str(p.body)}.encode("utf-8"),`);
+  } else if (p.form) {
+    // Every field goes in files= (text ones with no file name) so the body is always multipart;
+    // a list of tuples keeps repeated names and the field order.
+    pre.push(
+      `files = [\n${p.form
+        .map((f) =>
+          f.file === undefined
+            ? `    (${str(f.name)}, (None, ${str(f.value)})),`
+            : `    (${str(f.name)}, (${str(f.fileName)}, open(${str(f.file)}, "rb"), ${str(f.contentType)})),`,
+        )
+        .join('\n')}\n]`,
+    );
+    args.push(`    files=files,`);
+  } else if (p.file !== undefined) {
+    pre.push(`with open(${str(p.file)}, "rb") as f:\n    body = f.read()`);
+    args.push(`    data=body,`);
   }
   if (p.basic) args.push(`    auth=(${str(p.basic.username)}, ${str(p.basic.password)}),`);
   if (!p.followRedirects || p.method === 'HEAD')
@@ -204,17 +281,27 @@ function toGo(p: PreparedRequest): string {
   const body = json ? JSON.stringify(json.value, null, 2) : p.body;
   const imports = ['"fmt"', '"io"', '"net/http"', '"time"'];
   if (body !== undefined) imports.push('"strings"');
+  if (p.form) imports.push('"bytes"', '"mime/multipart"');
+  if (p.form?.some((f) => f.file !== undefined)) imports.push('"net/textproto"');
+  if (p.file !== undefined || p.form?.some((f) => f.file !== undefined)) imports.push('"os"');
   imports.sort();
 
   const out = [`package main`, ``, `import (`, ...imports.map((i) => `\t${i}`), `)`, ``, `func main() {`];
+  const sends = hasBody(p);
   if (body !== undefined) out.push(`\tbody := strings.NewReader(${goString(body)})`);
+  else if (p.form) out.push(...goMultipart(p.form));
+  else if (p.file !== undefined) {
+    out.push(`\tbody, err := os.Open(${str(p.file)})`, `\tif err != nil {`, `\t\tpanic(err)`, `\t}`);
+    out.push(`\tdefer body.Close()`);
+  }
   out.push(
-    `\treq, err := http.NewRequest(${str(p.method)}, ${str(p.url)}, ${body !== undefined ? 'body' : 'nil'})`,
+    `\treq, err := http.NewRequest(${str(p.method)}, ${str(p.url)}, ${sends ? 'body' : 'nil'})`,
     `\tif err != nil {`,
     `\t\tpanic(err)`,
     `\t}`,
     ...p.headers.map(([k, v]) => `\treq.Header.Set(${str(k)}, ${str(v)})`),
   );
+  if (p.form) out.push(`\treq.Header.Set("Content-Type", writer.FormDataContentType())`);
   if (p.basic) out.push(`\treq.SetBasicAuth(${str(p.basic.username)}, ${str(p.basic.password)})`);
   out.push(``, `\tclient := &http.Client{`, `\t\tTimeout: ${goDuration(p.timeoutMs)},`);
   if (!p.followRedirects) {
@@ -235,6 +322,37 @@ function toGo(p: PreparedRequest): string {
     `}`,
   );
   return out.join('\n');
+}
+
+function goMultipart(form: FormPart[]): string[] {
+  const out = [`\tbody := &bytes.Buffer{}`, `\twriter := multipart.NewWriter(body)`];
+  for (const f of form) {
+    if (f.file === undefined) {
+      out.push(`\tif err := writer.WriteField(${str(f.name)}, ${goString(f.value)}); err != nil {`);
+      out.push(`\t\tpanic(err)`, `\t}`);
+      continue;
+    }
+    const q = (v: string) => v.replace(/(["\\])/g, '\\$1');
+    const disposition = `form-data; name="${q(f.name)}"; filename="${q(f.fileName)}"`;
+    out.push(
+      `\t{`,
+      `\t\th := textproto.MIMEHeader{}`,
+      `\t\th.Set("Content-Disposition", ${str(disposition)})`,
+      `\t\th.Set("Content-Type", ${str(f.contentType)})`,
+      `\t\tpart, err := writer.CreatePart(h)`,
+      `\t\tif err != nil {`,
+      `\t\t\tpanic(err)`,
+      `\t\t}`,
+      `\t\tdata, err := os.ReadFile(${str(f.file)})`,
+      `\t\tif err != nil {`,
+      `\t\t\tpanic(err)`,
+      `\t\t}`,
+      `\t\tpart.Write(data)`,
+      `\t}`,
+    );
+  }
+  out.push(`\twriter.Close()`);
+  return out;
 }
 
 function goDuration(ms: number): string {
@@ -331,6 +449,19 @@ function toPhp(p: PreparedRequest): string {
   }
   if (p.basic) opts.push(`    CURLOPT_USERPWD => ${phpStr(`${p.basic.username}:${p.basic.password}`)},`);
   if (body !== undefined) opts.push(`    CURLOPT_POSTFIELDS => ${phpStr(body)},`);
+  else if (p.form) {
+    // An array makes curl send multipart/form-data.
+    opts.push(
+      `    CURLOPT_POSTFIELDS => [`,
+      ...p.form.map((f) =>
+        f.file === undefined
+          ? `        ${phpStr(f.name)} => ${phpStr(f.value)},`
+          : `        ${phpStr(f.name)} => new CURLFile(` +
+            `${phpStr(f.file)}, ${phpStr(f.contentType)}, ${phpStr(f.fileName)}),`,
+      ),
+      `    ],`,
+    );
+  } else if (p.file !== undefined) opts.push(`    CURLOPT_POSTFIELDS => file_get_contents(${phpStr(p.file)}),`);
   return [
     `<?php`,
     ``,
@@ -370,6 +501,16 @@ function toJava(p: PreparedRequest): string {
     `                .build();`,
   ];
   if (body !== undefined) lines.push(`        String body = ${str(body)};`);
+  else if (p.form) {
+    lines.push(`        var body = new java.io.ByteArrayOutputStream();`);
+    for (const seg of multipartSegments(p.form)) {
+      lines.push(
+        'text' in seg
+          ? `        body.write(${str(seg.text)}.getBytes(java.nio.charset.StandardCharsets.UTF_8));`
+          : `        body.write(java.nio.file.Files.readAllBytes(java.nio.file.Path.of(${str(seg.file)})));`,
+      );
+    }
+  }
   lines.push(
     `        HttpRequest request = HttpRequest.newBuilder(URI.create(${str(p.url)}))`,
     `                .timeout(Duration.ofMillis(${p.timeoutMs}))`,
@@ -379,10 +520,17 @@ function toJava(p: PreparedRequest): string {
   }
   for (const [k, v] of headers)
     if (!JAVA_RESTRICTED.has(k.toLowerCase())) lines.push(`                .header(${str(k)}, ${str(v)})`);
-  lines.push(
+  if (p.form) lines.push(`                .header("Content-Type", ${str(MULTIPART_TYPE)})`);
+  const publisher =
     body !== undefined
-      ? `                .method(${str(p.method)}, HttpRequest.BodyPublishers.ofString(body))`
-      : `                .method(${str(p.method)}, HttpRequest.BodyPublishers.noBody())`,
+      ? `HttpRequest.BodyPublishers.ofString(body)`
+      : p.form
+        ? `HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())`
+        : p.file !== undefined
+          ? `HttpRequest.BodyPublishers.ofFile(java.nio.file.Path.of(${str(p.file)}))`
+          : `HttpRequest.BodyPublishers.noBody()`;
+  lines.push(
+    `                .method(${str(p.method)}, ${publisher})`,
     `                .build();`,
     `        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());`,
     `        System.out.println(response.statusCode() + " " + response.body());`,
@@ -429,6 +577,24 @@ function toCSharp(p: PreparedRequest): string {
     // StringContent adds "text/plain; charset=utf-8"; replace it with the request's own content headers.
     if (content.length) lines.push(`request.Content.Headers.Remove("Content-Type");`);
     for (const [k, v] of content) lines.push(`request.Content.Headers.TryAddWithoutValidation(${str(k)}, ${str(v)});`);
+  } else if (p.form) {
+    lines.push(`var form = new MultipartFormDataContent();`);
+    let n = 0;
+    for (const f of p.form) {
+      if (f.file === undefined) lines.push(`form.Add(new StringContent(${str(f.value)}), ${str(f.name)});`);
+      else {
+        const v = `file${++n}`;
+        lines.push(
+          `var ${v} = new ByteArrayContent(File.ReadAllBytes(${str(f.file)}));`,
+          `${v}.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(${str(f.contentType)});`,
+          `form.Add(${v}, ${str(f.name)}, ${str(f.fileName)});`,
+        );
+      }
+    }
+    lines.push(`request.Content = form;`);
+  } else if (p.file !== undefined) {
+    lines.push(`request.Content = new ByteArrayContent(File.ReadAllBytes(${str(p.file)}));`);
+    for (const [k, v] of content) lines.push(`request.Content.Headers.TryAddWithoutValidation(${str(k)}, ${str(v)});`);
   }
   lines.push(
     ``,
@@ -444,16 +610,29 @@ function toDart(p: PreparedRequest): string {
   const body = bodyText(p);
   const headers = basicHeader(p);
   const lines = [
+    ...(p.file !== undefined ? [`import 'dart:io';`, ``] : []),
+    ...(p.form?.some((f) => f.file !== undefined) ? [`import 'package:http_parser/http_parser.dart';`] : []),
     `import 'package:http/http.dart' as http;`,
     ``,
     `Future<void> main() async {`,
-    `  final request = http.Request(${dartStr(p.method)}, Uri.parse(${dartStr(p.url)}))`,
+    `  final request = http.${p.form ? 'MultipartRequest' : 'Request'}(` +
+      `${dartStr(p.method)}, Uri.parse(${dartStr(p.url)}))`,
     `    ..followRedirects = ${p.followRedirects ? 'true' : 'false'};`,
   ];
   if (headers.length) {
     lines.push(`  request.headers.addAll({`, ...headers.map(([k, v]) => `    ${dartStr(k)}: ${dartStr(v)},`), `  });`);
   }
   if (body !== undefined) lines.push(`  request.body = ${dartStr(body)};`);
+  for (const f of p.form ?? []) {
+    if (f.file === undefined) lines.push(`  request.fields[${dartStr(f.name)}] = ${dartStr(f.value)};`);
+    else {
+      lines.push(
+        `  request.files.add(await http.MultipartFile.fromPath(${dartStr(f.name)}, ${dartStr(f.file)},`,
+        `      filename: ${dartStr(f.fileName)}, contentType: MediaType.parse(${dartStr(f.contentType)})));`,
+      );
+    }
+  }
+  if (p.file !== undefined) lines.push(`  request.bodyBytes = await File(${dartStr(p.file)}).readAsBytes();`);
   lines.push(
     ``,
     `  final client = http.Client();`,
@@ -482,6 +661,22 @@ function toSwift(p: PreparedRequest): string {
     ...headers.map(([k, v]) => `request.setValue(${swiftStr(v)}, forHTTPHeaderField: ${swiftStr(k)})`),
   ];
   if (body !== undefined) lines.push(`request.httpBody = Data(${swiftStr(body)}.utf8)`);
+  else if (p.form) {
+    lines.push(
+      `request.setValue(${swiftStr(MULTIPART_TYPE)}, forHTTPHeaderField: "Content-Type")`,
+      `var body = Data()`,
+    );
+    for (const seg of multipartSegments(p.form)) {
+      lines.push(
+        'text' in seg
+          ? `body.append(Data(${swiftStr(seg.text)}.utf8))`
+          : `body.append(try Data(contentsOf: URL(fileURLWithPath: ${swiftStr(seg.file)})))`,
+      );
+    }
+    lines.push(`request.httpBody = body`);
+  } else if (p.file !== undefined) {
+    lines.push(`request.httpBody = try Data(contentsOf: URL(fileURLWithPath: ${swiftStr(p.file)}))`);
+  }
   if (p.followRedirects) {
     lines.push(``, `let (data, response) = try await URLSession.shared.data(for: request)`);
   } else {
@@ -537,6 +732,22 @@ function toObjC(p: PreparedRequest): string {
   );
   if (body !== undefined)
     lines.push(`        request.HTTPBody = [${objcStr(body)} dataUsingEncoding:NSUTF8StringEncoding];`);
+  else if (p.form) {
+    lines.push(
+      `        [request setValue:${objcStr(MULTIPART_TYPE)} forHTTPHeaderField:@"Content-Type"];`,
+      `        NSMutableData *body = [NSMutableData data];`,
+    );
+    for (const seg of multipartSegments(p.form)) {
+      lines.push(
+        'text' in seg
+          ? `        [body appendData:[${objcStr(seg.text)} dataUsingEncoding:NSUTF8StringEncoding]];`
+          : `        [body appendData:[NSData dataWithContentsOfFile:${objcStr(seg.file)}]];`,
+      );
+    }
+    lines.push(`        request.HTTPBody = body;`);
+  } else if (p.file !== undefined) {
+    lines.push(`        request.HTTPBody = [NSData dataWithContentsOfFile:${objcStr(p.file)}];`);
+  }
   lines.push(
     ``,
     p.followRedirects
@@ -574,7 +785,9 @@ function toCpp(p: PreparedRequest): string {
     `// Build: g++ main.cpp -lcurl`,
     `#include <curl/curl.h>`,
     ``,
+    ...(p.file !== undefined ? [`#include <fstream>`] : []),
     `#include <iostream>`,
+    ...(p.file !== undefined ? [`#include <iterator>`] : []),
     `#include <string>`,
     ``,
     `static size_t collect(char *data, size_t size, size_t count, void *out) {`,
@@ -605,6 +818,26 @@ function toCpp(p: PreparedRequest): string {
       `    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());`,
       `    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));`,
     );
+  } else if (p.form) {
+    lines.push(`    curl_mime *form = curl_mime_init(curl);`, `    curl_mimepart *part;`);
+    for (const f of p.form) {
+      lines.push(`    part = curl_mime_addpart(form);`, `    curl_mime_name(part, ${cStr(f.name)});`);
+      if (f.file === undefined) lines.push(`    curl_mime_data(part, ${cStr(f.value)}, CURL_ZERO_TERMINATED);`);
+      else {
+        lines.push(
+          `    curl_mime_filedata(part, ${cStr(f.file)});`,
+          `    curl_mime_type(part, ${cStr(f.contentType)});`,
+        );
+      }
+    }
+    lines.push(`    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);`);
+  } else if (p.file !== undefined) {
+    lines.push(
+      `    std::ifstream file(${cStr(p.file)}, std::ios::binary);`,
+      `    std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());`,
+      `    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());`,
+      `    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));`,
+    );
   }
   lines.push(
     `    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, ${p.followRedirects ? '1L' : '0L'});`,
@@ -623,6 +856,7 @@ function toCpp(p: PreparedRequest): string {
     `    }`,
   );
   if (p.headers.length) lines.push(`    curl_slist_free_all(headers);`);
+  if (p.form) lines.push(`    curl_mime_free(form);`);
   lines.push(`    curl_easy_cleanup(curl);`, `    curl_global_cleanup();`, `    return res == CURLE_OK ? 0 : 1;`, `}`);
   return lines.join('\n');
 }
@@ -637,7 +871,7 @@ function toRust(p: PreparedRequest): string {
     ? `reqwest::Method::${p.method}`
     : `reqwest::Method::from_bytes(${rustStr(p.method)}.as_bytes())?`;
   const lines = [
-    `// Cargo.toml: reqwest = { version = "0.12", features = ["blocking"] }`,
+    `// Cargo.toml: reqwest = { version = "0.12", features = ["blocking"${p.form ? ', "multipart"' : ''}] }`,
     `use std::time::Duration;`,
     ``,
     `fn main() -> Result<(), Box<dyn std::error::Error>> {`,
@@ -645,10 +879,30 @@ function toRust(p: PreparedRequest): string {
     `        .timeout(Duration::from_millis(${p.timeoutMs}))`,
   ];
   if (!p.followRedirects) lines.push(`        .redirect(reqwest::redirect::Policy::none())`);
-  lines.push(`        .build()?;`, `    let response = client`, `        .request(${method}, ${rustStr(p.url)})`);
+  lines.push(`        .build()?;`);
+  if (p.form) {
+    lines.push(`    let form = reqwest::blocking::multipart::Form::new()`);
+    for (const f of p.form) {
+      if (f.file === undefined) lines.push(`        .text(${rustStr(f.name)}, ${rustStr(f.value)})`);
+      else {
+        lines.push(
+          `        .part(`,
+          `            ${rustStr(f.name)},`,
+          `            reqwest::blocking::multipart::Part::file(${rustStr(f.file)})?`,
+          `                .file_name(${rustStr(f.fileName)})`,
+          `                .mime_str(${rustStr(f.contentType)})?,`,
+          `        )`,
+        );
+      }
+    }
+    lines[lines.length - 1] += ';';
+  }
+  lines.push(`    let response = client`, `        .request(${method}, ${rustStr(p.url)})`);
   for (const [k, v] of p.headers) lines.push(`        .header(${rustStr(k)}, ${rustStr(v)})`);
   if (p.basic) lines.push(`        .basic_auth(${rustStr(p.basic.username)}, Some(${rustStr(p.basic.password)}))`);
   if (body !== undefined) lines.push(`        .body(${rustStr(body)})`);
+  else if (p.file !== undefined) lines.push(`        .body(std::fs::read(${rustStr(p.file)})?)`);
+  else if (p.form) lines.push(`        .multipart(form)`);
   lines.push(
     `        .send()?;`,
     `    println!("{} {}", response.status().as_u16(), response.text()?);`,

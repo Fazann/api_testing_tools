@@ -13,4 +13,6 @@ export const settingsService = {
   compactDatabase: () => request<void>(Endpoint.CompactDatabase, () => App.CompactDatabase()),
   deleteAllData: () => request<void>(Endpoint.DeleteAllData, () => App.DeleteAllData()),
   chooseCACertFile: () => request<string>(Endpoint.ChooseCACertFile, () => App.ChooseCACertFile()),
+  /** Asks for a file to upload; '' when cancelled. */
+  chooseUploadFile: () => request<string>(Endpoint.ChooseUploadFile, () => App.ChooseUploadFile()),
 };

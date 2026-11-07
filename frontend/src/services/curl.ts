@@ -2,7 +2,16 @@
 // options browsers and API docs emit ("Copy as cURL"); output mirrors how
 // internal/runner/runner.go builds the HTTP request, so pasting it into a
 // terminal sends what the app would send.
-import { METHODS, type Auth, type Environment, type KeyValue, type Method, type Request, type Variable } from '@/types';
+import {
+  METHODS,
+  type Auth,
+  type Environment,
+  type FormField,
+  type KeyValue,
+  type Method,
+  type Request,
+  type Variable,
+} from '@/types';
 
 import { describeVariable, splitVariables } from './variables';
 
@@ -10,7 +19,8 @@ import { describeVariable, splitVariables } from './variables';
 export type CurlRequest = Pick<
   Request,
   'name' | 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'auth' | 'timeoutMs' | 'followRedirects'
->;
+> &
+  Partial<Pick<Request, 'form' | 'bodyFile'>>;
 
 export interface ParsedCurl {
   request: CurlRequest;
@@ -386,6 +396,9 @@ export function parseCurl(command: string): ParsedCurl {
 
   const headers: KeyValue[] = [];
   const data: string[] = [];
+  const form: FormField[] = [];
+  let binaryFile = '';
+  let uploadFile = '';
   let explicitMethod = '';
   let forceGet = false;
   let head = false;
@@ -419,6 +432,10 @@ export function parseCurl(command: string): ParsedCurl {
       case 'data':
       case 'data-ascii':
       case 'data-binary':
+        if (o.name === 'data-binary' && v.startsWith('@') && v !== '@-') {
+          binaryFile = v.slice(1);
+          break;
+        }
         if (v.startsWith('@')) {
           warn(`Body from a file (${v}) is not supported; the file name was kept as the body`);
         }
@@ -471,11 +488,15 @@ export function parseCurl(command: string): ParsedCurl {
         warn('--insecure was ignored; TLS verification is a global setting in Settings');
         break;
       case 'form':
-      case 'form-string':
-        warn('Multipart form data (-F) is not supported and was skipped');
+      case 'form-string': {
+        const field = parseFormOption(v, o.name === 'form-string');
+        if (field) form.push(field);
+        else warn(`Form field ${v} was skipped`);
         break;
+      }
       case 'upload-file':
-        warn('File uploads (-T) are not supported and were skipped');
+        if (v === '-' || v === '.') warn('Uploading from standard input (-T -) is not supported');
+        else uploadFile = v;
         break;
       case 'proxy':
         warn('--proxy was ignored; the proxy is a global setting in Settings');
@@ -491,13 +512,19 @@ export function parseCurl(command: string): ParsedCurl {
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !url.startsWith('{{')) url = 'http://' + url;
 
   let body = data.join('&');
-  const hasBody = data.length > 0 && !forceGet;
+  if (form.length && (data.length || binaryFile || uploadFile)) {
+    warn('Only the form fields (-F) were used; curl cannot combine them with other body options either');
+  } else if ((binaryFile || uploadFile) && data.length) {
+    warn('The file body was used; other data options were skipped');
+  }
+  const fileBody = form.length ? '' : binaryFile || uploadFile;
+  const hasBody = (data.length > 0 || form.length > 0 || fileBody !== '') && !forceGet;
   if (forceGet && data.length) {
     url += (url.includes('?') ? '&' : '?') + body;
     body = '';
   }
 
-  let method = explicitMethod || (head ? 'HEAD' : hasBody ? 'POST' : 'GET');
+  let method = explicitMethod || (head ? 'HEAD' : uploadFile && !form.length ? 'PUT' : hasBody ? 'POST' : 'GET');
   if (!(METHODS as string[]).includes(method)) {
     warn(`Method ${method} is not supported; GET was used`);
     method = 'GET';
@@ -506,6 +533,12 @@ export function parseCurl(command: string): ParsedCurl {
   if (json) {
     if (headerIndex(headers, 'Content-Type') < 0) headers.push(kv('Content-Type', 'application/json'));
     if (headerIndex(headers, 'Accept') < 0) headers.push(kv('Accept', 'application/json'));
+  } else if (form.length) {
+    // The multipart Content-Type carries a boundary the app writes itself.
+    const i = headerIndex(headers, 'Content-Type');
+    if (i >= 0 && /^multipart\/form-data/i.test(headers[i].value)) headers.splice(i, 1);
+  } else if (fileBody) {
+    // curl sends --data-binary files as a form too; the app guesses the type from the file name.
   } else if (hasBody && headerIndex(headers, 'Content-Type') < 0) {
     // curl sends -d data as a form unless told otherwise; the app would send text/plain.
     headers.push(kv('Content-Type', 'application/x-www-form-urlencoded'));
@@ -516,7 +549,16 @@ export function parseCurl(command: string): ParsedCurl {
 
   const contentType = headers[headerIndex(headers, 'Content-Type')]?.value ?? '';
   let bodyType: Request['bodyType'] = 'none';
-  if (hasBody) bodyType = /json/i.test(contentType) || isJson(body) ? 'json' : 'text';
+  if (form.length) {
+    bodyType = 'form-data';
+    body = '';
+  } else if (fileBody) {
+    bodyType = 'binary';
+    body = '';
+  } else if (hasBody) bodyType = /json/i.test(contentType) || isJson(body) ? 'json' : 'text';
+  if (fileBody || form.some((f) => f.type === 'file')) {
+    warn('File paths were kept as written; choose the files again if they are relative or on another machine');
+  }
   if (bodyType !== 'none' && (method === 'GET' || method === 'HEAD')) {
     warn(`${method} requests are sent without a body; switch the method to send it`);
   }
@@ -529,12 +571,41 @@ export function parseCurl(command: string): ParsedCurl {
       headers,
       body,
       bodyType,
+      form: bodyType === 'form-data' ? form : [],
+      bodyFile: bodyType === 'binary' ? fileBody : '',
       auth,
       timeoutMs,
       followRedirects: true,
     },
     warnings,
   };
+}
+
+/**
+ * Reads a -F / --form-string value: name=value, name=@file;type=…, or name=<file
+ * (a file's content as a text field, kept as an upload). Returns null when there is no name.
+ */
+function parseFormOption(v: string, literal: boolean): FormField | null {
+  const eq = v.indexOf('=');
+  if (eq <= 0) return null;
+  const key = v.slice(0, eq);
+  const rest = v.slice(eq + 1);
+  if (literal || !(rest.startsWith('@') || rest.startsWith('<'))) {
+    return { key, value: literal ? rest : rest.replace(/;type=[^;]*$/, ''), type: 'text', enabled: true };
+  }
+  let spec = rest.slice(1);
+  let file: string;
+  if (spec.startsWith('"')) {
+    const end = /^"((?:[^"\\]|\\.)*)"/.exec(spec);
+    file = end ? end[1].replace(/\\(.)/g, '$1') : spec.slice(1);
+    spec = end ? spec.slice(end[0].length) : '';
+  } else {
+    const semi = spec.indexOf(';');
+    file = semi >= 0 ? spec.slice(0, semi) : spec;
+    spec = semi >= 0 ? spec.slice(semi) : '';
+  }
+  const contentType = /;type=([^;]+)/.exec(spec)?.[1]?.trim() ?? '';
+  return { key, value: '', type: 'file', file, contentType, enabled: true };
 }
 
 function kv(key: string, value: string): KeyValue {
@@ -640,20 +711,59 @@ export interface PreparedRequest {
   method: string;
   url: string;
   headers: [string, string][];
-  /** Set when a body is sent (never for GET or HEAD). */
+  /** Set when a text body is sent (never for GET or HEAD); URL-encoded forms are encoded into it. */
   body?: string;
   bodyType: Request['bodyType'];
+  /** The parts of a form-data body. Content-Type is left to the client library, which adds the boundary. */
+  form?: FormPart[];
+  /** The file a binary body sends. */
+  file?: string;
   /** Basic auth credentials, when the generator can express them natively. */
   basic?: { username: string; password: string };
   followRedirects: boolean;
   timeoutMs: number;
 }
 
+/** A form-data part: a text field, or a file with its file name and content type. */
+export type FormPart =
+  | { name: string; value: string; file?: undefined }
+  | { name: string; file: string; fileName: string; contentType: string };
+
 export type GeneratorRequest = Pick<
   Request,
   'method' | 'url' | 'headers' | 'query' | 'body' | 'bodyType' | 'auth' | 'timeoutMs'
 > &
-  Partial<Pick<Request, 'followRedirects'>>;
+  Partial<Pick<Request, 'followRedirects' | 'form' | 'bodyFile'>>;
+
+/** Whether the prepared request sends a body of any kind. */
+export const hasBody = (p: PreparedRequest) => p.body !== undefined || p.form !== undefined || p.file !== undefined;
+
+const MIME_TYPES: Record<string, string> = {
+  json: 'application/json',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  html: 'text/html',
+  xml: 'application/xml',
+  pdf: 'application/pdf',
+  zip: 'application/zip',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  mp3: 'audio/mpeg',
+};
+
+/** The last segment of a path, for Windows and POSIX paths alike. */
+export const fileName = (path: string) => path.split(/[\\/]/).pop() || path;
+
+/** A content type guessed from the file extension, like the app does. */
+export function guessContentType(path: string): string {
+  const ext = /\.([A-Za-z0-9]+)$/.exec(path)?.[1]?.toLowerCase() ?? '';
+  return MIME_TYPES[ext] ?? 'application/octet-stream';
+}
 
 /**
  * Resolves what the runner would send for req, shared by every code generator.
@@ -678,8 +788,47 @@ export function prepareRequest(req: GeneratorRequest, opts: CurlOptions = {}): P
 
   const method = req.method;
   const sendsBody = req.bodyType !== 'none' && method !== 'GET' && method !== 'HEAD';
-  if (sendsBody && !has('Content-Type')) {
-    set('Content-Type', req.bodyType === 'json' ? 'application/json' : 'text/plain; charset=utf-8');
+  const fields = (req.form ?? []).filter((f) => f.enabled && f.key.trim());
+  let body: string | undefined;
+  let form: FormPart[] | undefined;
+  let file: string | undefined;
+  if (sendsBody) {
+    switch (req.bodyType) {
+      case 'urlencoded': {
+        const enc = opts.resolve ? encodeURIComponent : encodeKeepingVariables;
+        body = fields
+          .filter((f) => f.type !== 'file')
+          .map((f) => `${enc(r(f.key))}=${enc(r(f.value))}`)
+          .join('&');
+        if (!has('Content-Type')) set('Content-Type', 'application/x-www-form-urlencoded');
+        break;
+      }
+      case 'form-data':
+        form = fields.map((f): FormPart => {
+          if (f.type !== 'file') return { name: r(f.key), value: r(f.value) };
+          const path = r(f.file ?? '');
+          return {
+            name: r(f.key),
+            file: path,
+            fileName: fileName(path),
+            contentType: r(f.contentType ?? '').trim() || guessContentType(path),
+          };
+        });
+        // The library writes the multipart Content-Type with its own boundary, as the app does.
+        for (let i = headers.length - 1; i >= 0; i--) {
+          if (headers[i][0].toLowerCase() === 'content-type') headers.splice(i, 1);
+        }
+        break;
+      case 'binary':
+        file = r(req.bodyFile ?? '');
+        if (!has('Content-Type')) set('Content-Type', guessContentType(file));
+        break;
+      default:
+        body = r(req.body);
+        if (!has('Content-Type')) {
+          set('Content-Type', req.bodyType === 'json' ? 'application/json' : 'text/plain; charset=utf-8');
+        }
+    }
   }
 
   const auth = req.auth.type === 'inherit' ? (opts.collectionAuth ?? { type: 'none' }) : req.auth;
@@ -715,8 +864,10 @@ export function prepareRequest(req: GeneratorRequest, opts: CurlOptions = {}): P
     method,
     url,
     headers,
-    body: sendsBody ? r(req.body) : undefined,
+    body,
     bodyType: req.bodyType,
+    form,
+    file,
     basic,
     followRedirects: req.followRedirects ?? true,
     timeoutMs: req.timeoutMs || 30000,
@@ -727,8 +878,7 @@ export function prepareRequest(req: GeneratorRequest, opts: CurlOptions = {}): P
 export function toCurl(req: GeneratorRequest, opts: CurlOptions = {}): string {
   const p = prepareRequest(req, opts);
   const { method, url, headers } = p;
-  const sendsBody = p.body !== undefined;
-  const body = p.body ?? '';
+  const sendsBody = hasBody(p);
   const user = p.basic ? `${p.basic.username}:${p.basic.password}` : '';
   const followRedirects = p.followRedirects;
   const timeoutMs = req.timeoutMs;
@@ -739,7 +889,13 @@ export function toCurl(req: GeneratorRequest, opts: CurlOptions = {}): string {
   parts.push(shellQuote(url));
   for (const [k, v] of headers) parts.push(`-H ${shellQuote(`${k}: ${v}`)}`);
   if (user) parts.push(`-u ${shellQuote(user)}`);
-  if (sendsBody) parts.push(`--data-raw ${shellQuote(body)}`);
+  if (p.body !== undefined) parts.push(`--data-raw ${shellQuote(p.body)}`);
+  for (const f of p.form ?? []) {
+    // --form-string sends text as is; -F would read a value starting with @ or < from a file.
+    if (f.file === undefined) parts.push(`--form-string ${shellQuote(`${f.name}=${f.value}`)}`);
+    else parts.push(`-F ${shellQuote(`${f.name}=@"${f.file.replace(/(["\\])/g, '\\$1')}";type=${f.contentType}`)}`);
+  }
+  if (p.file !== undefined) parts.push(`--data-binary ${shellQuote('@' + p.file)}`);
   if (followRedirects) parts.push('-L');
   if (timeoutMs && timeoutMs !== 30000) parts.push(`--max-time ${+(timeoutMs / 1000).toFixed(3)}`);
 

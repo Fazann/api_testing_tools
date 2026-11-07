@@ -967,6 +967,9 @@ type ImportResult struct {
 	// RaceTests and PermissionMatrix count the imported security tests.
 	RaceTests        int  `json:"raceTests"`
 	PermissionMatrix bool `json:"permissionMatrix"`
+	// FilesCleared counts upload file paths removed on import; those
+	// requests need their files chosen again.
+	FilesCleared int `json:"filesCleared"`
 }
 
 // ImportCollection validates untrusted data and stores it with fresh IDs.
@@ -979,7 +982,15 @@ func (s *Service) ImportCollection(ctx context.Context, data []byte, sourceName 
 	if imp.Contract != nil && imp.Contract.SourceName == "" {
 		imp.Contract.SourceName = sourceName
 	}
-	return s.ImportParsed(ctx, imp)
+	// A file path in someone else's collection could upload any local file
+	// (an SSH key, a password store) without the user noticing.
+	cleared := 0
+	for i := range imp.Tree.Requests {
+		cleared += imp.Tree.Requests[i].ClearFilePaths()
+	}
+	res, err := s.ImportParsed(ctx, imp)
+	res.FilesCleared = cleared
+	return res, err
 }
 
 // ImportParsed stores an already validated import. Baselines are attached

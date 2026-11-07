@@ -318,6 +318,7 @@ func load(ctx context.Context, s sourceOptions) (*loaded, error) {
 		if err != nil {
 			return nil, usagef("%s: %v", s.file, err)
 		}
+		absolutizeUploads(imp, filepath.Dir(s.file))
 		return &loaded{imp: imp, settings: domain.DefaultSettings(), label: s.file}, nil
 	}
 
@@ -379,6 +380,28 @@ func load(ctx context.Context, s sourceOptions) (*loaded, error) {
 		return nil, err
 	}
 	return &loaded{imp: imp, settings: app.GetSettings(), label: fmt.Sprintf("app collection %q", match[0].Name)}, nil
+}
+
+// absolutizeUploads makes relative upload paths in a collection file relative
+// to the file's directory, so a collection and its test files can be checked
+// in together. Paths starting with a {{variable}} are left alone.
+func absolutizeUploads(imp *collectionio.Imported, dir string) {
+	abs := func(p string) string {
+		if p == "" || strings.HasPrefix(p, "{{") || filepath.IsAbs(p) {
+			return p
+		}
+		if d, err := filepath.Abs(dir); err == nil {
+			return filepath.Join(d, p)
+		}
+		return p
+	}
+	for i := range imp.Tree.Requests {
+		r := &imp.Tree.Requests[i]
+		r.BodyFile = abs(r.BodyFile)
+		for j := range r.Form {
+			r.Form[j].File = abs(r.Form[j].File)
+		}
+	}
 }
 
 func unwrapPathError(err error) error {

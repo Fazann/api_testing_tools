@@ -38,6 +38,10 @@ export function ChooseCACertFile() {
   return window['go']['main']['App']['ChooseCACertFile']();
 }
 
+export function ChooseUploadFile() {
+  return window['go']['main']['App']['ChooseUploadFile']();
+}
+
 export function ClearHistory() {
   return window['go']['main']['App']['ClearHistory']();
 }

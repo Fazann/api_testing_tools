@@ -28,7 +28,8 @@ A free desktop app for testing HTTP APIs and catching regressions.
 
 | Feature | What it does |
 | --- | --- |
-| **Requests** | All HTTP methods, headers, query, JSON/text body, timeouts, redirects, cancel. |
+| **Requests** | All HTTP methods, headers, query, timeouts, redirects, cancel. |
+| **Bodies & uploads** | JSON, text, URL-encoded form, **form-data with file uploads**, or a whole file as the body. See [File uploads](docs/collection-format.md#file-uploads). |
 | **Auth** | Bearer, Basic or API key. Set it once on the collection, or override per request. |
 | **Collections** | Create, rename, duplicate, export and delete from the sidebar **⋯** menu. |
 | **Environments** | `{{variables}}` everywhere. Secrets are masked and never exported. |

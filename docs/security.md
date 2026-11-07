@@ -43,7 +43,7 @@ Loopback and private-network addresses are allowed because testing local and int
 
 ## Untrusted input
 
-Imported collections are validated in full before anything is written and always receive fresh IDs (see [collection-format.md](collection-format.md)). Malformed JSON in responses, baselines or damaged database rows produces a clear failure message instead of a crash. Response content in HTML reports is escaped by `html/template`, and reports load no external resources.
+Imported collections are validated in full before anything is written and always receive fresh IDs (see [collection-format.md](collection-format.md)). Imports drop every upload file path, so a shared collection cannot send your local files (an SSH key, a password store) without you choosing them (`internal/service/app_service.go`). Malformed JSON in responses, baselines or damaged database rows produces a clear failure message instead of a crash. Response content in HTML reports is escaped by `html/template`, and reports load no external resources.
 
 ## Data integrity
 
