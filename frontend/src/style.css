@@ -29,6 +29,14 @@
   --json-punct: #3b3b3b;
   /* {{variable}} placeholders in request bodies. */
   --json-template: #af00db;
+  /* Generated code colors (VS Code Light+ / Dark+). */
+  --code-comment: #008000;
+  --code-keyword: #0000ff;
+  --code-control: #af00db;
+  --code-function: #795e26;
+  --code-variable: #001080;
+  --code-type: #267f99;
+  --code-regex: #811f3f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,6 +62,13 @@
     --json-literal: #569cd6;
     --json-punct: #d4d4d4;
     --json-template: #c586c0;
+    --code-comment: #6a9955;
+    --code-keyword: #569cd6;
+    --code-control: #c586c0;
+    --code-function: #dcdcaa;
+    --code-variable: #9cdcfe;
+    --code-type: #4ec9b0;
+    --code-regex: #d16969;
     color-scheme: dark;
   }
 }
@@ -318,6 +333,43 @@ pre.json-view {
 }
 .json-view .tk-punct {
   color: var(--json-punct);
+}
+
+/* Generated code ("Copy as code"); strings and numbers share the JSON colors. */
+.code-view .tk-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+.code-view .tk-string {
+  color: var(--json-string);
+}
+.code-view .tk-number {
+  color: var(--json-number);
+}
+.code-view .tk-keyword,
+.code-view .tk-literal {
+  color: var(--code-keyword);
+}
+.code-view .tk-control {
+  color: var(--code-control);
+}
+.code-view .tk-function {
+  color: var(--code-function);
+}
+.code-view .tk-variable,
+.code-view .tk-property,
+.code-view .tk-key {
+  color: var(--code-variable);
+}
+.code-view .tk-type {
+  color: var(--code-type);
+}
+.code-view .tk-regex {
+  color: var(--code-regex);
+}
+.code-view .tk-template {
+  color: var(--json-template);
+  font-weight: 600;
 }
 
 .empty {

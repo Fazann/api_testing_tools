@@ -8,6 +8,7 @@ import ModalFrame from '@/components/base/ModalFrame.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { CODE_LANGUAGES, generateCode, type CodeLanguage } from '@/services/codegen';
+import { highlightCode } from '@/services/codeHighlight';
 import { hasVariables } from '@/services/variables';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
@@ -75,6 +76,10 @@ const command = computed(() =>
   }),
 );
 
+const tokens = computed(() =>
+  highlightCode(language.value, command.value).map((t) => ({ text: t.text, c: t.kind ? `tk-${t.kind}` : undefined })),
+);
+
 const hasScripts = computed(
   () =>
     !!(props.request.preRequestScript?.trim() || collection.value?.preRequestScript?.trim()) ||
@@ -103,7 +108,10 @@ async function copy() {
         >)
       </CheckboxField>
     </div>
-    <pre class="mono command">{{ command }}</pre>
+    <pre
+      class="mono command code-view"
+      :aria-label="`${languageLabel} code`"
+    ><span v-for="(t, i) in tokens" :key="i" :class="t.c" v-text="t.text" /></pre>
     <CalloutBox v-if="fill && includeSecrets" small>
       The command contains secret values. Avoid pasting it into chats, tickets or shell history you share.
     </CalloutBox>
