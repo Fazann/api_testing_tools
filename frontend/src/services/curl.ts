@@ -635,12 +635,32 @@ function utf8Base64(s: string): string {
   return btoa(bin);
 }
 
-/** Builds a multi-line cURL command that sends what the app would send for this request. */
-export function toCurl(
-  req: Pick<Request, 'method' | 'url' | 'headers' | 'query' | 'body' | 'bodyType' | 'auth' | 'timeoutMs'> &
-    Partial<Pick<Request, 'followRedirects'>>,
-  opts: CurlOptions = {},
-): string {
+/** A request as the app would send it: auth applied, query appended, Content-Type set. */
+export interface PreparedRequest {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  /** Set when a body is sent (never for GET or HEAD). */
+  body?: string;
+  bodyType: Request['bodyType'];
+  /** Basic auth credentials, when the generator can express them natively. */
+  basic?: { username: string; password: string };
+  followRedirects: boolean;
+  timeoutMs: number;
+}
+
+export type GeneratorRequest = Pick<
+  Request,
+  'method' | 'url' | 'headers' | 'query' | 'body' | 'bodyType' | 'auth' | 'timeoutMs'
+> &
+  Partial<Pick<Request, 'followRedirects'>>;
+
+/**
+ * Resolves what the runner would send for req, shared by every code generator.
+ * Basic auth stays separate when the user name has no colon (so curl -u, Python's
+ * auth=… and axios' auth work); otherwise it becomes an Authorization header.
+ */
+export function prepareRequest(req: GeneratorRequest, opts: CurlOptions = {}): PreparedRequest {
   const r = (s: string) => resolveVariables(s, opts.resolve);
   const headers: [string, string][] = req.headers
     .filter((h) => h.enabled && h.key.trim())
@@ -658,13 +678,12 @@ export function toCurl(
 
   const method = req.method;
   const sendsBody = req.bodyType !== 'none' && method !== 'GET' && method !== 'HEAD';
-  const body = sendsBody ? r(req.body) : '';
   if (sendsBody && !has('Content-Type')) {
     set('Content-Type', req.bodyType === 'json' ? 'application/json' : 'text/plain; charset=utf-8');
   }
 
   const auth = req.auth.type === 'inherit' ? (opts.collectionAuth ?? { type: 'none' }) : req.auth;
-  let user = '';
+  let basic: PreparedRequest['basic'];
   switch (auth.type) {
     case 'bearer':
       set('Authorization', `Bearer ${r(auth.token ?? '')}`);
@@ -672,9 +691,8 @@ export function toCurl(
     case 'basic': {
       const u = r(auth.username ?? '');
       const p = r(auth.password ?? '');
-      // -u is easier to read, but cannot carry a colon in the user name.
       if (u.includes(':')) set('Authorization', `Basic ${utf8Base64(`${u}:${p}`)}`);
-      else user = `${u}:${p}`;
+      else basic = { username: u, password: p };
       break;
     }
     case 'apikey':
@@ -693,6 +711,27 @@ export function toCurl(
     const [base, frag] = hash >= 0 ? [url.slice(0, hash), url.slice(hash)] : [url, ''];
     url = base + (base.includes('?') ? (/[?&]$/.test(base) ? '' : '&') : '?') + qs + frag;
   }
+  return {
+    method,
+    url,
+    headers,
+    body: sendsBody ? r(req.body) : undefined,
+    bodyType: req.bodyType,
+    basic,
+    followRedirects: req.followRedirects ?? true,
+    timeoutMs: req.timeoutMs || 30000,
+  };
+}
+
+/** Builds a multi-line cURL command that sends what the app would send for this request. */
+export function toCurl(req: GeneratorRequest, opts: CurlOptions = {}): string {
+  const p = prepareRequest(req, opts);
+  const { method, url, headers } = p;
+  const sendsBody = p.body !== undefined;
+  const body = p.body ?? '';
+  const user = p.basic ? `${p.basic.username}:${p.basic.password}` : '';
+  const followRedirects = p.followRedirects;
+  const timeoutMs = req.timeoutMs;
 
   const parts: string[] = [];
   if (method === 'HEAD') parts.push('--head');
@@ -701,8 +740,8 @@ export function toCurl(
   for (const [k, v] of headers) parts.push(`-H ${shellQuote(`${k}: ${v}`)}`);
   if (user) parts.push(`-u ${shellQuote(user)}`);
   if (sendsBody) parts.push(`--data-raw ${shellQuote(body)}`);
-  if (req.followRedirects ?? true) parts.push('-L');
-  if (req.timeoutMs && req.timeoutMs !== 30000) parts.push(`--max-time ${+(req.timeoutMs / 1000).toFixed(3)}`);
+  if (followRedirects) parts.push('-L');
+  if (timeoutMs && timeoutMs !== 30000) parts.push(`--max-time ${+(timeoutMs / 1000).toFixed(3)}`);
 
   const [first, ...rest] = parts;
   return [`curl ${first}`, ...rest].join(' \\\n  ');

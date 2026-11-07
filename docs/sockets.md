@@ -86,7 +86,7 @@ match), the handshake headers, and every message in the **Messages** tab. A test
 
 - Each transcript keeps up to 1,000 messages and 64 KB per message; history also applies the **history body limit**
   from Settings to the transcript as a whole. Larger messages than the response size limit close the connection.
-- Post-response scripts, baselines, response-time checks, race tests, the permission matrix and *Copy as cURL* are for
+- Post-response scripts, baselines, response-time checks, race tests, the permission matrix and *Copy as code* are for
   HTTP requests; socket requests do not have them. Collection post-response scripts are skipped for socket requests.
 - Socket.IO: no long-polling transport, no binary attachments, no Engine.IO 3 (Socket.IO v2) servers. Server events
   that ask the client for an acknowledgement are shown but not acknowledged.

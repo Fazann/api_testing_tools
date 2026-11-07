@@ -11,7 +11,7 @@ import { useUi } from '@/stores/ui';
 import { useWorkspace } from '@/stores/workspace';
 import type { CollectionTree, Folder, Request } from '@/types';
 
-import CurlExportDialog from './CurlExportDialog.vue';
+import CodeExportDialog from './CodeExportDialog.vue';
 import CurlImportDialog from './CurlImportDialog.vue';
 
 const props = defineProps<{ tree: CollectionTree; parentId: string; depth: number }>();
@@ -42,7 +42,7 @@ function requestMenu(r: Request) {
     { label: 'Rename', action: () => renameRequest(r) },
     { label: 'Duplicate', action: () => ws.duplicateRequest(r).catch(ui.error) },
     // The open request may have unsaved edits; copy what the editor shows.
-    { label: 'Copy as cURL…', action: () => (curlRequest.value = ws.draft?.id === r.id ? ws.draft : r) },
+    { label: 'Copy as code…', action: () => (curlRequest.value = ws.draft?.id === r.id ? ws.draft : r) },
     { label: 'Delete', danger: true, action: () => deleteRequest(r) },
   ];
 }
@@ -123,7 +123,7 @@ async function deleteRequest(r: Request) {
     :parent-id="curlFolder.id"
     @close="curlFolder = null"
   />
-  <CurlExportDialog v-if="curlRequest" :request="curlRequest" @close="curlRequest = null" />
+  <CodeExportDialog v-if="curlRequest" :request="curlRequest" @close="curlRequest = null" />
 </template>
 
 <style scoped>

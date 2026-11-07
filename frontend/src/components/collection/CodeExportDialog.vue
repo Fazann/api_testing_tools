@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import BaseButton from '@/components/base/BaseButton.vue';
 import CalloutBox from '@/components/base/CalloutBox.vue';
 import CheckboxField from '@/components/base/CheckboxField.vue';
 import ModalFrame from '@/components/base/ModalFrame.vue';
+import SelectField from '@/components/base/SelectField.vue';
 import { useAsyncAction } from '@/composables/useAsyncAction';
-import { toCurl } from '@/services/curl';
+import { CODE_LANGUAGES, generateCode, type CodeLanguage } from '@/services/codegen';
 import { hasVariables } from '@/services/variables';
 import { useEnvironments } from '@/stores/environments';
 import { useUi } from '@/stores/ui';
@@ -21,6 +22,26 @@ const ui = useUi();
 const { run } = useAsyncAction();
 
 const collection = computed(() => ws.collections.find((c) => c.id === props.request.collectionId) ?? null);
+// The last language used is remembered on this machine.
+const LANGUAGE_KEY = 'arg.codeLanguage';
+function readLanguage(): CodeLanguage {
+  try {
+    const v = localStorage.getItem(LANGUAGE_KEY);
+    return CODE_LANGUAGES.some((l) => l.value === v) ? (v as CodeLanguage) : 'curl';
+  } catch {
+    return 'curl';
+  }
+}
+const language = ref<CodeLanguage>(readLanguage());
+watch(language, (v) => {
+  try {
+    localStorage.setItem(LANGUAGE_KEY, v);
+  } catch {
+    /* a convenience only */
+  }
+});
+const languageLabel = computed(() => CODE_LANGUAGES.find((l) => l.value === language.value)?.label ?? '');
+
 const fill = ref(true);
 const includeSecrets = ref(false);
 
@@ -41,7 +62,7 @@ const usesVariables = computed(() => {
 });
 
 const command = computed(() =>
-  toCurl(props.request, {
+  generateCode(language.value, props.request, {
     collectionAuth: collection.value?.auth,
     resolve:
       fill.value && usesVariables.value
@@ -63,14 +84,15 @@ const hasScripts = computed(
 async function copy() {
   await run(async () => {
     await navigator.clipboard.writeText(command.value);
-    ui.toast('Copied cURL command', 'success');
+    ui.toast(`Copied ${languageLabel.value} code`, 'success');
     emit('close');
   });
 }
 </script>
 
 <template>
-  <ModalFrame :title="`Copy “${request.name}” as cURL`" wide @close="emit('close')">
+  <ModalFrame :title="`Copy “${request.name}” as code`" wide @close="emit('close')">
+    <SelectField v-model="language" label="Language" :options="CODE_LANGUAGES" class="language" />
     <div v-if="usesVariables" class="stack options">
       <CheckboxField v-model="fill" class="small">
         Fill in variables from
@@ -85,7 +107,7 @@ async function copy() {
     <CalloutBox v-if="fill && includeSecrets" small>
       The command contains secret values. Avoid pasting it into chats, tickets or shell history you share.
     </CalloutBox>
-    <p v-if="hasScripts" class="muted small">Scripts are not included; curl sends the request as written.</p>
+    <p v-if="hasScripts" class="muted small">Scripts are not included; the code sends the request as written.</p>
     <template #footer>
       <BaseButton @click="emit('close')">Close</BaseButton>
       <BaseButton variant="primary" @click="copy">Copy to clipboard</BaseButton>
@@ -94,6 +116,9 @@ async function copy() {
 </template>
 
 <style scoped>
+.language {
+  max-width: 280px;
+}
 .options {
   gap: 4px;
 }

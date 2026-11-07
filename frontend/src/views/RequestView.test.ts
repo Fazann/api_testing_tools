@@ -162,7 +162,7 @@ describe('RequestView with a socket request', () => {
     expect(tabs.join(' ')).not.toContain('Body');
     expect(tabs.join(' ')).not.toContain('Race test');
     expect(wrapper.find('select[aria-label="HTTP method"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Copy as cURL');
+    expect(wrapper.text()).not.toContain('Copy as code');
     expect(wrapper.text()).toContain('Console');
 
     await wrapper

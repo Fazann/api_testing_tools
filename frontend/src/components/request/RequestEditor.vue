@@ -10,8 +10,8 @@ import RadioGroup from '@/components/base/RadioGroup.vue';
 import SelectField from '@/components/base/SelectField.vue';
 import TabBar, { type Tab as TabItem } from '@/components/base/TabBar.vue';
 import TextField from '@/components/base/TextField.vue';
+import CodeExportDialog from '@/components/collection/CodeExportDialog.vue';
 import CollectionSettingsDialog from '@/components/collection/CollectionSettingsDialog.vue';
-import CurlExportDialog from '@/components/collection/CurlExportDialog.vue';
 import PerformancePanel from '@/components/performance/PerformancePanel.vue';
 import BaselinePanel from '@/components/response/BaselinePanel.vue';
 import RaceTestPanel from '@/components/security/RaceTestPanel.vue';
@@ -171,10 +171,10 @@ const httpTabs = computed<TabItem<Tab>[]>(() => [
         v-if="!socket"
         variant="ghost"
         small
-        title="Copy this request as a cURL command"
+        title="Copy this request as cURL, fetch, Python, Go, Java and other code"
         @click="copyingCurl = true"
       >
-        Copy as cURL
+        Copy as code
       </BaseButton>
       <span
         v-if="mayModify"
@@ -302,7 +302,7 @@ const httpTabs = computed<TabItem<Tab>[]>(() => [
         />
       </div>
     </div>
-    <CurlExportDialog v-if="copyingCurl" :request="req" @close="copyingCurl = false" />
+    <CodeExportDialog v-if="copyingCurl" :request="req" @close="copyingCurl = false" />
     <CollectionSettingsDialog
       v-if="editingCollection"
       :collection="editingCollection"
